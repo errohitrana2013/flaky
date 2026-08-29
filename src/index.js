@@ -91,6 +91,17 @@ export default {
 
     const isApi = url.pathname.startsWith("/v1");
 
+    // No redirect from the old workers.dev host, and that is a decision rather
+    // than an omission: Cloudflare serves a matching static asset *before* the
+    // Worker runs, so a redirect here would never execute for the pages it was
+    // meant to catch. Forcing it would mean run_worker_first, which turns every
+    // asset request into a Worker invocation against a 100k/day budget.
+    //
+    // The duplicate-content problem it was meant to solve is already handled by
+    // the <link rel="canonical"> in public/index.html, which is the cheaper and
+    // more standard answer.
+
+
     let response;
     try {
       // Anything outside /v1 is the marketing site and docs.
