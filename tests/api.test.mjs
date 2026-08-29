@@ -321,7 +321,10 @@ test("serves traffic when the rate-limit store cannot be written", async () => {
 
   const res = await call("/v1/posts?_limit=1", {}, env);
   assert.equal(res.status, 200, "a dead limiter must not become an outage");
-  assert.equal(res.headers.get("x-ratelimit-degraded"), "1", "and it says so");
+  // No degraded header for a write failure any more, and that is the accepted
+  // cost of moving the write off the request path: the response is already sent
+  // by the time the put resolves, so its outcome cannot be reported in it. Read
+  // failures, which are still awaited, do set the header — see the next test.
 });
 
 test("serves traffic when the rate-limit store cannot be read", async () => {

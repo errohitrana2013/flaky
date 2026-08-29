@@ -15,7 +15,7 @@ import { applyChaos } from "./middleware/chaos.js";
 import { visitorId, classifyClient, logRequest, rollUp, sendDigest, purgeExpired } from "./middleware/analytics.js";
 import { today, utcHour, ipId } from "./lib/hash.js";
 
-async function handle(request, env, ctx, url) {
+async function handle(request, env, ctx, url, state) {
   const route = matchRoute(request.method, url.pathname);
   if (!route) return fail(404, "No such route", "See GET /v1/meta for what this API offers.");
 
@@ -29,9 +29,10 @@ async function handle(request, env, ctx, url) {
     return fail(401, "Unrecognised API key", "Create one at POST /v1/keys, or drop the header for the anonymous tier.");
   }
   context.auth = auth;
+  state.auth = auth;
 
   const ip = request.headers.get("cf-connecting-ip") || "unknown";
-  const rate = await checkRateLimit(env, { key: auth.key, ip }, auth.tier);
+  const rate = await checkRateLimit(env, { key: auth.key, ip }, auth.tier, ctx);
   if (!rate.ok) {
     return rate.scope === "ip"
       ? fail(429, "Daily request limit reached for this address", `All keys from one address share a ceiling of ${rate.limit} requests/day. Limits reset at 00:00 UTC.`)
@@ -51,10 +52,13 @@ async function handle(request, env, ctx, url) {
 
 // Telemetry runs after the response is returned, so it costs the caller
 // nothing and can never break a request.
-function recordTelemetry(ctx, request, env, url, response, startedAt) {
+function recordTelemetry(ctx, request, env, url, response, state) {
   ctx.waitUntil((async () => {
     try {
-      const auth = await resolveTier(request, env).catch(() => ({ tier: "anonymous", keyId: null }));
+      // Reuses what handle() already resolved. Re-querying here cost a second
+      // D1 round trip on every authenticated request, for an answer already in
+      // hand.
+      const auth = state.auth || { tier: "anonymous", keyId: null };
       const meta = {
         visitor: await visitorId(request, env.VISITOR_SALT || "change-me"),
         client: classifyClient(request),
@@ -83,7 +87,7 @@ function recordTelemetry(ctx, request, env, url, response, startedAt) {
         injected:
           response.status >= 400 &&
           (url.searchParams.has("_status") || url.searchParams.has("_fail_rate")),
-        durationMs: Date.now() - startedAt,
+        durationMs: state.durationMs,
         bytes: Number(response.headers.get("content-length")) || 0,
       };
       logRequest(env, ctx, request, meta);
@@ -103,6 +107,9 @@ export default {
 
     const isApi = url.pathname.startsWith("/v1");
 
+    // Filled in by handle(), read by recordTelemetry.
+    const state = { auth: null, durationMs: 0 };
+
     // No redirect from the old workers.dev host, and that is a decision rather
     // than an omission: Cloudflare serves a matching static asset *before* the
     // Worker runs, so a redirect here would never execute for the pages it was
@@ -118,7 +125,7 @@ export default {
     try {
       // Anything outside /v1 is the marketing site and docs.
       response = isApi
-        ? await handle(request, env, ctx, url)
+        ? await handle(request, env, ctx, url, state)
         : harden(await env.ASSETS.fetch(request), { page: true });
     } catch (err) {
       // Last line of defence. Without it an unexpected throw — a D1 outage, a
@@ -132,7 +139,18 @@ export default {
     // the catch path, gets the API policy here.
     if (isApi || response.status === 500) response = harden(response);
 
-    recordTelemetry(ctx, request, env, url, response, startedAt);
+    // Measured HERE, not inside waitUntil. Taking it there included the
+    // telemetry's own D1 round trip — work that happens after the response has
+    // already been sent — and reported ~300ms for endpoints that answer from a
+    // bundled array in single digits.
+    //
+    // An injected delay is subtracted for the same reason: a caller who asked
+    // to wait three seconds got what they wanted, and counting it as service
+    // latency would make the chaos feature look like a performance problem.
+    const injectedDelay = Math.max(0, Number(url.searchParams.get("_delay")) || 0);
+    state.durationMs = Math.max(0, Date.now() - startedAt - injectedDelay);
+
+    recordTelemetry(ctx, request, env, url, response, state);
     return response;
   },
 

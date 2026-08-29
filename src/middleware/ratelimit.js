@@ -20,7 +20,7 @@ import { today } from "../lib/hash.js";
 // Read and write are handled separately on purpose. If the read works we can
 // still enforce the limit even when writes are gone, so a caller already over
 // quota stays blocked instead of being let through by the outage.
-async function bump(env, bucket, limit) {
+async function bump(env, bucket, limit, ctx) {
   let current = 0;
   try {
     current = Number(await env.RATE_LIMITS.get(bucket)) || 0;
@@ -30,24 +30,28 @@ async function bump(env, bucket, limit) {
 
   if (current >= limit) return { ok: false, limit, remaining: 0 };
 
+  // The write is deferred, not awaited. A KV put is a round trip to origin —
+  // measured at 300-700ms from APAC — and it was sitting on every request, so
+  // the API answered in ~550ms where a static asset took ~200ms. Nobody needs
+  // the counter durable before their response is sent.
+  //
   // A failed write costs accuracy, not availability: the counter stops rising,
   // so the limiter undercounts rather than the API going down.
-  let degraded = false;
-  try {
-    // 48h TTL so a window is never evicted while still in use.
-    await env.RATE_LIMITS.put(bucket, String(current + 1), { expirationTtl: 172800 });
-  } catch {
-    degraded = true;
-  }
+  const write = env.RATE_LIMITS
+    .put(bucket, String(current + 1), { expirationTtl: 172800 })
+    .catch(() => {});
 
-  return { ok: true, limit, remaining: limit - current - 1, degraded };
+  if (ctx?.waitUntil) ctx.waitUntil(write);
+  else await write; // tests and any caller without a context still behave
+
+  return { ok: true, limit, remaining: limit - current - 1, degraded: false };
 }
 
-export async function checkRateLimit(env, { key, ip }, tier) {
+export async function checkRateLimit(env, { key, ip }, tier, ctx) {
   const day = today();
   const limit = TIERS[tier].requestsPerDay;
 
-  const primary = await bump(env, `rl:${day}:${key || ip}`, limit);
+  const primary = await bump(env, `rl:${day}:${key || ip}`, limit, ctx);
   if (!primary.ok) return primary;
 
   // Anonymous callers are already counted by IP above, so their primary counter
@@ -60,7 +64,7 @@ export async function checkRateLimit(env, { key, ip }, tier) {
   // by scripting signups. This bounds the total from one address regardless of
   // how many keys are held. It costs a second KV write, but only on keyed
   // traffic, which is the small fraction.
-  const perIp = await bump(env, `ip:${day}:${ip}`, IP_DAILY_CEILING);
+  const perIp = await bump(env, `ip:${day}:${ip}`, IP_DAILY_CEILING, ctx);
   if (!perIp.ok) return { ok: false, limit: IP_DAILY_CEILING, remaining: 0, scope: "ip" };
 
   return { ...primary, degraded: primary.degraded || perIp.degraded };
