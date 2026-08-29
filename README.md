@@ -15,7 +15,7 @@ the failure you are trying to test against.
 
 ```bash
 npm install
-npm test          # 37 tests, ~0.4s, no network and no Cloudflare account
+npm test          # 41 tests, ~0.4s, no network and no Cloudflare account
 npm run dev       # http://localhost:8787
 ```
 
@@ -120,7 +120,7 @@ flaky/
 │   └── generate-db.js        regenerates src/data/db.js deterministically
 │
 ├── tests/
-│   └── api.test.mjs          37 tests, no dependencies, runs offline
+│   └── api.test.mjs          41 tests, no dependencies, runs offline
 │
 ├── wrangler.toml             bindings and cron
 ├── .dev.vars.example         copy to .dev.vars for local secrets
@@ -172,7 +172,7 @@ files.
 ## Tests
 
 ```bash
-npm test     # 37 tests, no network, no Cloudflare account needed
+npm test     # 41 tests, no network, no Cloudflare account needed
 ```
 
 Bindings (D1, KV, Analytics Engine, assets) are stubbed in memory at the top of
@@ -184,11 +184,20 @@ matching branch.
 
 A fixed daily window in KV, keyed by API key or IP, reset at 00:00 UTC.
 
-**Known limitation:** KV is eventually consistent and caps writes at roughly one
+**It fails open, deliberately.** KV's free tier allows 1,000 writes a day and
+this writes once per request, so exhausting the quota is what a *successful* day
+looks like. A limiter that fails closed would make the first popular day the day
+the service dies, so a KV error serves the request and sets
+`x-ratelimit-degraded: 1` rather than throwing. Reads and writes are handled
+separately: if the read still works the limit is enforced, so a caller already
+over quota is not let through by the outage.
+
+**Known limitations:** KV is eventually consistent and caps writes at roughly one
 per second per key, so a caller sending a burst is undercounted. This is a spend
-guard, not a fairness mechanism. Before the paid tier means anything, move the
-counter to a Durable Object — that is a change to `middleware/ratelimit.js` and
-nothing else.
+guard, not a fairness mechanism. And on the free tier the 1,000 daily writes are
+the real ceiling — past that the limiter is degraded rather than enforcing.
+Moving the counter to a Durable Object fixes both, and is a change to
+`middleware/ratelimit.js` and nothing else.
 
 ## Analytics
 

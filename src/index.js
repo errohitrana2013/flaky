@@ -78,10 +78,20 @@ export default {
 
     if (request.method === "OPTIONS") return preflight();
 
-    // Anything outside /v1 is the marketing site and docs.
-    if (!url.pathname.startsWith("/v1")) return env.ASSETS.fetch(request);
+    let response;
+    try {
+      // Anything outside /v1 is the marketing site and docs.
+      response = url.pathname.startsWith("/v1")
+        ? await handle(request, env, ctx, url)
+        : await env.ASSETS.fetch(request);
+    } catch (err) {
+      // Last line of defence. Without it an unexpected throw — a D1 outage, a
+      // KV blip — becomes a Cloudflare 1101 page: no CORS headers, no JSON, and
+      // a browser client sees an opaque network error rather than a status it
+      // can actually handle.
+      response = fail(500, "Something broke on our side", "This is a bug in flaky, not a problem with your request.");
+    }
 
-    const response = await handle(request, env, ctx, url);
     recordTelemetry(ctx, request, env, url, response, startedAt);
     return response;
   },

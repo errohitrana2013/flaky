@@ -259,6 +259,48 @@ test("csv quotes delimiters and neutralises spreadsheet formulas", async () => {
   assert.equal(lines[5], ",");
 });
 
+// KV's free tier allows 1,000 writes/day and the limiter writes once per
+// request, so hitting the quota is what a successful day looks like. These
+// guard the rule that a broken limiter must never take the API down with it.
+test("serves traffic when the rate-limit store cannot be written", async () => {
+  const env = makeEnv();
+  env.RATE_LIMITS.put = async () => { throw new Error("KV PUT failed: 429"); };
+
+  const res = await call("/v1/posts?_limit=1", {}, env);
+  assert.equal(res.status, 200, "a dead limiter must not become an outage");
+  assert.equal(res.headers.get("x-ratelimit-degraded"), "1", "and it says so");
+});
+
+test("serves traffic when the rate-limit store cannot be read", async () => {
+  const env = makeEnv();
+  env.RATE_LIMITS.get = async () => { throw new Error("KV GET failed"); };
+
+  const res = await call("/v1/posts?_limit=1", {}, env);
+  assert.equal(res.status, 200);
+  assert.equal(res.headers.get("x-ratelimit-degraded"), "1");
+});
+
+test("still enforces the limit when only writes are broken", async () => {
+  const env = makeEnv();
+  // Reads work and report the caller is already over the anonymous limit.
+  env.RATE_LIMITS.get = async () => "1000";
+  env.RATE_LIMITS.put = async () => { throw new Error("KV PUT failed: 429"); };
+
+  const res = await call("/v1/posts", {}, env);
+  assert.equal(res.status, 429, "an over-quota caller is not let through by the outage");
+});
+
+test("an unexpected failure returns clean JSON, not an unhandled exception", async () => {
+  const env = makeEnv();
+  env.DB.prepare = () => { throw new Error("D1 unavailable"); };
+
+  // The auth header forces a key lookup, so the broken D1 is reached.
+  const res = await call("/v1/posts", { headers: { authorization: "Bearer flk_x" } }, env);
+  assert.equal(res.status, 500);
+  assert.equal(res.headers.get("access-control-allow-origin"), "*", "CORS survives, so browsers see the status");
+  assert.match((await body(res)).error.message, /broke on our side/);
+});
+
 test("answers preflight requests", async () => {
   const res = await call("/v1/posts", { method: "OPTIONS" });
   assert.equal(res.status, 204);
