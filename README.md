@@ -175,6 +175,13 @@ request is an array slice, not a database read. The generator is seeded, so the
 same input produces byte-identical output and regenerating never creates a noisy
 diff.
 
+Collections are emitted as JSON strings and parsed on first access, not as
+object literals. `JSON.parse` uses a far simpler grammar than the JavaScript
+parser, and keeping each collection separate means a request for `/v1/posts`
+parses ~25 KB rather than all 346 KB — `photos` is two thirds of the dataset and
+most requests never touch it. The trade is about 5 KB more in the gzipped
+bundle, because escaped quotes compress slightly worse.
+
 ```bash
 npm run seed     # rewrites src/data/db.js
 ```

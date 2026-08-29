@@ -1,11 +1,26 @@
-// The base dataset is a plain module, bundled into the Worker at build time.
-// No database read on the hot path: a list request is an array slice.
+// The base dataset is bundled into the Worker — a list request is an array
+// slice, not a database read.
 //
-// It is a .js file rather than .json so the same import works unchanged in the
-// Node test runner and in the Workers bundler, without import attributes.
+// Each collection is stored as a JSON string and parsed on first access, then
+// memoised. That keeps cold starts proportional to what a request actually
+// touches: /v1/posts parses ~25 KB instead of the full 346 KB, and photos —
+// two thirds of the dataset, and rarely asked for — is never parsed at all
+// unless someone wants photos.
 
-import db from "./db.js";
+import { RAW, COUNTS } from "./db.js";
 
-export const DATA = db;
-export const RESOURCES = Object.keys(db);
-export const COUNTS = Object.fromEntries(RESOURCES.map((name) => [name, db[name].length]));
+const parsed = new Map();
+
+export const DATA = {};
+for (const name of Object.keys(RAW)) {
+  Object.defineProperty(DATA, name, {
+    enumerable: true, // so Object.keys works without forcing a parse
+    get() {
+      if (!parsed.has(name)) parsed.set(name, JSON.parse(RAW[name]));
+      return parsed.get(name);
+    },
+  });
+}
+
+export const RESOURCES = Object.keys(RAW);
+export { COUNTS };
