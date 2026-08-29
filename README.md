@@ -38,10 +38,22 @@ npx wrangler secret put DIGEST_WEBHOOK          # optional: Slack/Discord URL
 npm run deploy
 ```
 
-> **Set a billing alert before you point a domain at this.** Workers has no spend
-> cap, only alerts, and a public unauthenticated API is exactly the thing someone
-> leaves in a retry loop. The rate limiter is the guard; see the caveat under
-> [Rate limiting](#rate-limiting).
+> **Before you ever upgrade off the free plan, read this.**
+>
+> On the free plan there is nothing to guard: exceeding a limit returns errors
+> rather than charges, so the ceilings break before they bill. Cloudflare will
+> not even let you create a usage-based billing alert, because there is no
+> usage-based subscription to attach it to.
+>
+> The moment you move to the $5 Workers plan that protection disappears, and
+> Cloudflare has **no spend cap — only alerts**. A public unauthenticated API is
+> exactly the thing someone leaves in a retry loop, and the rate limiter is
+> degraded above ~1k requests/day on free KV. So on the day you upgrade, in this
+> order:
+>
+> 1. Create a **Billing → Usage Based Billing** notification for Workers
+> 2. Move the rate limiter to a Durable Object (see [Rate limiting](#rate-limiting))
+> 3. Only then point a real domain at it
 
 ## Routes
 
