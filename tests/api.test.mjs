@@ -214,6 +214,51 @@ test("guards the admin endpoint", async () => {
   assert.equal((await call("/v1/admin/stats", { headers: { authorization: "Bearer admin-token" } })).status, 200);
 });
 
+test("exports CSV with a filename and the right content type", async () => {
+  const res = await call("/v1/admin/export?dataset=daily", { headers: { authorization: "Bearer admin-token" } });
+  assert.equal(res.status, 200);
+  assert.match(res.headers.get("content-type"), /text\/csv/);
+  assert.match(res.headers.get("content-disposition"), /attachment; filename="flaky-daily-\d{4}-\d{2}-\d{2}\.csv"/);
+  // Check the bytes, not res.text(): "UTF-8 decode" strips a leading BOM by
+  // spec, so the string would look BOM-less even when the wire format has one.
+  const bytes = new Uint8Array(await res.arrayBuffer());
+  assert.deepEqual([...bytes.slice(0, 3)], [0xef, 0xbb, 0xbf], "starts with a UTF-8 BOM for Excel");
+  assert.equal(new TextDecoder().decode(bytes.slice(3)), "day,requests,errors\r\n");
+});
+
+test("guards the CSV export and rejects an unknown dataset", async () => {
+  assert.equal((await call("/v1/admin/export?dataset=daily")).status, 401);
+  const res = await call("/v1/admin/export?dataset=nonsense", { headers: { authorization: "Bearer admin-token" } });
+  assert.equal(res.status, 400);
+  assert.match((await body(res)).error.hint, /countries/);
+});
+
+test("csv quotes delimiters and neutralises spreadsheet formulas", async () => {
+  const { toCsv } = await import("../src/lib/csv.js");
+
+  const csv = toCsv(
+    [
+      { a: "plain", b: 1 },
+      { a: 'has "quotes", a comma\nand a newline', b: 2 },
+      // A field a stranger controls. Left alone, Excel executes this on open.
+      { a: "=cmd|'/c calc'!A1", b: 3 },
+      { a: "+1-555-0100", b: 4 },
+      { a: null, b: undefined },
+    ],
+    [["a", "a"], ["b", "b"]]
+  );
+
+  // Split on CRLF: a newline *inside* a quoted field is a bare \n and must stay
+  // part of that record, which is exactly what a correct parser will do too.
+  const lines = csv.split("\r\n");
+  assert.equal(lines[0], "a,b");
+  assert.equal(lines[1], "plain,1");
+  assert.equal(lines[2], '"has ""quotes"", a comma\nand a newline",2');
+  assert.equal(lines[3], "'=cmd|'/c calc'!A1,3");
+  assert.equal(lines[4], "'+1-555-0100,4");
+  assert.equal(lines[5], ",");
+});
+
 test("answers preflight requests", async () => {
   const res = await call("/v1/posts", { method: "OPTIONS" });
   assert.equal(res.status, 204);

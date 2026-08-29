@@ -252,6 +252,26 @@ here.) It shows:
   names resolved by `Intl.DisplayNames` rather than a bundled country table
 - **Busiest keys**
 
+Each section has a **CSV** button beside its heading. Downloads cover 90 days
+rather than the dashboard's 14, since someone opening a spreadsheet is looking
+for a trend rather than today.
+
+```bash
+# same data without the browser, for a cron job or a notebook
+curl -H "authorization: Bearer $ADMIN_TOKEN" \
+  'https://your-worker/v1/admin/export?dataset=countries&days=90' -o countries.csv
+```
+
+Datasets: `daily`, `hourly`, `countries`, `visitors`, `keys`. Files open in
+Excel and Sheets directly — UTF-8 BOM so accented country names survive, CRLF
+line endings, and any cell starting with `=`, `+`, `-` or `@` is prefixed with
+an apostrophe. That last one matters: without it a key id or email a stranger
+chose is executed as a formula when the file is opened.
+
+Hours stay UTC in the export even though the dashboard displays local. A
+shifted number in a spreadsheet with no timezone recorded next to it is a trap,
+so the column is named `hour_utc`.
+
 To fill it with plausible numbers while developing, insert rows straight into
 the local D1 — `.wrangler/` is gitignored, so it can never reach production.
 

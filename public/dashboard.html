@@ -76,6 +76,17 @@
 
   .flag { font-size: 15px; margin-right: 7px; }
   .code { color: var(--muted); font-size: 12px; }
+
+  /* CSV links sit in the section headings, so the download is next to the
+     table it came from rather than in a menu somewhere. */
+  h2 { display: flex; align-items: center; gap: 10px; }
+  .csv {
+    margin-left: auto; font-size: 11px; letter-spacing: .04em; font-weight: 600;
+    color: var(--muted); background: none; border: 1px solid var(--line);
+    padding: 4px 9px; border-radius: 6px; cursor: pointer; text-transform: uppercase;
+  }
+  .csv:hover { color: var(--accent); border-color: var(--accent); }
+  .csv:disabled { opacity: .5; cursor: wait; }
 </style>
 </head>
 <body>
@@ -105,22 +116,22 @@
       <div class="tile"><div class="k">Keys issued</div><div class="v" id="t-key">—</div></div>
     </div>
 
-    <h2>Per day</h2>
+    <h2>Per day <button class="csv" data-csv="daily">csv</button></h2>
     <table>
       <thead><tr><th>Day</th><th class="num">Requests</th><th class="num">Errors</th><th class="num">Visitors</th><th class="chart"></th></tr></thead>
       <tbody id="daily"></tbody>
     </table>
 
-    <h2>When people use it <span id="tz" class="tzlabel"></span></h2>
+    <h2>When people use it <span id="tz" class="tzlabel"></span> <button class="csv" data-csv="hourly">csv</button></h2>
     <div id="hours" class="hours"></div>
 
-    <h2>Where they come from</h2>
+    <h2>Where they come from <button class="csv" data-csv="countries">csv</button></h2>
     <table>
       <thead><tr><th>Region</th><th class="num">Visitors</th><th class="num">Requests</th><th class="chart"></th></tr></thead>
       <tbody id="geo"></tbody>
     </table>
 
-    <h2>Busiest keys</h2>
+    <h2>Busiest keys <button class="csv" data-csv="keys">csv</button></h2>
     <table>
       <thead><tr><th>Key id</th><th class="num">Requests</th></tr></thead>
       <tbody id="keys"></tbody>
@@ -240,16 +251,58 @@ function renderGeo(countries) {
     .join("");
 }
 
+// Held in memory only, for the export requests. It still needs the admin
+// header, so the download cannot be a plain link.
+let authToken = null;
+
 async function attempt(token) {
   $("error").hidden = true;
   try {
     render(await load(token));
+    authToken = token;
     sessionStorage.setItem("flaky_admin", token);
   } catch (err) {
+    authToken = null;
     sessionStorage.removeItem("flaky_admin");
     $("error").textContent = err.message;
     $("error").hidden = false;
   }
+}
+
+// The export window is deliberately wider than the dashboard's 14 days —
+// someone downloading a spreadsheet is looking for a trend, not today.
+async function downloadCsv(button) {
+  const dataset = button.dataset.csv;
+  button.disabled = true;
+  try {
+    const res = await fetch(`/v1/admin/export?dataset=${dataset}&days=90`, {
+      headers: { authorization: "Bearer " + authToken },
+    });
+    if (!res.ok) throw new Error("Export failed: " + res.status);
+
+    // Prefer the filename the server chose, so the date in it is the server's.
+    const disposition = res.headers.get("content-disposition") || "";
+    const named = disposition.match(/filename="([^"]+)"/);
+
+    const url = URL.createObjectURL(await res.blob());
+    const link = Object.assign(document.createElement("a"), {
+      href: url,
+      download: named ? named[1] : `flaky-${dataset}.csv`,
+    });
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(url);
+  } catch (err) {
+    $("error").textContent = err.message;
+    $("error").hidden = false;
+  } finally {
+    button.disabled = false;
+  }
+}
+
+for (const button of document.querySelectorAll(".csv")) {
+  button.addEventListener("click", () => downloadCsv(button));
 }
 
 $("go").addEventListener("click", () => attempt($("token").value.trim()));

@@ -1,5 +1,6 @@
 import { json, fail } from "../lib/response.js";
 import { daysAgo, today } from "../lib/hash.js";
+import { toCsv, csvResponse } from "../lib/csv.js";
 
 // Reads the D1 rollups, never the raw request log. The dashboard has to stay
 // fast and free, and Analytics Engine is for ad-hoc SQL when a question comes
@@ -99,4 +100,77 @@ export async function getStats(ctx) {
     hourly: hours, // hour is UTC; the dashboard converts to the viewer's zone
     countries,
   });
+}
+
+// --- CSV export ------------------------------------------------------------
+//
+// One dataset per file rather than one endpoint returning everything, because
+// a spreadsheet holds one table. Each entry declares its SQL and its column
+// order together, so adding an export is one entry and nothing else.
+//
+// Hours stay UTC in the file. The dashboard converts for display, but a shifted
+// number in a spreadsheet with no timezone recorded alongside it is a trap, so
+// the column is named for what it holds.
+
+const REGION = (() => {
+  try { return new Intl.DisplayNames(["en"], { type: "region" }); } catch { return null; }
+})();
+
+const countryName = (code) => {
+  if (!/^[A-Za-z]{2}$/.test(code || "") || code.toUpperCase() === "XX") return "Unknown";
+  try { return REGION?.of(code.toUpperCase()) || code.toUpperCase(); } catch { return code.toUpperCase(); }
+};
+
+const DATASETS = {
+  daily: {
+    sql: `SELECT day, SUM(requests) AS requests, SUM(errors) AS errors
+          FROM usage_daily WHERE day >= ? GROUP BY day ORDER BY day`,
+    columns: [["day", "day"], ["requests", "requests"], ["errors", "errors"]],
+  },
+  hourly: {
+    sql: `SELECT hour, SUM(requests) AS requests, SUM(errors) AS errors
+          FROM usage_hourly WHERE day >= ? GROUP BY hour ORDER BY hour`,
+    columns: [["hour_utc", "hour"], ["requests", "requests"], ["errors", "errors"]],
+  },
+  countries: {
+    sql: `SELECT g.country AS country, SUM(g.requests) AS requests,
+                 (SELECT COUNT(*) FROM daily_visitors v WHERE v.day >= ? AND v.country = g.country) AS visitors
+          FROM usage_geo g WHERE g.day >= ? GROUP BY g.country ORDER BY requests DESC`,
+    binds: 2,
+    columns: [["country_code", "country"], ["country", "name"], ["visitors", "visitors"], ["requests", "requests"]],
+    decorate: (rows) => rows.map((row) => ({ ...row, name: countryName(row.country) })),
+  },
+  visitors: {
+    sql: `SELECT day, COUNT(*) AS visitors FROM daily_visitors
+          WHERE day >= ? GROUP BY day ORDER BY day`,
+    columns: [["day", "day"], ["visitors", "visitors"]],
+  },
+  keys: {
+    sql: `SELECT key_id, tier, SUM(requests) AS requests, SUM(errors) AS errors
+          FROM usage_daily WHERE day >= ? AND key_id != 'anon'
+          GROUP BY key_id ORDER BY requests DESC`,
+    columns: [["key_id", "key_id"], ["tier", "tier"], ["requests", "requests"], ["errors", "errors"]],
+  },
+};
+
+// GET /v1/admin/export?dataset=daily&days=30
+export async function exportCsv(ctx) {
+  if (!authorised(ctx.request, ctx.env)) {
+    return fail(401, "Admin token required", "Send Authorization: Bearer <ADMIN_TOKEN>.");
+  }
+
+  const name = ctx.query.get("dataset") || "daily";
+  const spec = DATASETS[name];
+  if (!spec) {
+    return fail(400, `Unknown dataset '${name}'`, `Available: ${Object.keys(DATASETS).join(", ")}.`);
+  }
+
+  const days = Math.min(Math.max(Number(ctx.query.get("days")) || 30, 1), 365);
+  const since = daysAgo(days);
+
+  const binds = Array.from({ length: spec.binds || 1 }, () => since);
+  const result = await ctx.env.DB.prepare(spec.sql).bind(...binds).all();
+  const rows = spec.decorate ? spec.decorate(result.results || []) : result.results || [];
+
+  return csvResponse(toCsv(rows, spec.columns), `flaky-${name}-${today()}.csv`);
 }
