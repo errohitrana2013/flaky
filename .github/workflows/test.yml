@@ -1,0 +1,25 @@
+name: test
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      # The suite stubs every binding in memory, so it needs no Cloudflare
+      # account and no secrets. `npm ci` is only here for wrangler.
+      - run: npm ci
+      - run: npm test
+
+      # Catches a broken import or a bundle that has outgrown the size limit
+      # before it reaches a deploy.
+      - run: npx wrangler deploy --dry-run --outdir=/tmp/build

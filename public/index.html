@@ -207,16 +207,16 @@ GET /v1/posts/1/comments                  <span class="tok-com"># nested</span><
       loses an afternoon to it. When you need writes that persist, take a sandbox.
     </p>
     <pre><span class="tok-com"># 1. a free key (no confirmation email)</span>
-curl -X POST https://flaky.dev/v1/keys \
+curl -X POST <span class="host">https://flaky.dev</span>/v1/keys \
   -H 'content-type: application/json' \
   -d '{"email":"you@example.com"}'
 
 <span class="tok-com"># 2. a sandbox — your own writable copy, 24 hours</span>
-curl -X POST https://flaky.dev/v1/sandbox \
+curl -X POST <span class="host">https://flaky.dev</span>/v1/sandbox \
   -H 'authorization: Bearer flk_...'
 
 <span class="tok-com"># 3. write to it. this one is real.</span>
-curl -X POST https://flaky.dev/v1/sandbox/&lt;id&gt;/posts \
+curl -X POST <span class="host">https://flaky.dev</span>/v1/sandbox/&lt;id&gt;/posts \
   -H 'content-type: application/json' \
   -d '{"title":"this persists"}'</pre>
     <p style="margin-top:16px">
@@ -252,6 +252,11 @@ curl -X POST https://flaky.dev/v1/sandbox/&lt;id&gt;/posts \
 
 <script>
 const $ = (id) => document.getElementById(id);
+
+// Copy-pasteable examples have to point at wherever this page is actually
+// served from — localhost while developing, workers.dev today, a custom domain
+// later. Hardcoding one of those means the other two are quietly wrong.
+for (const el of document.querySelectorAll(".host")) el.textContent = location.origin;
 
 // Clamp to the range the API accepts, and write the corrected number back into
 // the field so the user sees what was actually sent. Sending an out-of-range
