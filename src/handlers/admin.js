@@ -88,9 +88,13 @@ export async function getStats(ctx) {
 
     // Region lives on daily_visitors rather than the hot rollup, so this counts
     // people and addresses per region, not requests.
+    // Blanks are grouped as Unknown rather than filtered out. Dropping them
+    // makes the region rows silently fail to add up to the visitor total, and
+    // a number that does not reconcile reads as a bug even when it is not.
     ctx.env.DB.prepare(
-      `SELECT country, region, COUNT(*) AS visitors, COUNT(DISTINCT ip_hash) AS addresses
-       FROM daily_visitors WHERE day >= ? AND region != ''
+      `SELECT country, CASE WHEN region = '' THEN 'Unknown' ELSE region END AS region,
+              COUNT(*) AS visitors, COUNT(DISTINCT NULLIF(ip_hash, '')) AS addresses
+       FROM daily_visitors WHERE day >= ?
        GROUP BY country, region ORDER BY visitors DESC LIMIT 40`
     ).bind(since).all(),
 
@@ -190,8 +194,9 @@ const DATASETS = {
     columns: [["day", "day"], ["visitors", "visitors"]],
   },
   regions: {
-    sql: `SELECT country, region, COUNT(*) AS visitors, COUNT(DISTINCT ip_hash) AS addresses
-          FROM daily_visitors WHERE day >= ? AND region != ''
+    sql: `SELECT country, CASE WHEN region = '' THEN 'Unknown' ELSE region END AS region,
+                 COUNT(*) AS visitors, COUNT(DISTINCT NULLIF(ip_hash, '')) AS addresses
+          FROM daily_visitors WHERE day >= ?
           GROUP BY country, region ORDER BY visitors DESC`,
     columns: [["country_code", "country"], ["region", "region"], ["visitors", "visitors"], ["addresses", "addresses"]],
   },
