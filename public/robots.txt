@@ -1,0 +1,19 @@
+# flakyapi.dev — a mock REST API that fails on purpose.
+#
+# Crawling the site is welcome: being found in search is the whole
+# distribution plan. Two things are excluded, for different reasons.
+
+User-agent: *
+
+# Admin-token gated and useless without it, but there is no reason for it
+# to appear in a search result.
+Disallow: /dashboard
+Disallow: /v1/admin/
+
+# The API itself. Indexing thousands of near-identical JSON responses
+# would bury the pages that actually explain what this is.
+Disallow: /v1/
+
+Allow: /
+
+Sitemap: https://flakyapi.dev/sitemap.xml

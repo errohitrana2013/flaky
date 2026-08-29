@@ -93,13 +93,19 @@ export async function rollUp(env, ctx, meta) {
     // guarded DO UPDATE backfills such a row once and then no-ops, so a repeat
     // visitor still costs nothing on the steady path.
     env.DB.prepare(
-      `INSERT INTO daily_visitors (day, visitor, country, region, ip_hash)
-       VALUES (?, ?, ?, ?, ?)
+      `INSERT INTO daily_visitors (day, visitor, country, region, ip_hash, bot)
+       VALUES (?, ?, ?, ?, ?, ?)
        ON CONFLICT (day, visitor) DO UPDATE SET
          region  = excluded.region,
-         ip_hash = excluded.ip_hash
-       WHERE daily_visitors.ip_hash = '' OR daily_visitors.region = ''`
-    ).bind(meta.day, meta.visitor, meta.country, meta.region || "", meta.ipHash || ""),
+         ip_hash = excluded.ip_hash,
+         -- Sticky: one bot-shaped request is enough to call it a bot for the
+         -- day. A crawler that sends a browser user agent once should not
+         -- launder itself into the human count.
+         bot     = MAX(daily_visitors.bot, excluded.bot)
+       WHERE daily_visitors.ip_hash = ''
+          OR daily_visitors.region = ''
+          OR daily_visitors.bot < excluded.bot`
+    ).bind(meta.day, meta.visitor, meta.country, meta.region || "", meta.ipHash || "", meta.client === "bot" ? 1 : 0),
   ]);
 }
 
@@ -126,7 +132,7 @@ export async function sendDigest(env) {
   ).bind(day).first();
 
   const visitors = await env.DB.prepare(
-    "SELECT COUNT(*) AS count FROM daily_visitors WHERE day = ?"
+    "SELECT COUNT(*) AS count FROM daily_visitors WHERE day = ? AND bot = 0"
   ).bind(day).first();
 
   const requests = totals?.requests || 0;

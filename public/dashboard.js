@@ -22,6 +22,7 @@ function render(data) {
   $("t-err").textContent = (data.totals.errorRate * 100).toFixed(1) + "%";
   $("t-key").textContent = num(data.totals.keysIssued);
   $("t-ip").textContent = num(data.totals.addresses);
+  $("t-bot").textContent = num(data.totals.bots);
 
   const visitorsByDay = Object.fromEntries(data.visitors.map((v) => [v.day, v.visitors]));
   $("t-vis").textContent = num(data.visitors.reduce((s, v) => s + v.visitors, 0));

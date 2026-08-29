@@ -51,7 +51,9 @@ export async function getStats(ctx) {
     ).bind(since).all(),
 
     ctx.env.DB.prepare(
-      `SELECT day, COUNT(*) AS visitors
+      `SELECT day,
+              SUM(CASE WHEN bot = 0 THEN 1 ELSE 0 END) AS visitors,
+              SUM(bot) AS bots
        FROM daily_visitors WHERE day >= ? GROUP BY day ORDER BY day`
     ).bind(since).all(),
 
@@ -77,7 +79,7 @@ export async function getStats(ctx) {
 
     ctx.env.DB.prepare(
       `SELECT country, COUNT(*) AS visitors
-       FROM daily_visitors WHERE day >= ? GROUP BY country`
+       FROM daily_visitors WHERE day >= ? AND bot = 0 GROUP BY country`
     ).bind(since).all(),
 
     ctx.env.DB.prepare(
@@ -94,12 +96,14 @@ export async function getStats(ctx) {
     ctx.env.DB.prepare(
       `SELECT country, CASE WHEN region = '' THEN 'Unknown' ELSE region END AS region,
               COUNT(*) AS visitors, COUNT(DISTINCT NULLIF(ip_hash, '')) AS addresses
-       FROM daily_visitors WHERE day >= ?
+       FROM daily_visitors WHERE day >= ? AND bot = 0
        GROUP BY country, region ORDER BY visitors DESC LIMIT 40`
     ).bind(since).all(),
 
     ctx.env.DB.prepare(
-      "SELECT COUNT(DISTINCT ip_hash) AS count FROM daily_visitors WHERE day >= ? AND ip_hash != ''"
+      `SELECT COUNT(DISTINCT CASE WHEN bot = 0 THEN NULLIF(ip_hash, '') END) AS count,
+              SUM(bot) AS bots
+       FROM daily_visitors WHERE day >= ?`
     ).bind(since).first(),
   ]);
 
@@ -138,6 +142,9 @@ export async function getStats(ctx) {
       // The gap between visitors and addresses answers "ten people, or one
       // person with ten tabs".
       addresses: addresses?.count || 0,
+      // Counted, not hidden. Scanners hitting a new domain are normal, and
+      // seeing the split is the only way to read the visitor number honestly.
+      bots: addresses?.bots || 0,
     },
     daily: rows,
     visitors: visitors.results || [],
@@ -189,14 +196,16 @@ const DATASETS = {
     decorate: (rows) => rows.map((row) => ({ ...row, name: countryName(row.country) })),
   },
   visitors: {
-    sql: `SELECT day, COUNT(*) AS visitors FROM daily_visitors
-          WHERE day >= ? GROUP BY day ORDER BY day`,
-    columns: [["day", "day"], ["visitors", "visitors"]],
+    sql: `SELECT day,
+                 SUM(CASE WHEN bot = 0 THEN 1 ELSE 0 END) AS visitors,
+                 SUM(bot) AS bots
+          FROM daily_visitors WHERE day >= ? GROUP BY day ORDER BY day`,
+    columns: [["day", "day"], ["visitors", "visitors"], ["bots", "bots"]],
   },
   regions: {
     sql: `SELECT country, CASE WHEN region = '' THEN 'Unknown' ELSE region END AS region,
                  COUNT(*) AS visitors, COUNT(DISTINCT NULLIF(ip_hash, '')) AS addresses
-          FROM daily_visitors WHERE day >= ?
+          FROM daily_visitors WHERE day >= ? AND bot = 0
           GROUP BY country, region ORDER BY visitors DESC`,
     columns: [["country_code", "country"], ["region", "region"], ["visitors", "visitors"], ["addresses", "addresses"]],
   },

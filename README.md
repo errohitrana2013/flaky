@@ -245,7 +245,7 @@ fast and free of API calls:
 |---|---|---|
 | `usage_bucket` | day × hour × key × country | traffic, errors, when, where, whose |
 | `error_bucket` | day × status × path | *what* is failing, written only on failures |
-| `daily_visitors` | day × visitor (+ country, region, address hash) | how many unique people and addresses, from where |
+| `daily_visitors` | day × visitor (+ country, region, address hash, bot flag) | how many unique **people** and addresses, from where |
 
 Daily totals, the hour histogram and the per-country breakdown are all `GROUP
 BY`s over `usage_bucket`, so they cost one upsert between them rather than three.
@@ -270,7 +270,11 @@ slow down or break a request.
 (Cloudflare's asset handler drops the `.html`, so `/dashboard.html` redirects
 here.) It shows:
 
-- **Totals** — requests, unique visitors, error rate, keys issued
+- **Totals** — requests, people, addresses, bots, error rate, keys issued
+
+  Bots are counted and shown separately, never folded into the people number. A
+  new domain is scanned for `/.env` and `/.git/config` within hours; counting
+  those as visitors makes being scanned look like traction.
 - **Per day** — a row and a bar per day, error-heavy days in accent
 - **When people use it** — a 24-bar hour-of-day histogram, converted from stored
   UTC into the *viewer's* timezone, half-hour offsets included, because "when
@@ -291,7 +295,8 @@ curl -H "authorization: Bearer $ADMIN_TOKEN" \
   'https://flakyapi.dev/v1/admin/export?dataset=countries&days=90' -o countries.csv
 ```
 
-Datasets: `daily`, `hourly`, `countries`, `regions`, `visitors`, `errors`, `keys`. Files open in
+Datasets: `daily`, `hourly`, `countries`, `regions`, `visitors`, `errors`, `keys`.
+Geography and the people count exclude bots; `visitors` carries both columns. Files open in
 Excel and Sheets directly — UTF-8 BOM so accented country names survive, CRLF
 line endings, and any cell starting with `=`, `+`, `-` or `@` is prefixed with
 an apostrophe. That last one matters: without it a key id or email a stranger
