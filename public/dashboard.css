@@ -91,3 +91,26 @@
 .st-4 { color: var(--muted); }
 .st-5 { color: var(--accent); }
 .track.sev { background: var(--accent); }
+
+/* Session state and the escape hatch for it. */
+.session { color: var(--muted); font-size: 13px; margin-left: 10px; }
+.linkish {
+  background: none; border: 0; padding: 0 0 0 10px; color: var(--accent);
+  font: inherit; font-size: 13px; cursor: pointer; text-decoration: underline;
+}
+
+/* Segmented control for the histogram series. */
+.toggle { display: inline-flex; border: 1px solid var(--line); border-radius: 7px; overflow: hidden; margin-left: 4px; }
+.seg {
+  background: none; border: 0; padding: 4px 10px; cursor: pointer;
+  font: inherit; font-size: 11px; letter-spacing: .05em; text-transform: uppercase;
+  color: var(--muted); border-radius: 0;
+}
+.seg.on { background: var(--accent); color: #fff; }
+
+/* An error the caller asked for is the product working; one the service
+   produced is not. They must not look alike. */
+.cause { font-size: 11px; letter-spacing: .05em; text-transform: uppercase; }
+.cause-req { color: var(--muted); }
+.cause-real { color: var(--accent); font-weight: 600; }
+tr.real td { background: var(--accent-soft, transparent); }

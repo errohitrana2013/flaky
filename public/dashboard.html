@@ -19,7 +19,11 @@
     </svg>
     flaky · traffic
   </h1>
-  <p class="sub">Reads the D1 rollups. Your token is kept in sessionStorage and never leaves this tab.</p>
+  <p class="sub">
+    Reads the D1 rollups. <a href="/insights">insights →</a>
+    <span id="session" class="session"></span>
+    <button id="forget" class="linkish" hidden>Forget token</button>
+  </p>
 
   <div id="gate" class="gate">
     <input id="token" type="password" placeholder="ADMIN_TOKEN" autocomplete="off">
@@ -33,6 +37,7 @@
       <div class="tile"><div class="k">People</div><div class="v" id="t-vis">—</div></div>
       <div class="tile"><div class="k">Addresses</div><div class="v" id="t-ip">—</div></div>
       <div class="tile"><div class="k">Bots</div><div class="v" id="t-bot">—</div></div>
+      <div class="tile"><div class="k">Real errors</div><div class="v" id="t-real">—</div></div>
       <div class="tile"><div class="k">Error rate</div><div class="v" id="t-err">—</div></div>
       <div class="tile"><div class="k">Keys issued</div><div class="v" id="t-key">—</div></div>
     </div>
@@ -43,7 +48,12 @@
       <tbody id="daily"></tbody>
     </table>
 
-    <h2>When people use it <span id="tz" class="tzlabel"></span> <button class="csv" data-csv="hourly">csv</button></h2>
+    <h2>When people use it <span id="tz" class="tzlabel"></span>
+      <span class="toggle">
+        <button id="m-people" class="seg on">People</button><button id="m-req" class="seg">Requests</button>
+      </span>
+      <button class="csv" data-csv="hourly">csv</button>
+    </h2>
     <div id="hours" class="hours"></div>
 
     <h2>Where they come from <button class="csv" data-csv="countries">csv</button></h2>
@@ -60,7 +70,7 @@
 
     <h2>What is failing <button class="csv" data-csv="errors">csv</button></h2>
     <table>
-      <thead><tr><th>Status</th><th>Path</th><th class="num">Count</th><th class="chart"></th></tr></thead>
+      <thead><tr><th>Status</th><th>Path</th><th>Cause</th><th class="num">Count</th><th class="chart"></th></tr></thead>
       <tbody id="errors"></tbody>
     </table>
 
@@ -72,6 +82,7 @@
   </div>
 </div>
 
+<script src="/token.js" defer></script>
 <script src="/dashboard.js" defer></script>
 </body>
 </html>

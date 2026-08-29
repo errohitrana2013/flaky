@@ -1,0 +1,34 @@
+/* Layered on dashboard.css, which supplies the palette and the base tables. */
+
+.sub a { margin-left: 10px; }
+.lead { color: var(--muted); font-size: 14.5px; max-width: 62ch; margin: -4px 0 14px; }
+
+/* The headline answer gets a shape of its own, because it is the one number
+   that decides whether the rest is worth optimising. */
+.verdict {
+  display: flex; align-items: center; gap: 22px;
+  background: var(--panel); border: 1px solid var(--line);
+  border-radius: 12px; padding: 22px 26px; margin-bottom: 12px;
+}
+.verdict-num {
+  font-size: 46px; font-weight: 600; letter-spacing: -.03em;
+  color: var(--accent); font-variant-numeric: tabular-nums; line-height: 1;
+}
+.verdict-text p { margin: 0; font-size: 15px; }
+.verdict-text .hint { color: var(--muted); font-size: 13.5px; margin-top: 5px; max-width: 52ch; }
+
+.tiles-3 { grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); }
+.tiles-3 .k { font-family: ui-monospace, monospace; text-transform: none; letter-spacing: 0; }
+
+.cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 14px; }
+.card { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 20px 22px; }
+.card h3 { margin: 0 0 6px; font-size: 15px; }
+.card p { color: var(--muted); font-size: 14px; margin: 0 0 12px; }
+.card pre {
+  background: var(--bg); border: 1px solid var(--line); color: var(--ink);
+  padding: 12px 14px; border-radius: 8px; overflow-x: auto;
+  font-family: ui-monospace, monospace; font-size: 12px; line-height: 1.6; margin: 0;
+}
+
+td.ms { font-family: ui-monospace, monospace; font-size: 13px; font-variant-numeric: tabular-nums; }
+td.ms.slow { color: var(--accent); font-weight: 600; }

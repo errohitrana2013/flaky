@@ -71,6 +71,18 @@ function recordTelemetry(ctx, request, env, url, response, startedAt) {
         // identify a person, which the visitor hashing exists to prevent.
         region: request.cf?.region || "",
         ipHash: await ipId(request, env.VISITOR_SALT || "change-me"),
+        // Which of the three controls this caller reached for. The whole
+        // product thesis is that people want these; nothing measured it.
+        chaos: {
+          delay: url.searchParams.has("_delay"),
+          status: url.searchParams.has("_status"),
+          failRate: url.searchParams.has("_fail_rate"),
+        },
+        // A failure the caller requested is the product working, not a fault.
+        // Only _status and _fail_rate can cause one; _delay cannot.
+        injected:
+          response.status >= 400 &&
+          (url.searchParams.has("_status") || url.searchParams.has("_fail_rate")),
         durationMs: Date.now() - startedAt,
         bytes: Number(response.headers.get("content-length")) || 0,
       };

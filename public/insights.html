@@ -1,0 +1,101 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>flaky — insights</title>
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="/dashboard.css">
+<link rel="stylesheet" href="/insights.css">
+</head>
+<body>
+<div class="wrap">
+  <h1>
+    <svg class="mark" viewBox="0 0 32 32" aria-hidden="true">
+      <rect class="bar"   x="3"  y="18" width="5" height="9"  rx="2.5"/>
+      <rect class="bar"   x="10" y="12" width="5" height="15" rx="2.5"/>
+      <rect class="flake" x="17" y="22" width="5" height="5"  rx="2.5"/>
+      <rect class="bar"   x="24" y="4"  width="5" height="23" rx="2.5"/>
+    </svg>
+    flaky · insights
+  </h1>
+  <p class="sub">
+    What to change, rather than how much happened.
+    <a href="/dashboard">← traffic dashboard</a>
+    <span id="session" class="session"></span>
+    <button id="forget" class="linkish" hidden>Forget token</button>
+  </p>
+
+  <div id="gate" class="gate">
+    <input id="token" type="password" placeholder="ADMIN_TOKEN" autocomplete="off">
+    <button id="go">Load</button>
+  </div>
+  <div id="error" class="err" hidden></div>
+
+  <div id="panel" hidden>
+
+    <!-- The product question first, because it is the one that decides
+         whether any of the rest is worth optimising. -->
+    <h2>Is the differentiator being used? <button class="csv" data-csv="paths">csv</button></h2>
+    <div class="verdict" id="verdict">
+      <div class="verdict-num" id="chaos-share">—</div>
+      <div class="verdict-text">
+        <p id="chaos-line">of requests reach for a chaos parameter</p>
+        <p class="hint" id="chaos-hint"></p>
+      </div>
+    </div>
+    <div class="tiles tiles-3">
+      <div class="tile"><div class="k">_delay</div><div class="v" id="c-delay">—</div></div>
+      <div class="tile"><div class="k">_status</div><div class="v" id="c-status">—</div></div>
+      <div class="tile"><div class="k">_fail_rate</div><div class="v" id="c-fail">—</div></div>
+    </div>
+
+    <h2>Where traffic comes from <button class="csv" data-csv="referrers">csv</button></h2>
+    <table>
+      <thead><tr><th>Referrer</th><th class="num">Requests</th><th class="chart"></th></tr></thead>
+      <tbody id="referrers"></tbody>
+    </table>
+
+    <h2>Most-used endpoints <button class="csv" data-csv="paths">csv</button></h2>
+    <table>
+      <thead><tr><th>Path</th><th class="num">Requests</th><th class="num">Avg</th><th class="num">Slowest</th><th class="chart"></th></tr></thead>
+      <tbody id="paths"></tbody>
+    </table>
+
+    <h2>Slowest responses</h2>
+    <p class="lead">Ranked by worst single response, not by average — a mean of 8&nbsp;ms hides a 4-second outlier, and the outlier is the bug.</p>
+    <table>
+      <thead><tr><th>Path</th><th class="num">Slowest</th><th class="num">Avg</th><th class="num">Requests</th></tr></thead>
+      <tbody id="slowest"></tbody>
+    </table>
+
+    <h2>Raw request logs</h2>
+    <p class="lead">
+      Per-request detail is not in D1 — storing every request would triple the write
+      cost for data that is rarely read. Two places have it:
+    </p>
+    <div class="cards">
+      <div class="card">
+        <h3>Live tail</h3>
+        <p>Every request as it happens, including console output and uncaught errors. Best for debugging something happening right now.</p>
+        <pre><code>npm run tail</code></pre>
+      </div>
+      <div class="card">
+        <h3>Analytics Engine</h3>
+        <p>One row per request, kept for 90 days, queryable with SQL. Best for a question these rollups cannot answer.</p>
+        <pre><code>SELECT blob1 AS path, count() AS hits,
+       avg(double1) AS avg_ms
+FROM flaky_requests
+WHERE timestamp > now() - INTERVAL '7' DAY
+  AND double3 = 0
+GROUP BY path ORDER BY hits DESC</code></pre>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="/token.js" defer></script>
+<script src="/insights.js" defer></script>
+</body>
+</html>

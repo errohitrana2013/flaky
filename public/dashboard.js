@@ -20,6 +20,7 @@ function applySizes(root) {
 function render(data) {
   $("t-req").textContent = num(data.totals.requests);
   $("t-err").textContent = (data.totals.errorRate * 100).toFixed(1) + "%";
+  $("t-real").textContent = num(data.totals.realErrors);
   $("t-key").textContent = num(data.totals.keysIssued);
   $("t-ip").textContent = num(data.totals.addresses);
   $("t-bot").textContent = num(data.totals.bots);
@@ -42,7 +43,8 @@ function render(data) {
     : '<tr><td colspan="5" class="muted">No traffic yet.</td></tr>';
 
   applySizes($("daily"));
-  renderHours(data.hourly);
+  LATEST = data;
+  renderHours(data.hourly, data.hourlyVisitors, MODE);
   renderErrors(data.errors || []);
   renderGeo(data.countries);
   renderRegions(data.regions || []);
@@ -58,7 +60,10 @@ function render(data) {
 // The API stores hours in UTC. "When should I ship" is a local-time question,
 // so shift into the viewer's zone here. India and friends sit on a half-hour
 // offset, hence the fractional maths rather than a plain integer rotate.
-function renderHours(hourly) {
+let LATEST = null;
+let MODE = "people";
+
+function renderHours(hourly, visitors, mode) {
   const offset = -new Date().getTimezoneOffset() / 60;
   const zone = Intl.DateTimeFormat().resolvedOptions().timeZone;
   $("tz").textContent = zone ? `· ${zone}` : "· local time";
@@ -68,18 +73,27 @@ function renderHours(hourly) {
     return `${String(hh).padStart(2, "0")}:${String(Math.round((v - hh) * 60)).padStart(2, "0")}`;
   };
 
+  // Two different questions: requests can be dominated by one busy script,
+  // while arrivals say when people actually turn up.
+  const byHour = Object.fromEntries((visitors || []).map((v) => [v.hour, v.visitors]));
   const buckets = hourly
-    .map((b) => ({ ...b, local: (((b.hour + offset) % 24) + 24) % 24 }))
+    .map((b) => ({
+      hour: b.hour,
+      errors: b.errors,
+      value: mode === "people" ? (byHour[b.hour] || 0) : b.requests,
+      local: (((b.hour + offset) % 24) + 24) % 24,
+    }))
     .sort((a, b) => a.local - b.local);
 
-  const peak = Math.max(...buckets.map((b) => b.requests));
+  const unit = mode === "people" ? "people" : "requests";
+  const peak = Math.max(...buckets.map((b) => b.value));
 
   $("hours").innerHTML = buckets
     .map((b, i) => {
-      const height = peak ? Math.max((b.requests / peak) * 100, 1.5) : 1.5;
+      const height = peak ? Math.max((b.value / peak) * 100, 1.5) : 1.5;
       // Every third label only; 24 of them overlap on a phone.
-      return `<div class="hour${b.requests === peak && peak > 0 ? " peak" : ""}"
-                   title="${label(b.local)}–${label((b.local + 1) % 24)} · ${num(b.requests)} requests, ${num(b.errors)} errors">
+      return `<div class="hour${b.value === peak && peak > 0 ? " peak" : ""}"
+                   title="${label(b.local)}–${label((b.local + 1) % 24)} · ${num(b.value)} ${unit}">
         <div class="col" data-h="${height.toFixed(1)}"></div>
         <div class="lab${i % 3 ? " hide" : ""}">${label(b.local).slice(0, 2)}</div>
       </div>`;
@@ -108,16 +122,17 @@ function flag(code) {
 
 function renderErrors(errors) {
   if (!errors.length) {
-    $("errors").innerHTML = '<tr><td colspan="4" class="muted">No errors recorded.</td></tr>';
+    $("errors").innerHTML = '<tr><td colspan="5" class="muted">No errors recorded.</td></tr>';
     return;
   }
   const peak = Math.max(...errors.map((e) => e.count));
   $("errors").innerHTML = errors
-    .map((e) => `<tr>
+    .map((e) => `<tr class="${e.injected ? "" : "real"}">
         <td><span class="st st-${String(e.status)[0]}">${Number(e.status) || "?"}</span></td>
         <td class="mono">${String(e.path).replace(/[<>&"]/g, "")}</td>
+        <td><span class="cause ${e.injected ? "cause-req" : "cause-real"}">${e.injected ? "requested" : "real"}</span></td>
         <td class="num">${num(e.count)}</td>
-        <td class="chart"><div class="track${e.status >= 500 ? " sev" : ""}" data-w="${((e.count / peak) * 100).toFixed(1)}"></div></td>
+        <td class="chart"><div class="track${!e.injected && e.status >= 500 ? " sev" : ""}" data-w="${((e.count / peak) * 100).toFixed(1)}"></div></td>
       </tr>`)
     .join("");
   applySizes($("errors"));
@@ -168,10 +183,10 @@ async function attempt(token) {
   try {
     render(await load(token));
     authToken = token;
-    sessionStorage.setItem("flaky_admin", token);
+    saveToken(token);
   } catch (err) {
     authToken = null;
-    sessionStorage.removeItem("flaky_admin");
+    clearToken();
     $("error").textContent = err.message;
     $("error").hidden = false;
   }
@@ -209,6 +224,15 @@ async function downloadCsv(button) {
   }
 }
 
+function setMode(mode) {
+  MODE = mode;
+  $("m-people").classList.toggle("on", mode === "people");
+  $("m-req").classList.toggle("on", mode === "requests");
+  if (LATEST) renderHours(LATEST.hourly, LATEST.hourlyVisitors, mode);
+}
+$("m-people").addEventListener("click", () => setMode("people"));
+$("m-req").addEventListener("click", () => setMode("requests"));
+
 for (const button of document.querySelectorAll(".csv")) {
   button.addEventListener("click", () => downloadCsv(button));
 }
@@ -216,8 +240,7 @@ for (const button of document.querySelectorAll(".csv")) {
 $("go").addEventListener("click", () => attempt($("token").value.trim()));
 $("token").addEventListener("keydown", (e) => { if (e.key === "Enter") $("go").click(); });
 
-// sessionStorage can throw in a private window; a failed read just shows the gate.
-try {
-  const saved = sessionStorage.getItem("flaky_admin");
-  if (saved) attempt(saved);
-} catch {}
+wireSessionControls(() => location.reload());
+
+const saved = loadToken();
+if (saved) attempt(saved);

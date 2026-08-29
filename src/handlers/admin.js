@@ -44,7 +44,7 @@ export async function getStats(ctx) {
   const days = Math.min(Math.max(Number(ctx.query.get("days")) || 14, 1), 90);
   const since = daysAgo(days);
 
-  const [daily, visitors, keys, topKeys, hourly, geoRequests, geoVisitors, errors_, regions, addresses] = await Promise.all([
+  const [daily, visitors, keys, topKeys, hourly, geoRequests, geoVisitors, errors_, regions, addresses, arrivals] = await Promise.all([
     ctx.env.DB.prepare(
       `SELECT day, SUM(requests) AS requests, SUM(errors) AS errors
        FROM usage_bucket WHERE day >= ? GROUP BY day ORDER BY day`
@@ -83,9 +83,9 @@ export async function getStats(ctx) {
     ).bind(since).all(),
 
     ctx.env.DB.prepare(
-      `SELECT status, path, SUM(count) AS count
+      `SELECT status, path, injected, SUM(count) AS count
        FROM error_bucket WHERE day >= ?
-       GROUP BY status, path ORDER BY count DESC LIMIT 30`
+       GROUP BY status, path, injected ORDER BY injected ASC, count DESC LIMIT 40`
     ).bind(since).all(),
 
     // Region lives on daily_visitors rather than the hot rollup, so this counts
@@ -105,6 +105,13 @@ export async function getStats(ctx) {
               SUM(bot) AS bots
        FROM daily_visitors WHERE day >= ?`
     ).bind(since).first(),
+
+    // Arrivals per hour: people, not requests, and bots excluded.
+    ctx.env.DB.prepare(
+      `SELECT hour, COUNT(*) AS visitors
+       FROM daily_visitors WHERE day >= ? AND bot = 0 AND hour >= 0
+       GROUP BY hour ORDER BY hour`
+    ).bind(since).all(),
   ]);
 
   const rows = daily.results || [];
@@ -137,6 +144,8 @@ export async function getStats(ctx) {
       requests,
       errors,
       errorRate: requests ? Number((errors / requests).toFixed(4)) : 0,
+      // Errors the service produced on its own — the number worth reacting to.
+      realErrors: (errors_.results || []).filter((e) => !e.injected).reduce((n, e) => n + e.count, 0),
       keysIssued: keys?.count || 0,
       countries: countries.length,
       // The gap between visitors and addresses answers "ten people, or one
@@ -150,10 +159,78 @@ export async function getStats(ctx) {
     visitors: visitors.results || [],
     topKeys: topKeys.results || [],
     hourly: hours, // hour is UTC; the dashboard converts to the viewer's zone
+    hourlyVisitors: (() => {
+      const byHour = Object.fromEntries((arrivals.results || []).map((r) => [r.hour, r.visitors]));
+      return Array.from({ length: 24 }, (_, hour) => ({ hour, visitors: byHour[hour] || 0 }));
+    })(),
     countries,
     // What the error rate is actually made of.
     errors: errors_.results || [],
     regions: regions.results || [],
+  });
+}
+
+// GET /v1/admin/insights?days=14
+//
+// Separate from /stats on purpose: stats answers "how is it going", insights
+// answers "what should I change". Different questions, different page, and no
+// reason to make the dashboard pay for queries it does not render.
+export async function getInsights(ctx) {
+  if (!authorised(ctx.request, ctx.env)) {
+    return fail(401, "Admin token required", "Send Authorization: Bearer <ADMIN_TOKEN>.");
+  }
+
+  const days = Math.min(Math.max(Number(ctx.query.get("days")) || 14, 1), 90);
+  const since = daysAgo(days);
+
+  const [paths, referrers, chaos, slowest] = await Promise.all([
+    ctx.env.DB.prepare(
+      `SELECT path, SUM(requests) AS requests, SUM(sum_ms) AS sum_ms, MAX(max_ms) AS max_ms
+       FROM path_bucket WHERE day >= ? GROUP BY path ORDER BY requests DESC LIMIT 25`
+    ).bind(since).all(),
+
+    ctx.env.DB.prepare(
+      `SELECT referrer, SUM(requests) AS requests
+       FROM referrer_bucket WHERE day >= ? GROUP BY referrer ORDER BY requests DESC LIMIT 25`
+    ).bind(since).all(),
+
+    ctx.env.DB.prepare(
+      `SELECT SUM(requests) AS requests, SUM(with_delay) AS delay,
+              SUM(with_status) AS status, SUM(with_fail_rate) AS fail_rate
+       FROM path_bucket WHERE day >= ?`
+    ).bind(since).first(),
+
+    // Mean hides the tail, so rank by the worst single response rather than the
+    // average — that is where a real problem shows first.
+    ctx.env.DB.prepare(
+      `SELECT path, MAX(max_ms) AS max_ms, SUM(sum_ms) / SUM(requests) AS avg_ms, SUM(requests) AS requests
+       FROM path_bucket WHERE day >= ? GROUP BY path
+       HAVING requests > 0 ORDER BY max_ms DESC LIMIT 10`
+    ).bind(since).all(),
+  ]);
+
+  const rows = (paths.results || []).map((r) => ({
+    path: r.path,
+    requests: r.requests,
+    avgMs: r.requests ? Math.round(r.sum_ms / r.requests) : 0,
+    maxMs: r.max_ms,
+  }));
+
+  const total = chaos?.requests || 0;
+  return json({
+    window: { from: since, to: today(), days },
+    paths: rows,
+    referrers: referrers.results || [],
+    slowest: slowest.results || [],
+    // The product question, as a number: what share of traffic reaches for the
+    // thing that makes this different from every other mock API.
+    chaos: {
+      requests: total,
+      delay: chaos?.delay || 0,
+      status: chaos?.status || 0,
+      failRate: chaos?.fail_rate || 0,
+      anyShare: total ? Number((((chaos?.delay || 0) + (chaos?.status || 0) + (chaos?.fail_rate || 0)) / total).toFixed(4)) : 0,
+    },
   });
 }
 
@@ -209,11 +286,24 @@ const DATASETS = {
           GROUP BY country, region ORDER BY visitors DESC`,
     columns: [["country_code", "country"], ["region", "region"], ["visitors", "visitors"], ["addresses", "addresses"]],
   },
+  paths: {
+    sql: `SELECT day, path, SUM(requests) AS requests, SUM(sum_ms)/SUM(requests) AS avg_ms,
+                 MAX(max_ms) AS max_ms, SUM(with_delay) AS with_delay,
+                 SUM(with_status) AS with_status, SUM(with_fail_rate) AS with_fail_rate
+          FROM path_bucket WHERE day >= ? GROUP BY day, path ORDER BY day, requests DESC`,
+    columns: [["day","day"],["path","path"],["requests","requests"],["avg_ms","avg_ms"],["max_ms","max_ms"],
+              ["with_delay","with_delay"],["with_status","with_status"],["with_fail_rate","with_fail_rate"]],
+  },
+  referrers: {
+    sql: `SELECT day, referrer, SUM(requests) AS requests
+          FROM referrer_bucket WHERE day >= ? GROUP BY day, referrer ORDER BY day, requests DESC`,
+    columns: [["day","day"],["referrer","referrer"],["requests","requests"]],
+  },
   errors: {
-    sql: `SELECT day, status, path, SUM(count) AS count
+    sql: `SELECT day, status, path, injected, SUM(count) AS count
           FROM error_bucket WHERE day >= ?
-          GROUP BY day, status, path ORDER BY day, count DESC`,
-    columns: [["day", "day"], ["status", "status"], ["path", "path"], ["count", "count"]],
+          GROUP BY day, status, path, injected ORDER BY day, injected, count DESC`,
+    columns: [["day","day"],["status","status"],["path","path"],["requested","injected"],["count","count"]],
   },
   keys: {
     sql: `SELECT key_id, tier, SUM(requests) AS requests, SUM(errors) AS errors

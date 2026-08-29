@@ -59,6 +59,13 @@ export function normalisePath(path) {
     .slice(0, 120);
 }
 
+// Host only, lowercased. A full referrer can carry a search query or a private
+// path; the host is what answers "which channel worked".
+export function referrerHost(raw) {
+  if (!raw) return "";
+  try { return new URL(raw).hostname.toLowerCase().slice(0, 80); } catch { return ""; }
+}
+
 export async function rollUp(env, ctx, meta) {
   if (!env.DB) return;
   const keyId = meta.keyId || "anon";
@@ -68,15 +75,44 @@ export async function rollUp(env, ctx, meta) {
   const errorDetail = isError
     ? [
         env.DB.prepare(
-          `INSERT INTO error_bucket (day, status, path, count)
-           VALUES (?, ?, ?, 1)
-           ON CONFLICT (day, status, path) DO UPDATE SET count = count + 1`
-        ).bind(meta.day, meta.status, normalisePath(meta.path)),
+          `INSERT INTO error_bucket (day, status, path, injected, count)
+           VALUES (?, ?, ?, ?, 1)
+           ON CONFLICT (day, status, path, injected) DO UPDATE SET count = count + 1`
+        ).bind(meta.day, meta.status, normalisePath(meta.path), meta.injected ? 1 : 0),
+      ]
+    : [];
+
+  // Written only when there is a referrer, which for an API is uncommon.
+  const host = referrerHost(meta.referrer);
+  const referrerRow = host
+    ? [
+        env.DB.prepare(
+          `INSERT INTO referrer_bucket (day, referrer, requests) VALUES (?, ?, 1)
+           ON CONFLICT (day, referrer) DO UPDATE SET requests = requests + 1`
+        ).bind(meta.day, host),
       ]
     : [];
 
   await env.DB.batch([
     ...errorDetail,
+    ...referrerRow,
+
+    // Top endpoints, latency, and whether the chaos parameters are actually
+    // being used — the last of which is the product's central question.
+    env.DB.prepare(
+      `INSERT INTO path_bucket (day, path, requests, sum_ms, max_ms, with_delay, with_status, with_fail_rate)
+       VALUES (?, ?, 1, ?, ?, ?, ?, ?)
+       ON CONFLICT (day, path) DO UPDATE SET
+         requests       = requests + 1,
+         sum_ms         = sum_ms + excluded.sum_ms,
+         max_ms         = MAX(max_ms, excluded.max_ms),
+         with_delay     = with_delay + excluded.with_delay,
+         with_status    = with_status + excluded.with_status,
+         with_fail_rate = with_fail_rate + excluded.with_fail_rate`
+    ).bind(
+      meta.day, normalisePath(meta.path), meta.durationMs, meta.durationMs,
+      meta.chaos?.delay ? 1 : 0, meta.chaos?.status ? 1 : 0, meta.chaos?.failRate ? 1 : 0
+    ),
     env.DB.prepare(
       `INSERT INTO usage_bucket (day, hour, key_id, tier, country, requests, errors)
        VALUES (?, ?, ?, ?, ?, 1, ?)
@@ -93,19 +129,23 @@ export async function rollUp(env, ctx, meta) {
     // guarded DO UPDATE backfills such a row once and then no-ops, so a repeat
     // visitor still costs nothing on the steady path.
     env.DB.prepare(
-      `INSERT INTO daily_visitors (day, visitor, country, region, ip_hash, bot)
-       VALUES (?, ?, ?, ?, ?, ?)
+      `INSERT INTO daily_visitors (day, visitor, country, region, ip_hash, bot, hour)
+       VALUES (?, ?, ?, ?, ?, ?, ?)
        ON CONFLICT (day, visitor) DO UPDATE SET
          region  = excluded.region,
          ip_hash = excluded.ip_hash,
          -- Sticky: one bot-shaped request is enough to call it a bot for the
          -- day. A crawler that sends a browser user agent once should not
          -- launder itself into the human count.
-         bot     = MAX(daily_visitors.bot, excluded.bot)
+         bot     = MAX(daily_visitors.bot, excluded.bot),
+         -- Only ever fills a blank. The hour of first arrival must not drift
+         -- forward every time the same person comes back.
+         hour    = CASE WHEN daily_visitors.hour < 0 THEN excluded.hour ELSE daily_visitors.hour END
        WHERE daily_visitors.ip_hash = ''
+          OR daily_visitors.hour < 0
           OR daily_visitors.region = ''
           OR daily_visitors.bot < excluded.bot`
-    ).bind(meta.day, meta.visitor, meta.country, meta.region || "", meta.ipHash || "", meta.client === "bot" ? 1 : 0),
+    ).bind(meta.day, meta.visitor, meta.country, meta.region || "", meta.ipHash || "", meta.client === "bot" ? 1 : 0, meta.hour),
   ]);
 }
 
