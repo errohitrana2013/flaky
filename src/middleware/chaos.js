@@ -1,4 +1,4 @@
-import { fail } from "../lib/response.js";
+import { fail, echo } from "../lib/response.js";
 import { MAX_INJECTED_DELAY_MS } from "../config/tiers.js";
 
 // The reason this API exists. Callers ask for the failure they want to test
@@ -21,7 +21,7 @@ function read(params, name) {
 }
 
 const reject = (name, raw, expected) =>
-  fail(400, `Invalid ${name}`, `${name}=${raw} is out of range. ${expected}`);
+  fail(400, `Invalid ${name}`, `${name}=${echo(raw)} is out of range. ${expected}`);
 
 export async function applyChaos(params) {
   const delay = read(params, "_delay");
@@ -50,7 +50,7 @@ export async function applyChaos(params) {
     return fail(
       500,
       "Injected failure",
-      `This request lost the dice roll for _fail_rate=${rate.raw}. Retry, or drop the parameter.`
+      `This request lost the dice roll for _fail_rate=${echo(rate.raw)}. Retry, or drop the parameter.`
     );
   }
 

@@ -27,3 +27,33 @@ export const DEFAULT_PAGE_SIZE = 30;
 
 // Cache reads at the edge so the common case never reaches the Worker.
 export const READ_CACHE_SECONDS = 300;
+
+// Applied to every response, API and page alike.
+//
+// nosniff matters most for the API: without it a browser may sniff a JSON body
+// containing attacker-chosen text as HTML and execute it.
+export const SECURITY_HEADERS = {
+  "x-content-type-options": "nosniff",
+  "referrer-policy": "strict-origin-when-cross-origin",
+  "strict-transport-security": "max-age=31536000; includeSubDomains",
+  "permissions-policy": "geolocation=(), microphone=(), camera=(), payment=()",
+};
+
+// The HTML pages. Inline <script> and <style> were moved into their own files
+// specifically so this can be 'self' rather than 'unsafe-inline' — an inline
+// allowance would make the script policy close to decorative. Bar widths in the
+// dashboard are set through the CSSOM, which CSP does not restrict.
+export const PAGE_CSP = [
+  "default-src 'self'",
+  "script-src 'self'",
+  "style-src 'self'",
+  "img-src 'self' data:",
+  "connect-src 'self'",
+  "frame-ancestors 'none'",
+  "base-uri 'none'",
+  "form-action 'none'",
+  "object-src 'none'",
+].join("; ");
+
+// A JSON response should never load or execute anything at all.
+export const API_CSP = "default-src 'none'; frame-ancestors 'none'; base-uri 'none'";

@@ -1,0 +1,85 @@
+:root {
+    --bg: #fbfbf9; --panel: #fff; --ink: #16150f; --muted: #6b6a60;
+    --line: #e5e4de; --accent: #c2410c; --bar: #d4d2c8;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #111110; --panel: #1a1a18; --ink: #eceae1; --muted: #918f84;
+      --line: #2b2b28; --accent: #fb923c; --bar: #3a3a35;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--ink);
+    font: 15px/1.55 ui-sans-serif, -apple-system, "Segoe UI", Roboto, sans-serif;
+  }
+  .wrap { max-width: 900px; margin: 0 auto; padding: 48px 24px 80px; }
+  h1 { font-size: 22px; letter-spacing: -.02em; margin: 0 0 4px; display: flex; align-items: center; gap: 10px; }
+  /* Static here — a looping animation next to live numbers reads as a chart
+     updating when it is not. */
+  .mark { width: 24px; height: 24px; display: block; }
+  .mark .bar { fill: currentColor; }
+  .mark .flake { fill: var(--accent); }
+  .sub { color: var(--muted); font-size: 14px; margin: 0 0 32px; }
+
+  .gate { display: flex; gap: 8px; max-width: 460px; }
+  input {
+    flex: 1; font: 14px/1 ui-monospace, monospace; padding: 11px 12px;
+    border: 1px solid var(--line); border-radius: 8px; background: var(--panel); color: var(--ink);
+  }
+  button {
+    font: 600 13px/1 inherit; padding: 11px 18px; border: 0;
+    border-radius: 8px; background: var(--accent); color: #fff; cursor: pointer;
+  }
+  .err { color: var(--accent); font-size: 14px; margin-top: 10px; }
+
+  .tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; margin-bottom: 32px; }
+  .tile { background: var(--panel); border: 1px solid var(--line); border-radius: 11px; padding: 16px 18px; }
+  .tile .k { font-size: 11.5px; text-transform: uppercase; letter-spacing: .07em; color: var(--muted); }
+  .tile .v { font-size: 27px; font-weight: 600; letter-spacing: -.02em; font-variant-numeric: tabular-nums; margin-top: 4px; }
+
+  h2 { font-size: 12px; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); margin: 32px 0 12px; font-weight: 600; }
+  table { width: 100%; border-collapse: collapse; font-size: 14px; }
+  th, td { text-align: left; padding: 8px 10px 8px 0; border-bottom: 1px solid var(--line); }
+  th { font-size: 11.5px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); font-weight: 600; }
+  td.num { text-align: right; font-variant-numeric: tabular-nums; }
+  td.mono { font-family: ui-monospace, monospace; font-size: 13px; }
+
+  /* A bar per day, drawn with a div. No chart library for six numbers. */
+  .track { background: var(--bar); height: 7px; border-radius: 4px; min-width: 2px; }
+  .track.err { background: var(--accent); }
+  td.chart { width: 45%; }
+
+  /* Hour-of-day histogram. 24 columns on a flex row, heights as percentages —
+     still no chart library. */
+  .tzlabel { text-transform: none; letter-spacing: 0; font-weight: 400; }
+  .hours {
+    display: flex; align-items: flex-end; gap: 3px; height: 110px;
+    padding: 12px 14px; background: var(--panel);
+    border: 1px solid var(--line); border-radius: 11px;
+  }
+  .hour { flex: 1; display: flex; flex-direction: column; justify-content: flex-end; height: 100%; gap: 5px; }
+  .hour .col { background: var(--bar); border-radius: 3px 3px 0 0; min-height: 2px; transition: background .12s; }
+  .hour.peak .col { background: var(--accent); }
+  .hour .lab { font-size: 9.5px; color: var(--muted); text-align: center; font-variant-numeric: tabular-nums; height: 12px; }
+  .hour .lab.hide { visibility: hidden; }
+  .hour:hover .col { background: var(--accent); }
+
+  .flag { font-size: 15px; margin-right: 7px; }
+  .code { color: var(--muted); font-size: 12px; }
+
+  /* CSV links sit in the section headings, so the download is next to the
+     table it came from rather than in a menu somewhere. */
+  h2 { display: flex; align-items: center; gap: 10px; }
+  .csv {
+    margin-left: auto; font-size: 11px; letter-spacing: .04em; font-weight: 600;
+    color: var(--muted); background: none; border: 1px solid var(--line);
+    padding: 4px 9px; border-radius: 6px; cursor: pointer; text-transform: uppercase;
+  }
+  .csv:hover { color: var(--accent); border-color: var(--accent); }
+  .csv:disabled { opacity: .5; cursor: wait; }
+
+/* See app.css — inline style attributes are blocked by the CSP, so the bar
+   widths are set through the CSSOM in dashboard.js, which CSP does not
+   restrict. */
+.muted { color: var(--muted); }

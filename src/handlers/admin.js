@@ -1,4 +1,4 @@
-import { json, fail } from "../lib/response.js";
+import { json, fail, echo } from "../lib/response.js";
 import { daysAgo, today } from "../lib/hash.js";
 import { toCsv, csvResponse } from "../lib/csv.js";
 
@@ -182,7 +182,7 @@ export async function exportCsv(ctx) {
   const name = ctx.query.get("dataset") || "daily";
   const spec = DATASETS[name];
   if (!spec) {
-    return fail(400, `Unknown dataset '${name}'`, `Available: ${Object.keys(DATASETS).join(", ")}.`);
+    return fail(400, `Unknown dataset '${echo(name)}'`, `Available: ${Object.keys(DATASETS).join(", ")}.`);
   }
 
   const days = Math.min(Math.max(Number(ctx.query.get("days")) || 30, 1), 365);

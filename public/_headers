@@ -1,0 +1,15 @@
+# Cloudflare serves a matching static asset *before* the Worker runs, so the
+# hardening in src/lib/response.js never sees these requests. This file is how
+# the asset server gets the same policy.
+#
+# Keep it in step with PAGE_CSP and SECURITY_HEADERS in src/config/constants.js
+# — the Worker still hardens asset responses it proxies itself, so the two paths
+# should agree.
+
+/*
+  X-Content-Type-Options: nosniff
+  X-Frame-Options: DENY
+  Referrer-Policy: strict-origin-when-cross-origin
+  Strict-Transport-Security: max-age=31536000; includeSubDomains
+  Permissions-Policy: geolocation=(), microphone=(), camera=(), payment=()
+  Content-Security-Policy: default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'none'; object-src 'none'

@@ -175,7 +175,60 @@ test("rejects an unknown key", async () => {
 
 test("refuses a sandbox without a key", async () => {
   const res = await call("/v1/sandbox", { method: "POST" });
-  assert.equal(res.status, 402);
+  // 403, not 402: anonymous is a valid tier, so the caller is authenticated but
+  // not permitted. 402 reads as a billing failure to client error handling.
+  assert.equal(res.status, 403);
+});
+
+test("validates _page and _limit as strictly as the chaos parameters", async () => {
+  for (const query of ["_page=abc", "_page=-1", "_page=0", "_limit=abc", "_limit=-1", "_limit=0", "_limit=1.5"]) {
+    assert.equal((await call(`/v1/posts?${query}`)).status, 400, `${query} should be a 400`);
+  }
+  // Capping above the tier maximum is the documented contract, not a silent
+  // fallback, so it stays a 200.
+  assert.equal((await call("/v1/photos?_limit=9999")).status, 200);
+});
+
+test("never echoes raw caller input back into an error hint", async () => {
+  const payload = "<img src=x onerror=alert(1)>";
+  const res = await call(`/v1/posts?_status=${encodeURIComponent(payload)}`);
+  assert.equal(res.status, 400);
+
+  const text = await res.text();
+  // Not merely escaped — the value is refused outright, so none of the
+  // attacker's words reach a consumer that renders the hint carelessly.
+  assert.ok(!text.includes("onerror"), "no payload words survive");
+  assert.ok(!/[<>]/.test(text), "no angle brackets anywhere in the body");
+  assert.match((await body(await call("/v1/posts?_status=" + encodeURIComponent(payload)))).error.hint, /\(unprintable\)/);
+
+  // A boring value still echoes, so the hint stays useful for the common typo.
+  assert.match((await body(await call("/v1/posts?_status=99a"))).error.hint, /_status=99a/);
+});
+
+test("bounds total traffic per address even when several keys are held", async () => {
+  const env = makeEnv({ keys: [{ id: "k1", key: "flk_good", tier: "free", revoked: 0 }] });
+  // The key's own budget is untouched; the shared per-address ceiling is spent.
+  env.RATE_LIMITS.get = async (k) => (k.startsWith("ip:") ? "20000" : "0");
+
+  const res = await call("/v1/posts", { headers: { authorization: "Bearer flk_good", "cf-connecting-ip": "203.0.113.9" } }, env);
+  assert.equal(res.status, 429);
+  assert.match((await body(res)).error.message, /for this address/);
+});
+
+test("sends hardening headers on both the API and the pages", async () => {
+  const api = await call("/v1/posts?_limit=1");
+  assert.equal(api.headers.get("x-content-type-options"), "nosniff");
+  assert.equal(api.headers.get("x-frame-options"), "DENY");
+  assert.match(api.headers.get("content-security-policy"), /default-src 'none'/);
+  assert.match(api.headers.get("strict-transport-security"), /max-age=31536000/);
+
+  const page = await call("/");
+  assert.equal(page.headers.get("x-content-type-options"), "nosniff");
+  // 'self' rather than 'unsafe-inline' — the whole point of extracting the
+  // inline script and style out of the HTML.
+  assert.match(page.headers.get("content-security-policy"), /script-src 'self'/);
+  assert.ok(!page.headers.get("content-security-policy").includes("unsafe-inline"));
+  assert.match(page.headers.get("content-security-policy"), /frame-ancestors 'none'/);
 });
 
 test("creates a sandbox for a keyed caller", async () => {

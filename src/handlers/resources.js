@@ -1,12 +1,12 @@
 import { DATA, RESOURCES } from "../data/index.js";
 import { RELATIONS, childrenOf } from "../data/relations.js";
-import { json, fail } from "../lib/response.js";
+import { json, fail, echo } from "../lib/response.js";
 import { queryCollection, pageHeaders } from "../lib/query.js";
 import { TIERS } from "../config/tiers.js";
 import { READ_CACHE_SECONDS } from "../config/constants.js";
 
 const unknownResource = (name) =>
-  fail(404, `Unknown resource '${name}'`, `Available resources: ${RESOURCES.join(", ")}.`);
+  fail(404, `Unknown resource '${echo(name)}'`, `Available resources: ${RESOURCES.join(", ")}.`);
 
 // GET /v1/:resource
 // GET /v1/:resource/:id
@@ -24,10 +24,10 @@ export function readResource(ctx) {
       const known = childrenOf(resource);
       return fail(
         404,
-        `'${resource}' has no nested '${child}'`,
+        `'${echo(resource)}' has no nested '${echo(child)}'`,
         known.length
-          ? `Known nested routes for ${resource}: ${known.join(", ")}.`
-          : `Known nested routes: none for ${resource}. Try /v1/posts/1/comments.`
+          ? `Known nested routes for ${echo(resource)}: ${known.join(", ")}.`
+          : `Known nested routes: none for ${echo(resource)}. Try /v1/posts/1/comments.`
       );
     }
 
@@ -40,7 +40,7 @@ export function readResource(ctx) {
     const found = DATA[resource].find((row) => String(row.id) === id);
     return found
       ? json(found, { headers: cache })
-      : fail(404, `No ${resource} with id ${id}`, `Ids run from 1 to ${DATA[resource].length}.`);
+      : fail(404, `No ${echo(resource)} with id ${echo(id)}`, `Ids run from 1 to ${DATA[resource].length}.`);
   }
 
   const page = queryCollection(DATA[resource], ctx.query, maxLimit);
@@ -76,7 +76,7 @@ export async function echoWrite(ctx) {
   // PUT replaces, PATCH merges — same contract as the sandbox, so switching
   // from echo to persisted writes is a URL change and nothing else.
   const base = DATA[resource].find((row) => String(row.id) === id);
-  if (!base) return fail(404, `No ${resource} with id ${id}`);
+  if (!base) return fail(404, `No ${echo(resource)} with id ${echo(id)}`);
 
   const record = method === "PUT" ? { id: base.id, ...body } : { ...base, ...body };
   return json(record, { headers });

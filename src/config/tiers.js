@@ -19,6 +19,13 @@ export const MAX_INJECTED_DELAY_MS = 10000;
 // forever, and every key carries a sandbox allowance.
 export const KEYS_PER_IP_PER_DAY = 5;
 
+// Keys are free, so without this one address could mint several and multiply
+// its allowance — the anonymous limit would be bypassable by scripting signups.
+// Set above a single free key's 10k so a normal keyed user never sees it, and
+// far below 5 x 10k so stacking keys buys little. A shared office IP hits this
+// collectively, which is the accepted cost of not verifying emails.
+export const IP_DAILY_CEILING = 20000;
+
 // A sandbox record is stored in D1, so an unbounded body is unbounded storage
 // on a free tier with no spend cap. 64 KB is far more than any plausible mock
 // record and small enough that filling 5 GB needs ~80,000 deliberate writes.

@@ -1,0 +1,112 @@
+:root {
+    --bg: #fbfbf9; --panel: #fff; --ink: #16150f; --muted: #6b6a60;
+    --line: #e5e4de; --accent: #c2410c; --accent-soft: #fff2ec;
+    --code-bg: #16150f; --code-ink: #e8e6dd; --ok: #15803d; --warn: #b45309;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #111110; --panel: #1a1a18; --ink: #eceae1; --muted: #918f84;
+      --line: #2b2b28; --accent: #fb923c; --accent-soft: #2a1a10;
+      --code-bg: #0a0a09; --code-ink: #e8e6dd; --ok: #4ade80; --warn: #fbbf24;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--ink);
+    font: 16px/1.6 ui-sans-serif, -apple-system, "Segoe UI", Roboto, sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+  code, pre, .mono { font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; }
+  .wrap { max-width: 880px; margin: 0 auto; padding: 0 24px; }
+  a { color: var(--accent); }
+
+  header { padding: 72px 0 40px; }
+
+  /* Brand lockup. The mark is inline rather than an <img> so it inherits the
+     theme through currentColor and can animate. */
+  .brand { display: inline-flex; align-items: center; gap: 11px; text-decoration: none; color: var(--ink); }
+  .mark { width: 30px; height: 30px; display: block; overflow: visible; }
+  .mark .bar { fill: currentColor; }
+  .mark .flake { fill: var(--accent); }
+  .mark .ghost { fill: none; stroke: currentColor; stroke-width: 1.25; stroke-dasharray: 2.5 2.5; opacity: .32; }
+  .wordmark { font-size: 20px; font-weight: 700; letter-spacing: -.03em; }
+  .wordmark .dot { color: var(--accent); }
+
+  /* The dropped bar recovers for a moment, then drops again. The logo does the
+     thing the product does. transform-box keeps the origin on the bar itself
+     rather than the whole SVG. */
+  .mark .flake, .mark .ghost { transform-box: fill-box; transform-origin: bottom; }
+  .mark .flake { animation: recover 6s cubic-bezier(.2,.8,.2,1) infinite; }
+  .mark .ghost { animation: vacancy 6s cubic-bezier(.2,.8,.2,1) infinite; }
+
+  @keyframes recover {
+    0%, 46%  { transform: scaleY(1); }
+    52%, 62% { transform: scaleY(3.2); }
+    68%, 71% { transform: scaleY(1); }   /* a stutter on the way down */
+    74%, 78% { transform: scaleY(2.4); }
+    84%, 100% { transform: scaleY(1); }
+  }
+  @keyframes vacancy {
+    0%, 46%  { opacity: .32; }
+    52%, 62% { opacity: 0; }
+    68%, 71% { opacity: .32; }
+    74%, 78% { opacity: 0; }
+    84%, 100% { opacity: .32; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .mark .flake, .mark .ghost { animation: none; }
+  }
+  h1 { font-size: clamp(32px, 6vw, 46px); line-height: 1.1; letter-spacing: -.03em; margin: 24px 0 16px; }
+  .lede { font-size: 19px; color: var(--muted); max-width: 34em; margin: 0; }
+  .lede strong { color: var(--ink); font-weight: 600; }
+
+  pre {
+    background: var(--code-bg); color: var(--code-ink); padding: 16px 18px;
+    border-radius: 10px; overflow-x: auto; font-size: 13.5px; line-height: 1.7; margin: 0;
+  }
+  .tok-str { color: #86efac; } .tok-key { color: #93c5fd; } .tok-com { color: #6b7280; }
+
+  section { padding: 40px 0; border-top: 1px solid var(--line); }
+  h2 { font-size: 13px; text-transform: uppercase; letter-spacing: .09em; color: var(--muted); margin: 0 0 20px; font-weight: 600; }
+  h3 { font-size: 17px; margin: 28px 0 8px; letter-spacing: -.01em; }
+  p { color: var(--muted); }
+  p strong { color: var(--ink); font-weight: 600; }
+
+  /* inspector */
+  .inspector { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; overflow: hidden; }
+  .bar { display: flex; align-items: center; gap: 8px; padding: 12px; border-bottom: 1px solid var(--line); flex-wrap: wrap; }
+  .method { font: 600 12px/1 ui-monospace, monospace; padding: 8px 10px; border-radius: 6px; background: var(--accent-soft); color: var(--accent); }
+  input, select {
+    font: 13.5px/1 ui-monospace, monospace; padding: 9px 10px;
+    border: 1px solid var(--line); border-radius: 7px; background: var(--bg); color: var(--ink);
+  }
+  #path { flex: 1; min-width: 200px; }
+  button {
+    font: 600 13px/1 inherit; padding: 10px 18px; border: 0; border-radius: 7px;
+    background: var(--accent); color: #fff; cursor: pointer;
+  }
+  button:disabled { opacity: .5; cursor: wait; }
+  .controls { display: flex; gap: 18px; padding: 12px; flex-wrap: wrap; border-bottom: 1px solid var(--line); font-size: 12.5px; color: var(--muted); }
+  .ctl { display: flex; align-items: center; gap: 7px; }
+  .ctl input { width: 84px; padding: 6px 8px; }
+  .status { display: flex; gap: 16px; padding: 10px 14px; font: 12.5px/1 ui-monospace, monospace; border-bottom: 1px solid var(--line); color: var(--muted); }
+  .status b { font-weight: 600; }
+  .s-ok { color: var(--ok); } .s-err { color: var(--accent); }
+  #out { margin: 0; border-radius: 0; max-height: 340px; overflow: auto; }
+
+  table { width: 100%; border-collapse: collapse; font-size: 14.5px; }
+  th, td { text-align: left; padding: 9px 12px 9px 0; border-bottom: 1px solid var(--line); }
+  th { font-size: 12px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); font-weight: 600; }
+  td.mono { font-size: 13px; }
+  td.num { color: var(--muted); font-variant-numeric: tabular-nums; }
+
+  .note { background: var(--accent-soft); border-left: 3px solid var(--accent); padding: 14px 16px; border-radius: 0 8px 8px 0; font-size: 14.5px; color: var(--ink); }
+  footer { padding: 40px 0 72px; border-top: 1px solid var(--line); color: var(--muted); font-size: 14px; }
+
+/* Utility classes rather than inline style attributes: the CSP sets
+   style-src 'self', which blocks inline styles, and keeping them out means
+   the policy needs no 'unsafe-inline' escape hatch. */
+.mt-16 { margin-top: 16px; }
+.mt-20 { margin-top: 20px; }
+.m-0 { margin: 0; }
+.muted { color: var(--muted); }

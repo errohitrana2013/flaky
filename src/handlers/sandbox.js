@@ -1,5 +1,5 @@
 import { DATA, RESOURCES } from "../data/index.js";
-import { json, fail } from "../lib/response.js";
+import { json, fail, echo } from "../lib/response.js";
 import { queryCollection, pageHeaders } from "../lib/query.js";
 import { TIERS, SANDBOX_TTL_MS, MAX_SANDBOX_RECORD_BYTES, MAX_SANDBOX_RECORDS } from "../config/tiers.js";
 
@@ -12,7 +12,11 @@ export async function createSandbox(ctx) {
   const allowance = TIERS[ctx.auth.tier].sandboxes;
 
   if (allowance === 0) {
-    return fail(402, "Sandboxes need an API key", "Create a free key at POST /v1/keys, then send it as a Bearer token.");
+    // 403, not 402. The caller is not unauthenticated — anonymous is a valid
+    // tier — they are authenticated as a tier that does not include sandboxes.
+    // 402 also reads as a billing failure, which misleads clients that treat it
+    // as "payment declined" when the fix is a free key.
+    return fail(403, "Sandboxes need an API key", "Create a free key at POST /v1/keys, then send it as a Bearer token.");
   }
 
   const live = await ctx.env.DB.prepare(
@@ -83,7 +87,7 @@ export async function handleSandbox(ctx) {
   if (error) return error;
 
   if (!RESOURCES.includes(resource)) {
-    return fail(404, `Unknown resource '${resource}'`, `Available: ${RESOURCES.join(", ")}`);
+    return fail(404, `Unknown resource '${echo(resource)}'`, `Available: ${RESOURCES.join(", ")}`);
   }
 
   const method = ctx.request.method;
@@ -92,7 +96,7 @@ export async function handleSandbox(ctx) {
     const rows = await materialise(ctx.env, sandboxId, resource);
     if (id) {
       const found = rows.find((row) => String(row.id) === id);
-      return found ? json(found) : fail(404, `No ${resource} with id ${id}`);
+      return found ? json(found) : fail(404, `No ${echo(resource)} with id ${echo(id)}`);
     }
     const page = queryCollection(rows, ctx.query, TIERS[ctx.auth.tier].maxLimit);
     return json(page.rows, { headers: pageHeaders(page) });
@@ -137,7 +141,7 @@ export async function handleSandbox(ctx) {
   }
 
   if (!id) {
-    return fail(405, `${method} needs a record id`, `Try ${method} /v1/sandbox/${sandboxId}/${resource}/1`);
+    return fail(405, `${method} needs a record id`, `Try ${method} /v1/sandbox/${echo(sandboxId)}/${echo(resource)}/1`);
   }
 
   if (method === "DELETE") {
@@ -151,7 +155,7 @@ export async function handleSandbox(ctx) {
     ).bind(sandboxId, resource, String(id)).first();
 
     const base = stored ? JSON.parse(stored.body) : DATA[resource].find((row) => String(row.id) === id);
-    if (!base) return fail(404, `No ${resource} with id ${id}`);
+    if (!base) return fail(404, `No ${echo(resource)} with id ${echo(id)}`);
 
     // PUT replaces, PATCH merges.
     const record = method === "PUT" ? { id: base.id, ...body } : { ...base, ...body };
@@ -159,5 +163,5 @@ export async function handleSandbox(ctx) {
     return json(record);
   }
 
-  return fail(405, `${method} is not supported here`);
+  return fail(405, `${echo(method)} is not supported here`);
 }

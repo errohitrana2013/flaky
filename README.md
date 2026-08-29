@@ -15,7 +15,7 @@ the failure you are trying to test against.
 
 ```bash
 npm install
-npm test          # 45 tests, ~0.4s, no network and no Cloudflare account
+npm test          # 49 tests, ~0.4s, no network and no Cloudflare account
 npm run dev       # http://localhost:8787
 ```
 
@@ -121,7 +121,7 @@ flaky/
 │   └── generate-db.js        regenerates src/data/db.js deterministically
 │
 ├── tests/
-│   └── api.test.mjs          45 tests, no dependencies, runs offline
+│   └── api.test.mjs          49 tests, no dependencies, runs offline
 │
 ├── wrangler.toml             bindings and cron
 ├── .dev.vars.example         copy to .dev.vars for local secrets
@@ -173,7 +173,7 @@ files.
 ## Tests
 
 ```bash
-npm test     # 45 tests, no network, no Cloudflare account needed
+npm test     # 49 tests, no network, no Cloudflare account needed
 ```
 
 Bindings (D1, KV, Analytics Engine, assets) are stubbed in memory at the top of
@@ -311,6 +311,25 @@ counter fails open for the same reason the rate limiter does.
 `ADMIN_TOKEN` accepts a comma-separated list, so a token can be rotated with no
 window where the dashboard is locked out: add the new one, switch over, then
 drop the old one.
+
+## Hardening
+
+Every response carries `X-Content-Type-Options`, `X-Frame-Options`,
+`Referrer-Policy`, `Strict-Transport-Security` and `Permissions-Policy`. The
+pages get a strict CSP — `script-src 'self'`, no `unsafe-inline`, which is why
+the page CSS and JS live in their own files rather than inline in the HTML. The
+JSON API gets `default-src 'none'`, because a JSON body should load nothing.
+
+Cloudflare serves a matching static asset *before* the Worker runs, so the
+pages are covered by `public/_headers` and the API by `src/lib/response.js`.
+Both paths must be kept in step.
+
+**Error hints never echo caller input verbatim.** A value is repeated back only
+if it is entirely alphanumeric; anything else becomes `(unprintable)`. Nothing
+here renders HTML, so this is not an XSS risk for flaky itself — but this API
+exists to be consumed by other people's apps, and someone will eventually put
+`error.hint` into `innerHTML`. Refusing to carry a payload is cheaper than
+documenting the hazard.
 
 ## Privacy
 

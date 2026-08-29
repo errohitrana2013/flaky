@@ -1,4 +1,4 @@
-import { TIERS } from "../config/tiers.js";
+import { TIERS, IP_DAILY_CEILING } from "../config/tiers.js";
 import { today } from "../lib/hash.js";
 
 // A fixed daily window in KV, keyed by API key or IP. Deliberately not a
@@ -17,16 +17,13 @@ import { today } from "../lib/hash.js";
 // the quota is what *success* looks like. Failing closed would mean the first
 // popular day is the day the service dies.
 
-export async function checkRateLimit(env, identity, tier) {
-  const limit = TIERS[tier].requestsPerDay;
-  const key = `rl:${today()}:${identity}`;
-
-  // Read and write are handled separately on purpose. If the read works we can
-  // still enforce the limit even when writes are gone, so a caller already over
-  // quota stays blocked instead of being let through by the outage.
+// Read and write are handled separately on purpose. If the read works we can
+// still enforce the limit even when writes are gone, so a caller already over
+// quota stays blocked instead of being let through by the outage.
+async function bump(env, bucket, limit) {
   let current = 0;
   try {
-    current = Number(await env.RATE_LIMITS.get(key)) || 0;
+    current = Number(await env.RATE_LIMITS.get(bucket)) || 0;
   } catch {
     return { ok: true, limit, remaining: limit, degraded: true };
   }
@@ -38,12 +35,35 @@ export async function checkRateLimit(env, identity, tier) {
   let degraded = false;
   try {
     // 48h TTL so a window is never evicted while still in use.
-    await env.RATE_LIMITS.put(key, String(current + 1), { expirationTtl: 172800 });
+    await env.RATE_LIMITS.put(bucket, String(current + 1), { expirationTtl: 172800 });
   } catch {
     degraded = true;
   }
 
   return { ok: true, limit, remaining: limit - current - 1, degraded };
+}
+
+export async function checkRateLimit(env, { key, ip }, tier) {
+  const day = today();
+  const limit = TIERS[tier].requestsPerDay;
+
+  const primary = await bump(env, `rl:${day}:${key || ip}`, limit);
+  if (!primary.ok) return primary;
+
+  // Anonymous callers are already counted by IP above, so their primary counter
+  // *is* the IP counter and one check is enough.
+  if (!key) return primary;
+
+  // Keyed callers get their own budget, which is the point of a key. But keys
+  // are free and unverified, so without a second ceiling one address could mint
+  // several and multiply its allowance — the anonymous limit would be bypassable
+  // by scripting signups. This bounds the total from one address regardless of
+  // how many keys are held. It costs a second KV write, but only on keyed
+  // traffic, which is the small fraction.
+  const perIp = await bump(env, `ip:${day}:${ip}`, IP_DAILY_CEILING);
+  if (!perIp.ok) return { ok: false, limit: IP_DAILY_CEILING, remaining: 0, scope: "ip" };
+
+  return { ...primary, degraded: primary.degraded || perIp.degraded };
 }
 
 export const rateHeaders = (rate, tier) => ({

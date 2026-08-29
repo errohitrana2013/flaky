@@ -6,7 +6,9 @@
 //                                          response ← telemetry (after send)
 
 import { matchRoute } from "./router.js";
-import { preflight, fail, withHeaders } from "./lib/response.js";
+import { validatePaging } from "./lib/query.js";
+import { TIERS } from "./config/tiers.js";
+import { preflight, fail, withHeaders, harden } from "./lib/response.js";
 import { resolveTier } from "./middleware/auth.js";
 import { checkRateLimit, rateHeaders } from "./middleware/ratelimit.js";
 import { applyChaos } from "./middleware/chaos.js";
@@ -28,13 +30,18 @@ async function handle(request, env, ctx, url) {
   }
   context.auth = auth;
 
-  const identity = auth.key || request.headers.get("cf-connecting-ip") || "unknown";
-  const rate = await checkRateLimit(env, identity, auth.tier);
+  const ip = request.headers.get("cf-connecting-ip") || "unknown";
+  const rate = await checkRateLimit(env, { key: auth.key, ip }, auth.tier);
   if (!rate.ok) {
-    return fail(429, "Daily request limit reached", `The ${auth.tier} tier allows ${rate.limit} requests/day. Limits reset at 00:00 UTC.`);
+    return rate.scope === "ip"
+      ? fail(429, "Daily request limit reached for this address", `All keys from one address share a ceiling of ${rate.limit} requests/day. Limits reset at 00:00 UTC.`)
+      : fail(429, "Daily request limit reached", `The ${auth.tier} tier allows ${rate.limit} requests/day. Limits reset at 00:00 UTC.`);
   }
 
   const headers = rateHeaders(rate, auth.tier);
+
+  const paging = validatePaging(url.searchParams, TIERS[auth.tier].maxLimit);
+  if (paging) return withHeaders(paging, headers);
 
   const injected = await applyChaos(url.searchParams);
   if (injected) return withHeaders(injected, headers);
@@ -76,14 +83,16 @@ export default {
     const url = new URL(request.url);
     const startedAt = Date.now();
 
-    if (request.method === "OPTIONS") return preflight();
+    if (request.method === "OPTIONS") return harden(preflight());
+
+    const isApi = url.pathname.startsWith("/v1");
 
     let response;
     try {
       // Anything outside /v1 is the marketing site and docs.
-      response = url.pathname.startsWith("/v1")
+      response = isApi
         ? await handle(request, env, ctx, url)
-        : await env.ASSETS.fetch(request);
+        : harden(await env.ASSETS.fetch(request), { page: true });
     } catch (err) {
       // Last line of defence. Without it an unexpected throw — a D1 outage, a
       // KV blip — becomes a Cloudflare 1101 page: no CORS headers, no JSON, and
@@ -91,6 +100,10 @@ export default {
       // can actually handle.
       response = fail(500, "Something broke on our side", "This is a bug in flaky, not a problem with your request.");
     }
+
+    // Assets are hardened above with the page policy; everything else, including
+    // the catch path, gets the API policy here.
+    if (isApi || response.status === 500) response = harden(response);
 
     recordTelemetry(ctx, request, env, url, response, startedAt);
     return response;
