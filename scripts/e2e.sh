@@ -64,7 +64,12 @@ R=$(curl -s --max-time 25 "$U/v1/posts?_status=%3Cimg%20src%3Dx%20onerror%3Daler
 echo "$R" | grep -q "unprintable" && ok "payload refused, not echoed" || bad "echo" "$R"
 echo "$R" | grep -qE "[<>]" && bad "angle brackets in body" "$R" || ok "no angle brackets in body"
 is "sql-ish input handled" "$(code "$U/v1/posts?userId=1'%20OR%20'1'='1")" "200"
-is "proto pollution handled" "$(code --get --data-urlencode '__proto__[x]=1' "$U/v1/posts")" "200"
+# Rejected rather than ignored: __proto__ starts with an underscore, so it is
+# an unknown control parameter, and naming it is better than silently filtering
+# on a field nobody has. Either way nothing is polluted — the point is that the
+# response is deliberate.
+is "proto pollution rejected cleanly" "$(code --get --data-urlencode '__proto__[x]=1' "$U/v1/posts")" "400"
+is "constructor[prototype] handled" "$(code --get --data-urlencode 'constructor[prototype][x]=1' "$U/v1/posts?_limit=1")" "200"
 
 echo; echo "WRITES"
 W=$(curl -sD - --max-time 25 -X POST "$U/v1/posts" -H 'content-type: application/json' -d '{"title":"t"}')
