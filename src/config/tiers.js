@@ -7,7 +7,11 @@ export const TIERS = {
 };
 
 export const SANDBOX_TTL_MS = 24 * 60 * 60 * 1000;
+// Visitor hashes are personal-ish data, so they go early. The aggregates hold
+// no identity and are small — a year keeps a like-for-like comparison possible
+// without letting the tables grow forever.
 export const VISITOR_RETENTION_DAYS = 90;
+export const ROLLUP_RETENTION_DAYS = 400;
 export const MAX_INJECTED_DELAY_MS = 10000;
 
 // --- abuse ceilings --------------------------------------------------------

@@ -1,5 +1,5 @@
 import { visitorId, today, daysAgo } from "../lib/hash.js";
-import { VISITOR_RETENTION_DAYS } from "../config/tiers.js";
+import { VISITOR_RETENTION_DAYS, ROLLUP_RETENTION_DAYS } from "../config/tiers.js";
 
 export { visitorId };
 
@@ -159,15 +159,31 @@ export async function rollUp(env, ctx, meta) {
 
 // --- cron jobs -------------------------------------------------------------
 
+// Everything that grows is trimmed here. Left alone, the rollups would grow for
+// the life of the project — small per day, unbounded over years, and nothing
+// else deletes from them.
 export async function purgeExpired(env) {
   if (!env.DB) return;
   const now = Date.now();
+  const visitorCutoff = daysAgo(VISITOR_RETENTION_DAYS);
+  const rollupCutoff = daysAgo(ROLLUP_RETENTION_DAYS);
+
   await env.DB.batch([
+    // Expired sandboxes, and the records belonging to them. Records first, or
+    // the second statement removes the rows the first needs to find them by.
     env.DB.prepare(
       "DELETE FROM sandbox_records WHERE sandbox_id IN (SELECT id FROM sandboxes WHERE expires_at < ?)"
     ).bind(now),
     env.DB.prepare("DELETE FROM sandboxes WHERE expires_at < ?").bind(now),
-    env.DB.prepare("DELETE FROM daily_visitors WHERE day < ?").bind(daysAgo(VISITOR_RETENTION_DAYS)),
+
+    // Visitor hashes: the privacy clock, and the shortest of the three.
+    env.DB.prepare("DELETE FROM daily_visitors WHERE day < ?").bind(visitorCutoff),
+
+    // Aggregates: no identity in them, so they keep a year for comparison.
+    env.DB.prepare("DELETE FROM usage_bucket WHERE day < ?").bind(rollupCutoff),
+    env.DB.prepare("DELETE FROM path_bucket WHERE day < ?").bind(rollupCutoff),
+    env.DB.prepare("DELETE FROM referrer_bucket WHERE day < ?").bind(rollupCutoff),
+    env.DB.prepare("DELETE FROM error_bucket WHERE day < ?").bind(rollupCutoff),
   ]);
 }
 

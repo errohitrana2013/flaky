@@ -190,7 +190,7 @@ export async function getInsights(ctx) {
   const days = Math.min(Math.max(Number(ctx.query.get("days")) || 14, 1), 90);
   const since = daysAgo(days);
 
-  const [paths, referrers, chaos, slowest] = await Promise.all([
+  const [paths, referrers, chaos, slowest, retention, frequency, dwell] = await Promise.all([
     ctx.env.DB.prepare(
       `SELECT path, SUM(requests) AS requests, SUM(sum_ms) AS sum_ms, MAX(max_ms) AS max_ms
        FROM path_bucket WHERE day >= ? GROUP BY path ORDER BY requests DESC LIMIT 25`
@@ -215,6 +215,34 @@ export async function getInsights(ctx) {
        FROM path_bucket WHERE day >= ? GROUP BY path
        HAVING requests > 0 ORDER BY max_ms DESC LIMIT 10`
     ).bind(since).all(),
+
+    // New vs returning today. "Returning" means this visitor hash was also seen
+    // on an earlier day — see the caveat in the README about hashes changing
+    // when someone's address does.
+    ctx.env.DB.prepare(
+      `SELECT
+         SUM(CASE WHEN prior.visitor IS NULL THEN 1 ELSE 0 END) AS fresh,
+         -- Not aliased "returning": that is a reserved word in SQLite (the
+         -- RETURNING clause) and breaks the parse.
+         SUM(CASE WHEN prior.visitor IS NOT NULL THEN 1 ELSE 0 END) AS came_back
+       FROM (SELECT DISTINCT visitor FROM daily_visitors WHERE day = ? AND bot = 0) t
+       LEFT JOIN (SELECT DISTINCT visitor FROM daily_visitors WHERE day < ? AND bot = 0) prior
+         ON prior.visitor = t.visitor`
+    ).bind(today(), today()).first(),
+
+    // How many separate days each person showed up across the window.
+    ctx.env.DB.prepare(
+      `SELECT days, COUNT(*) AS people FROM (
+         SELECT visitor, COUNT(DISTINCT day) AS days
+         FROM daily_visitors WHERE day >= ? AND bot = 0 GROUP BY visitor
+       ) GROUP BY days ORDER BY days`
+    ).bind(since).all(),
+
+    ctx.env.DB.prepare(
+      `SELECT path, SUM(visits) AS visits, SUM(sum_seconds) AS sum_seconds,
+              MAX(max_seconds) AS max_seconds, SUM(bounced) AS bounced
+       FROM page_time WHERE day >= ? GROUP BY path ORDER BY visits DESC LIMIT 10`
+    ).bind(since).all(),
   ]);
 
   const rows = (paths.results || []).map((r) => ({
@@ -230,6 +258,18 @@ export async function getInsights(ctx) {
     paths: rows,
     referrers: referrers.results || [],
     slowest: slowest.results || [],
+    returning: {
+      today: { new: retention?.fresh || 0, returning: retention?.came_back || 0 },
+      // [{days, people}] — people who appeared on exactly that many days.
+      frequency: frequency.results || [],
+    },
+    dwell: (dwell.results || []).map((r) => ({
+      path: r.path,
+      visits: r.visits,
+      avgSeconds: r.visits ? Math.round(r.sum_seconds / r.visits) : 0,
+      maxSeconds: r.max_seconds,
+      bounceRate: r.visits ? Number((r.bounced / r.visits).toFixed(3)) : 0,
+    })),
     // The product question, as a number: what share of traffic reaches for the
     // thing that makes this different from every other mock API.
     chaos: (() => {

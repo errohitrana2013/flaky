@@ -31,6 +31,9 @@ function render(d) {
       ? "Low. People are using this as a plain mock API — the thing that makes it different is not landing."
       : "People are reaching for the controls. This is the number to protect.";
 
+  renderReturning(d.returning);
+  renderDwell(d.dwell || []);
+
   const refs = d.referrers;
   $("referrers").innerHTML = refs.length
     ? (() => {
@@ -70,6 +73,40 @@ function render(d) {
 
   $("gate").hidden = true;
   $("panel").hidden = false;
+}
+
+const secs = (n) => (n >= 60 ? Math.floor(n / 60) + "m " + (n % 60) + "s" : n + "s");
+
+function renderReturning(r) {
+  const back = r.today.returning, fresh = r.today.new, total = back + fresh;
+  $("r-new").textContent = num(fresh);
+  $("r-back").textContent = num(back);
+  $("r-rate").textContent = total ? ((back / total) * 100).toFixed(0) + "%" : "—";
+
+  const rows = r.frequency;
+  $("frequency").innerHTML = rows.length
+    ? (() => {
+        const peak = Math.max(...rows.map((f) => f.people));
+        return rows.map((f) => `<tr>
+            <td>${f.days} day${f.days === 1 ? "" : "s"}${f.days === 1 ? " only" : ""}</td>
+            <td class="num">${num(f.people)}</td>
+            <td class="chart"><div class="track" data-w="${((f.people / peak) * 100).toFixed(1)}"></div></td>
+          </tr>`).join("");
+      })()
+    : '<tr><td colspan="3" class="muted">Nobody recorded yet.</td></tr>';
+  applySizes($("frequency"));
+}
+
+function renderDwell(rows) {
+  $("dwell").innerHTML = rows.length
+    ? rows.map((p) => `<tr>
+        <td class="mono">${clean(p.path)}</td>
+        <td class="num">${num(p.visits)}</td>
+        <td class="num">${secs(p.avgSeconds)}</td>
+        <td class="num">${secs(p.maxSeconds)}</td>
+        <td class="num">${(p.bounceRate * 100).toFixed(0)}%</td>
+      </tr>`).join("")
+    : '<tr><td colspan="5" class="muted">No page visits recorded yet. Only the landing page reports this, and only once someone leaves it.</td></tr>';
 }
 
 let authToken = null;

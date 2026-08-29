@@ -53,6 +53,25 @@
       <div class="tile"><div class="k">_fail_rate</div><div class="v" id="c-fail">—</div></div>
     </div>
 
+    <h2>Do people come back?</h2>
+    <p class="lead">Days are UTC, so "today" rolls over at 05:30 IST rather than midnight. A visitor is the same salted hash as elsewhere. Someone whose address changes between visits looks like a new person, so this under-counts returns rather than over-counting them.</p>
+    <div class="tiles tiles-3">
+      <div class="tile"><div class="k">New today</div><div class="v" id="r-new">—</div></div>
+      <div class="tile"><div class="k">Returning today</div><div class="v" id="r-back">—</div></div>
+      <div class="tile"><div class="k">Return rate</div><div class="v" id="r-rate">—</div></div>
+    </div>
+    <table>
+      <thead><tr><th>Showed up on</th><th class="num">People</th><th class="chart"></th></tr></thead>
+      <tbody id="frequency"></tbody>
+    </table>
+
+    <h2>Time on page</h2>
+    <p class="lead">Measured in the browser and sent on unload. Background tabs do not count — the clock stops when the page is hidden.</p>
+    <table>
+      <thead><tr><th>Page</th><th class="num">Visits</th><th class="num">Average</th><th class="num">Longest</th><th class="num">Bounced</th></tr></thead>
+      <tbody id="dwell"></tbody>
+    </table>
+
     <h2>Where traffic comes from <button class="csv" data-csv="referrers">csv</button></h2>
     <p class="lead">External referrers only. Requests from this site's own try-it widget are excluded — they would otherwise sit at the top of a table meant to show where people arrive from.</p>
     <table>

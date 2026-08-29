@@ -3,6 +3,7 @@ import { createSandbox, handleSandbox } from "./handlers/sandbox.js";
 import { createKey } from "./handlers/keys.js";
 import { getMeta } from "./handlers/meta.js";
 import { getStats, exportCsv, getInsights } from "./handlers/admin.js";
+import { recordBeacon } from "./handlers/beacon.js";
 
 // Routes are matched top to bottom, first match wins. Static segments beat
 // dynamic ones, so specific paths are listed before the generic catch-alls.
@@ -11,6 +12,7 @@ const ROUTES = [
   { method: "GET",  path: "/v1/admin/stats",                          handler: getStats,      auth: "admin" },
   { method: "GET",  path: "/v1/admin/export",                         handler: exportCsv,     auth: "admin" },
   { method: "GET",  path: "/v1/admin/insights",                       handler: getInsights,   auth: "admin" },
+  { method: "POST", path: "/v1/beacon",                               handler: recordBeacon },
   { method: "POST", path: "/v1/keys",                                 handler: createKey },
   { method: "GET",  path: "/v1/meta",                                 handler: getMeta },
   { method: "POST", path: "/v1/sandbox",                              handler: createSandbox },
