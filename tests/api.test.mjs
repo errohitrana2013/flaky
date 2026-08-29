@@ -104,6 +104,51 @@ test("fails every request at a failure rate of 1", async () => {
   assert.equal(res.status, 500);
 });
 
+// A chaos parameter that is ignored is worse than one that errors: someone
+// testing a retry path would get a 200 and a green test for the wrong reason.
+test("rejects an out-of-range _fail_rate instead of always failing", async () => {
+  const res = await call("/v1/posts?_fail_rate=2");
+  assert.equal(res.status, 400);
+  assert.match((await body(res)).error.hint, /probability from 0 to 1/);
+});
+
+test("rejects an out-of-range _status instead of returning 200", async () => {
+  const res = await call("/v1/posts?_status=999");
+  assert.equal(res.status, 400);
+  assert.match((await body(res)).error.hint, /100 to 599/);
+});
+
+test("rejects a _delay beyond the cap instead of silently clamping", async () => {
+  const res = await call("/v1/posts?_delay=99999");
+  assert.equal(res.status, 400);
+  assert.match((await body(res)).error.hint, /0 to 10000/);
+});
+
+test("rejects non-numeric and negative chaos parameters", async () => {
+  for (const query of ["_delay=abc", "_delay=-500", "_fail_rate=abc", "_fail_rate=-1", "_status=abc", "_status=503.5"]) {
+    assert.equal((await call(`/v1/posts?${query}`)).status, 400, `${query} should be a 400`);
+  }
+});
+
+test("treats an empty chaos parameter as absent", async () => {
+  const res = await call("/v1/posts?_status=&_delay=&_fail_rate=&_limit=1");
+  assert.equal(res.status, 200);
+});
+
+test("validates every parameter before acting on any of them", async () => {
+  // A valid _delay must not be served before an invalid _status is caught.
+  const started = Date.now();
+  const res = await call("/v1/posts?_delay=2000&_status=999");
+  assert.equal(res.status, 400);
+  assert.ok(Date.now() - started < 500, "rejected without sitting through the delay");
+});
+
+test("_status=200 is valid and means behave normally", async () => {
+  const res = await call("/v1/posts?_status=200&_limit=1");
+  assert.equal(res.status, 200);
+  assert.equal((await body(res)).length, 1);
+});
+
 test("echoes writes without persisting them", async () => {
   const res = await call("/v1/posts", { method: "POST", body: JSON.stringify({ title: "hello" }) });
   assert.equal(res.status, 201);

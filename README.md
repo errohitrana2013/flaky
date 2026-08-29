@@ -15,7 +15,7 @@ the failure you are trying to test against.
 
 ```bash
 npm install
-npm test          # 27 tests, ~0.4s, no network and no Cloudflare account
+npm test          # 34 tests, ~0.4s, no network and no Cloudflare account
 npm run dev       # http://localhost:8787
 ```
 
@@ -58,6 +58,13 @@ npm run deploy
 | `GET /v1/admin/stats?days=14` | Traffic rollups (admin token required) |
 
 Response controls, on any request: `?_delay=2000`, `?_status=503`, `?_fail_rate=0.3`
+
+These are validated strictly and an out-of-range value is a `400`, never a
+silent fallback. `_delay` takes 0–10000 ms, `_fail_rate` a probability of 0–1,
+`_status` a code of 100–599. This matters more here than elsewhere: quietly
+ignoring `_status=999` would return a `200` to someone testing their retry path
+and their test would pass for the wrong reason. A tool for testing failures must
+not fail quietly itself.
 
 Resources: `users` (10), `posts` (100), `comments` (500), `albums` (100),
 `photos` (1000), `todos` (200), `products` (100).
@@ -111,7 +118,7 @@ flaky/
 │   └── generate-db.js        regenerates src/data/db.js deterministically
 │
 ├── tests/
-│   └── api.test.mjs          27 tests, no dependencies, runs offline
+│   └── api.test.mjs          34 tests, no dependencies, runs offline
 │
 ├── wrangler.toml             bindings and cron
 ├── .dev.vars.example         copy to .dev.vars for local secrets
@@ -163,7 +170,7 @@ files.
 ## Tests
 
 ```bash
-npm test     # 27 tests, no network, no Cloudflare account needed
+npm test     # 34 tests, no network, no Cloudflare account needed
 ```
 
 Bindings (D1, KV, Analytics Engine, assets) are stubbed in memory at the top of
@@ -213,8 +220,9 @@ slow down or break a request.
 
 ### Dashboard
 
-`/dashboard.html` — requests, unique visitors, error rate, keys issued, busiest
-keys. Asks for the admin token, keeps it in sessionStorage only.
+`/dashboard` — requests, unique visitors, error rate, keys issued, busiest keys.
+Asks for the admin token, keeps it in sessionStorage only. (Cloudflare's asset
+handler drops the `.html`, so `/dashboard.html` redirects here.)
 
 ### Daily digest
 

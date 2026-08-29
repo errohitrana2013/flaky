@@ -210,9 +210,23 @@ curl -X POST https://flaky.dev/v1/sandbox/&lt;id&gt;/posts \
 <script>
 const $ = (id) => document.getElementById(id);
 
+// Clamp to the range the API accepts, and write the corrected number back into
+// the field so the user sees what was actually sent. Sending an out-of-range
+// value would earn an honest 400 from the API, but that reads as the demo being
+// broken rather than as the input being wrong.
+function clamp(input, min, max) {
+  if (!input.value.trim()) return "";
+  const bounded = Math.min(Math.max(Number(input.value), min), max);
+  if (!Number.isFinite(bounded)) { input.value = ""; return ""; }
+  input.value = String(bounded);
+  return String(bounded);
+}
+
 function buildUrl() {
   const url = new URL($("path").value.trim() || "/v1/posts", location.origin);
-  const delay = $("delay").value, status = $("status").value, fail = $("fail").value;
+  const delay = clamp($("delay"), 0, 10000);
+  const fail = clamp($("fail"), 0, 1);
+  const status = $("status").value;
   if (delay) url.searchParams.set("_delay", delay);
   if (status) url.searchParams.set("_status", status);
   if (fail) url.searchParams.set("_fail_rate", fail);
