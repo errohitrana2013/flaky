@@ -301,6 +301,60 @@ test("an unexpected failure returns clean JSON, not an unhandled exception", asy
   assert.match((await body(res)).error.message, /broke on our side/);
 });
 
+test("caps how many new keys one address can mint per day", async () => {
+  const env = makeEnv();
+  // Five already issued from this address today.
+  env.RATE_LIMITS.get = async (k) => (k.startsWith("keys:") ? "5" : null);
+
+  const res = await call("/v1/keys", {
+    method: "POST",
+    headers: { "content-type": "application/json", "cf-connecting-ip": "203.0.113.7" },
+    body: JSON.stringify({ email: "farmer@example.com" }),
+  }, env);
+
+  assert.equal(res.status, 429);
+  assert.match((await body(res)).error.hint, /already have is always allowed/);
+});
+
+test("still returns an existing key when the mint cap is reached", async () => {
+  const env = makeEnv({ keys: [{ id: "k1", key: "flk_mine", email: "me@example.com", tier: "free", revoked: 0 }] });
+  env.RATE_LIMITS.get = async (k) => (k.startsWith("keys:") ? "99" : null);
+
+  const res = await call("/v1/keys", {
+    method: "POST",
+    headers: { "content-type": "application/json", "cf-connecting-ip": "203.0.113.7" },
+    body: JSON.stringify({ email: "me@example.com" }),
+  }, env);
+
+  assert.equal(res.status, 200, "the idempotent path is never rate limited");
+  assert.equal((await body(res)).key, "flk_mine");
+});
+
+test("refuses an oversized sandbox record", async () => {
+  const env = makeEnv({ sandboxes: [{ id: "live", key_id: "k1", expires_at: Date.now() + 60000 }] });
+  const huge = JSON.stringify({ title: "x".repeat(70 * 1024) });
+
+  const res = await call("/v1/sandbox/live/posts", {
+    method: "POST",
+    headers: { "content-type": "application/json", "content-length": String(huge.length) },
+    body: huge,
+  }, env);
+
+  assert.equal(res.status, 413);
+  assert.match((await body(res)).error.hint, /64 KB/);
+});
+
+test("accepts multiple admin tokens so one can be rotated without downtime", async () => {
+  const env = makeEnv();
+  env.ADMIN_TOKEN = "old-token, new-token";
+
+  for (const token of ["old-token", "new-token"]) {
+    const res = await call("/v1/admin/stats", { headers: { authorization: `Bearer ${token}` } }, env);
+    assert.equal(res.status, 200, `${token} should be accepted`);
+  }
+  assert.equal((await call("/v1/admin/stats", { headers: { authorization: "Bearer neither" } }, env)).status, 401);
+});
+
 test("answers preflight requests", async () => {
   const res = await call("/v1/posts", { method: "OPTIONS" });
   assert.equal(res.status, 204);

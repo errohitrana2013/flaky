@@ -41,8 +41,9 @@ export function logRequest(env, ctx, request, meta) {
   });
 }
 
-// One upsert per request would be a write per request. Instead we increment a
-// per-day, per-key counter, which D1 collapses cheaply.
+// Two writes per request, not four. Daily totals, the hour-of-day histogram
+// and the per-country breakdown are all GROUP BYs over the same row, so one
+// bucket serves all three. See migrations/0003 for why that ceiling matters.
 export async function rollUp(env, ctx, meta) {
   if (!env.DB) return;
   const keyId = meta.keyId || "anon";
@@ -50,12 +51,12 @@ export async function rollUp(env, ctx, meta) {
 
   await env.DB.batch([
     env.DB.prepare(
-      `INSERT INTO usage_daily (day, key_id, tier, requests, errors)
-       VALUES (?, ?, ?, 1, ?)
-       ON CONFLICT (day, key_id) DO UPDATE SET
+      `INSERT INTO usage_bucket (day, hour, key_id, tier, country, requests, errors)
+       VALUES (?, ?, ?, ?, ?, 1, ?)
+       ON CONFLICT (day, hour, key_id, country) DO UPDATE SET
          requests = requests + 1,
          errors   = errors + excluded.errors`
-    ).bind(meta.day, keyId, meta.tier, isError),
+    ).bind(meta.day, meta.hour, keyId, meta.tier, meta.country, isError),
 
     // Primary key makes this idempotent, so a repeat visitor costs one no-op.
     // The country recorded is the one they first appeared from that day, which
@@ -63,23 +64,6 @@ export async function rollUp(env, ctx, meta) {
     env.DB.prepare(
       "INSERT OR IGNORE INTO daily_visitors (day, visitor, country) VALUES (?, ?, ?)"
     ).bind(meta.day, meta.visitor, meta.country),
-
-    // 24 rows a day. Answers "when do people actually use this".
-    env.DB.prepare(
-      `INSERT INTO usage_hourly (day, hour, requests, errors)
-       VALUES (?, ?, 1, ?)
-       ON CONFLICT (day, hour) DO UPDATE SET
-         requests = requests + 1,
-         errors   = errors + excluded.errors`
-    ).bind(meta.day, meta.hour, isError),
-
-    // One row per country per day. Requests, not visitors — the visitor count
-    // per region comes from daily_visitors above.
-    env.DB.prepare(
-      `INSERT INTO usage_geo (day, country, requests)
-       VALUES (?, ?, 1)
-       ON CONFLICT (day, country) DO UPDATE SET requests = requests + 1`
-    ).bind(meta.day, meta.country),
   ]);
 }
 
@@ -102,7 +86,7 @@ export async function sendDigest(env) {
 
   const day = daysAgo(1);
   const totals = await env.DB.prepare(
-    "SELECT SUM(requests) AS requests, SUM(errors) AS errors FROM usage_daily WHERE day = ?"
+    "SELECT SUM(requests) AS requests, SUM(errors) AS errors FROM usage_bucket WHERE day = ?"
   ).bind(day).first();
 
   const visitors = await env.DB.prepare(

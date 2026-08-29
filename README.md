@@ -15,7 +15,7 @@ the failure you are trying to test against.
 
 ```bash
 npm install
-npm test          # 41 tests, ~0.4s, no network and no Cloudflare account
+npm test          # 45 tests, ~0.4s, no network and no Cloudflare account
 npm run dev       # http://localhost:8787
 ```
 
@@ -114,13 +114,14 @@ flaky/
 │
 ├── migrations/               applied in order by `npm run db:migrate`
 │   ├── 0001_init.sql         keys, sandboxes, usage and visitor rollups
-│   └── 0002_hourly_and_geo.sql  hour-of-day and per-country traffic
+│   ├── 0002_hourly_and_geo.sql  hour-of-day and per-country traffic
+│   └── 0003_single_rollup.sql   collapse three rollups into one
 │
 ├── scripts/
 │   └── generate-db.js        regenerates src/data/db.js deterministically
 │
 ├── tests/
-│   └── api.test.mjs          41 tests, no dependencies, runs offline
+│   └── api.test.mjs          45 tests, no dependencies, runs offline
 │
 ├── wrangler.toml             bindings and cron
 ├── .dev.vars.example         copy to .dev.vars for local secrets
@@ -172,7 +173,7 @@ files.
 ## Tests
 
 ```bash
-npm test     # 41 tests, no network, no Cloudflare account needed
+npm test     # 45 tests, no network, no Cloudflare account needed
 ```
 
 Bindings (D1, KV, Analytics Engine, assets) are stubbed in memory at the top of
@@ -228,17 +229,18 @@ fast and free of API calls:
 
 | Table | Grain | Answers |
 |---|---|---|
-| `usage_daily` | day × key | how much traffic, how many errors |
+| `usage_bucket` | day × hour × key × country | traffic, errors, when, where, whose |
 | `daily_visitors` | day × visitor (+ country) | how many unique people, from where |
-| `usage_hourly` | day × hour (UTC) | what time of day people show up |
-| `usage_geo` | day × country | which regions send the most requests |
 
-That is four upserts per request, batched into one D1 call inside `waitUntil`.
-Worth knowing before traffic grows: D1's free tier covers 100k writes a day, so
-the rollups become the write ceiling at roughly 25k requests a day, well before
-the Workers request limit does. When that gets close, drop `usage_geo` and read
-regions from Analytics Engine instead — it already has the same data per request
-with no write cost.
+Daily totals, the hour histogram and the per-country breakdown are all `GROUP
+BY`s over `usage_bucket`, so they cost one upsert between them rather than three.
+Two writes per request, batched into one D1 call inside `waitUntil`.
+
+That halving matters: D1's free tier covers 100k writes a day, so at four writes
+per request the rollups became the ceiling at ~25k requests/day — before the
+Workers request limit binds. At two, the ceiling is ~50k. Past that, drop the
+rollups entirely and read from Analytics Engine, which already has the same data
+per request at no write cost.
 
 Country is as fine-grained as the rollups go. City or region would start to make
 a low-traffic day identifying, which is exactly what the visitor hashing exists
@@ -289,6 +291,26 @@ the local D1 — `.wrangler/` is gitignored, so it can never reach production.
 
 The 03:00 UTC cron posts a one-line summary to `DIGEST_WEBHOOK` (Slack or
 Discord) and purges expired sandboxes.
+
+## Abuse ceilings
+
+Keys stay free and unverified — a key buys a rate limit and a sandbox, not
+access to anything private, so a confirmation loop would cost signups and
+protect nothing. But unverified must not mean unlimited, so:
+
+| Limit | Value | Why |
+|---|---|---|
+| New keys per IP per day | 5 | one script with a wordlist could otherwise mint keys forever |
+| Sandbox record size | 64 KB | a record lives in D1; unbounded body means unbounded storage |
+| Records per sandbox | 500 | bounds a single sandbox's footprint |
+
+Asking again for a key you already hold is idempotent and never counted, so a
+repeat caller is never locked out — only minting *new* keys is capped. The IP
+counter fails open for the same reason the rate limiter does.
+
+`ADMIN_TOKEN` accepts a comma-separated list, so a token can be rotated with no
+window where the dashboard is locked out: add the new one, switch over, then
+drop the old one.
 
 ## Privacy
 

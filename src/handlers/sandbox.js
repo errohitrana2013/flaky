@@ -1,7 +1,7 @@
 import { DATA, RESOURCES } from "../data/index.js";
 import { json, fail } from "../lib/response.js";
 import { queryCollection, pageHeaders } from "../lib/query.js";
-import { TIERS, SANDBOX_TTL_MS } from "../config/tiers.js";
+import { TIERS, SANDBOX_TTL_MS, MAX_SANDBOX_RECORD_BYTES, MAX_SANDBOX_RECORDS } from "../config/tiers.js";
 
 // A sandbox is an overlay, not a copy. The base dataset stays shared and
 // cacheable; only the records a user has touched are stored in D1. That keeps
@@ -98,9 +98,39 @@ export async function handleSandbox(ctx) {
     return json(page.rows, { headers: pageHeaders(page) });
   }
 
+  // Reject on the declared length before reading the body, so an oversized
+  // payload is refused rather than buffered.
+  const declared = Number(ctx.request.headers.get("content-length")) || 0;
+  if (declared > MAX_SANDBOX_RECORD_BYTES) {
+    return fail(
+      413,
+      "Record too large",
+      `Sandbox records are capped at ${MAX_SANDBOX_RECORD_BYTES / 1024} KB. This is a mock API, not storage.`
+    );
+  }
+
   const body = await ctx.request.json().catch(() => ({}));
 
+  // A chunked request has no content-length, so the parsed size is checked too.
+  if (JSON.stringify(body).length > MAX_SANDBOX_RECORD_BYTES) {
+    return fail(413, "Record too large", `Sandbox records are capped at ${MAX_SANDBOX_RECORD_BYTES / 1024} KB.`);
+  }
+
   if (method === "POST") {
+    // Only new records can grow a sandbox, so the count is checked here and not
+    // on the update paths below.
+    const stored = await ctx.env.DB.prepare(
+      "SELECT COUNT(*) AS count FROM sandbox_records WHERE sandbox_id = ?"
+    ).bind(sandboxId).first();
+
+    if ((stored?.count || 0) >= MAX_SANDBOX_RECORDS) {
+      return fail(
+        429,
+        "Sandbox is full",
+        `A sandbox holds ${MAX_SANDBOX_RECORDS} records. Create a fresh one at POST /v1/sandbox.`
+      );
+    }
+
     const record = { id: Date.now(), ...body };
     await upsert(ctx.env, sandboxId, resource, record.id, record);
     return json(record, { status: 201 });

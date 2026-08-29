@@ -9,10 +9,30 @@ import { toCsv, csvResponse } from "../lib/csv.js";
 // This route bypasses the tier and rate-limit pipeline (router.js marks it
 // auth: "admin"), so it does its own check first and ctx.auth is null here.
 
+// ADMIN_TOKEN accepts a comma-separated list, so a token can be rotated
+// without a window where the dashboard is locked out: add the new one, switch
+// over, then drop the old one on the next `wrangler secret put`.
+//
+// Comparison is length-then-constant-time. A remote timing attack on a 48-char
+// random token is not a realistic threat, but the correct comparison costs one
+// line and removes the need to have that argument.
+function safeEqual(a, b) {
+  if (a.length !== b.length) return false;
+  let diff = 0;
+  for (let i = 0; i < a.length; i++) diff |= a.charCodeAt(i) ^ b.charCodeAt(i);
+  return diff === 0;
+}
+
 function authorised(request, env) {
   const header = request.headers.get("authorization") || "";
   const token = header.replace(/^Bearer\s+/i, "").trim();
-  return Boolean(env.ADMIN_TOKEN) && token === env.ADMIN_TOKEN;
+  if (!token || !env.ADMIN_TOKEN) return false;
+
+  return String(env.ADMIN_TOKEN)
+    .split(",")
+    .map((candidate) => candidate.trim())
+    .filter(Boolean)
+    .some((candidate) => safeEqual(token, candidate));
 }
 
 // GET /v1/admin/stats?days=14
@@ -27,7 +47,7 @@ export async function getStats(ctx) {
   const [daily, visitors, keys, topKeys, hourly, geoRequests, geoVisitors] = await Promise.all([
     ctx.env.DB.prepare(
       `SELECT day, SUM(requests) AS requests, SUM(errors) AS errors
-       FROM usage_daily WHERE day >= ? GROUP BY day ORDER BY day`
+       FROM usage_bucket WHERE day >= ? GROUP BY day ORDER BY day`
     ).bind(since).all(),
 
     ctx.env.DB.prepare(
@@ -41,18 +61,18 @@ export async function getStats(ctx) {
 
     ctx.env.DB.prepare(
       `SELECT key_id, SUM(requests) AS requests
-       FROM usage_daily WHERE day >= ? AND key_id != 'anon'
+       FROM usage_bucket WHERE day >= ? AND key_id != 'anon'
        GROUP BY key_id ORDER BY requests DESC LIMIT 10`
     ).bind(since).all(),
 
     ctx.env.DB.prepare(
       `SELECT hour, SUM(requests) AS requests, SUM(errors) AS errors
-       FROM usage_hourly WHERE day >= ? GROUP BY hour ORDER BY hour`
+       FROM usage_bucket WHERE day >= ? GROUP BY hour ORDER BY hour`
     ).bind(since).all(),
 
     ctx.env.DB.prepare(
       `SELECT country, SUM(requests) AS requests
-       FROM usage_geo WHERE day >= ? GROUP BY country ORDER BY requests DESC LIMIT 25`
+       FROM usage_bucket WHERE day >= ? GROUP BY country ORDER BY requests DESC LIMIT 25`
     ).bind(since).all(),
 
     ctx.env.DB.prepare(
@@ -124,18 +144,18 @@ const countryName = (code) => {
 const DATASETS = {
   daily: {
     sql: `SELECT day, SUM(requests) AS requests, SUM(errors) AS errors
-          FROM usage_daily WHERE day >= ? GROUP BY day ORDER BY day`,
+          FROM usage_bucket WHERE day >= ? GROUP BY day ORDER BY day`,
     columns: [["day", "day"], ["requests", "requests"], ["errors", "errors"]],
   },
   hourly: {
     sql: `SELECT hour, SUM(requests) AS requests, SUM(errors) AS errors
-          FROM usage_hourly WHERE day >= ? GROUP BY hour ORDER BY hour`,
+          FROM usage_bucket WHERE day >= ? GROUP BY hour ORDER BY hour`,
     columns: [["hour_utc", "hour"], ["requests", "requests"], ["errors", "errors"]],
   },
   countries: {
     sql: `SELECT g.country AS country, SUM(g.requests) AS requests,
                  (SELECT COUNT(*) FROM daily_visitors v WHERE v.day >= ? AND v.country = g.country) AS visitors
-          FROM usage_geo g WHERE g.day >= ? GROUP BY g.country ORDER BY requests DESC`,
+          FROM usage_bucket g WHERE g.day >= ? GROUP BY g.country ORDER BY requests DESC`,
     binds: 2,
     columns: [["country_code", "country"], ["country", "name"], ["visitors", "visitors"], ["requests", "requests"]],
     decorate: (rows) => rows.map((row) => ({ ...row, name: countryName(row.country) })),
@@ -147,8 +167,8 @@ const DATASETS = {
   },
   keys: {
     sql: `SELECT key_id, tier, SUM(requests) AS requests, SUM(errors) AS errors
-          FROM usage_daily WHERE day >= ? AND key_id != 'anon'
-          GROUP BY key_id ORDER BY requests DESC`,
+          FROM usage_bucket WHERE day >= ? AND key_id != 'anon'
+          GROUP BY key_id, tier ORDER BY requests DESC`,
     columns: [["key_id", "key_id"], ["tier", "tier"], ["requests", "requests"], ["errors", "errors"]],
   },
 };
