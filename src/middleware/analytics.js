@@ -33,7 +33,7 @@ export function logRequest(env, ctx, request, meta) {
       String(meta.status),
       meta.tier,
       meta.client,
-      request.cf?.country || "",
+      meta.country,
       meta.referrer,
       meta.keyId || "",
     ],
@@ -58,9 +58,28 @@ export async function rollUp(env, ctx, meta) {
     ).bind(meta.day, keyId, meta.tier, isError),
 
     // Primary key makes this idempotent, so a repeat visitor costs one no-op.
+    // The country recorded is the one they first appeared from that day, which
+    // is enough to count unique visitors per region without a second table.
     env.DB.prepare(
-      "INSERT OR IGNORE INTO daily_visitors (day, visitor) VALUES (?, ?)"
-    ).bind(meta.day, meta.visitor),
+      "INSERT OR IGNORE INTO daily_visitors (day, visitor, country) VALUES (?, ?, ?)"
+    ).bind(meta.day, meta.visitor, meta.country),
+
+    // 24 rows a day. Answers "when do people actually use this".
+    env.DB.prepare(
+      `INSERT INTO usage_hourly (day, hour, requests, errors)
+       VALUES (?, ?, 1, ?)
+       ON CONFLICT (day, hour) DO UPDATE SET
+         requests = requests + 1,
+         errors   = errors + excluded.errors`
+    ).bind(meta.day, meta.hour, isError),
+
+    // One row per country per day. Requests, not visitors — the visitor count
+    // per region comes from daily_visitors above.
+    env.DB.prepare(
+      `INSERT INTO usage_geo (day, country, requests)
+       VALUES (?, ?, 1)
+       ON CONFLICT (day, country) DO UPDATE SET requests = requests + 1`
+    ).bind(meta.day, meta.country),
   ]);
 }
 

@@ -11,7 +11,7 @@ import { resolveTier } from "./middleware/auth.js";
 import { checkRateLimit, rateHeaders } from "./middleware/ratelimit.js";
 import { applyChaos } from "./middleware/chaos.js";
 import { visitorId, classifyClient, logRequest, rollUp, sendDigest, purgeExpired } from "./middleware/analytics.js";
-import { today } from "./lib/hash.js";
+import { today, utcHour } from "./lib/hash.js";
 
 async function handle(request, env, ctx, url) {
   const route = matchRoute(request.method, url.pathname);
@@ -57,11 +57,14 @@ function recordTelemetry(ctx, request, env, url, response, startedAt) {
         tier: auth.tier,
         keyId: auth.keyId,
         referrer: request.headers.get("referer") || "",
+        // 'XX' rather than empty, so an unknown region is a visible row in the
+        // dashboard instead of a blank one that looks like a bug.
+        country: request.cf?.country || "XX",
         durationMs: Date.now() - startedAt,
         bytes: Number(response.headers.get("content-length")) || 0,
       };
       logRequest(env, ctx, request, meta);
-      await rollUp(env, ctx, { day: today(), ...meta });
+      await rollUp(env, ctx, { day: today(), hour: utcHour(), ...meta });
     } catch {
       // Telemetry failures are never surfaced to the caller.
     }

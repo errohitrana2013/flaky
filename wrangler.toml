@@ -13,6 +13,9 @@ binding = "ASSETS"
 binding = "DB"
 database_name = "flaky"
 database_id = "PASTE_AFTER_wrangler_d1_create_flaky"
+# Lets `wrangler d1 migrations apply` track what has already run, so a schema
+# change is a new 000N_*.sql file and never a hand-run statement.
+migrations_dir = "migrations"
 
 [[kv_namespaces]]
 binding = "RATE_LIMITS"

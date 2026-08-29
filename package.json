@@ -12,8 +12,8 @@
     "deploy": "wrangler deploy",
     "seed": "node scripts/generate-db.js",
     "test": "node --test \"tests/**/*.test.mjs\"",
-    "db:init": "wrangler d1 execute flaky --file=migrations/0001_init.sql --remote",
-    "db:init:local": "wrangler d1 execute flaky --file=migrations/0001_init.sql --local",
+    "db:migrate": "wrangler d1 migrations apply flaky --remote",
+    "db:migrate:local": "wrangler d1 migrations apply flaky --local",
     "tail": "wrangler tail"
   },
   "devDependencies": {

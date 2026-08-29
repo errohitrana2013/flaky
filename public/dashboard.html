@@ -58,6 +58,24 @@
   .track { background: var(--bar); height: 7px; border-radius: 4px; min-width: 2px; }
   .track.err { background: var(--accent); }
   td.chart { width: 45%; }
+
+  /* Hour-of-day histogram. 24 columns on a flex row, heights as percentages —
+     still no chart library. */
+  .tzlabel { text-transform: none; letter-spacing: 0; font-weight: 400; }
+  .hours {
+    display: flex; align-items: flex-end; gap: 3px; height: 110px;
+    padding: 12px 14px; background: var(--panel);
+    border: 1px solid var(--line); border-radius: 11px;
+  }
+  .hour { flex: 1; display: flex; flex-direction: column; justify-content: flex-end; height: 100%; gap: 5px; }
+  .hour .col { background: var(--bar); border-radius: 3px 3px 0 0; min-height: 2px; transition: background .12s; }
+  .hour.peak .col { background: var(--accent); }
+  .hour .lab { font-size: 9.5px; color: var(--muted); text-align: center; font-variant-numeric: tabular-nums; height: 12px; }
+  .hour .lab.hide { visibility: hidden; }
+  .hour:hover .col { background: var(--accent); }
+
+  .flag { font-size: 15px; margin-right: 7px; }
+  .code { color: var(--muted); font-size: 12px; }
 </style>
 </head>
 <body>
@@ -91,6 +109,15 @@
     <table>
       <thead><tr><th>Day</th><th class="num">Requests</th><th class="num">Errors</th><th class="num">Visitors</th><th class="chart"></th></tr></thead>
       <tbody id="daily"></tbody>
+    </table>
+
+    <h2>When people use it <span id="tz" class="tzlabel"></span></h2>
+    <div id="hours" class="hours"></div>
+
+    <h2>Where they come from</h2>
+    <table>
+      <thead><tr><th>Region</th><th class="num">Visitors</th><th class="num">Requests</th><th class="chart"></th></tr></thead>
+      <tbody id="geo"></tbody>
     </table>
 
     <h2>Busiest keys</h2>
@@ -135,12 +162,82 @@ function render(data) {
         .join("")
     : '<tr><td colspan="5" style="color:var(--muted)">No traffic yet.</td></tr>';
 
+  renderHours(data.hourly);
+  renderGeo(data.countries);
+
   $("keys").innerHTML = data.topKeys.length
     ? data.topKeys.map((k) => `<tr><td class="mono">${k.key_id}</td><td class="num">${num(k.requests)}</td></tr>`).join("")
     : '<tr><td colspan="2" style="color:var(--muted)">No keyed traffic yet.</td></tr>';
 
   $("gate").hidden = true;
   $("panel").hidden = false;
+}
+
+// The API stores hours in UTC. "When should I ship" is a local-time question,
+// so shift into the viewer's zone here. India and friends sit on a half-hour
+// offset, hence the fractional maths rather than a plain integer rotate.
+function renderHours(hourly) {
+  const offset = -new Date().getTimezoneOffset() / 60;
+  const zone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+  $("tz").textContent = zone ? `· ${zone}` : "· local time";
+
+  const label = (v) => {
+    const hh = Math.floor(v);
+    return `${String(hh).padStart(2, "0")}:${String(Math.round((v - hh) * 60)).padStart(2, "0")}`;
+  };
+
+  const buckets = hourly
+    .map((b) => ({ ...b, local: (((b.hour + offset) % 24) + 24) % 24 }))
+    .sort((a, b) => a.local - b.local);
+
+  const peak = Math.max(...buckets.map((b) => b.requests));
+
+  $("hours").innerHTML = buckets
+    .map((b, i) => {
+      const height = peak ? Math.max((b.requests / peak) * 100, 1.5) : 1.5;
+      // Every third label only; 24 of them overlap on a phone.
+      return `<div class="hour${b.requests === peak && peak > 0 ? " peak" : ""}"
+                   title="${label(b.local)}–${label((b.local + 1) % 24)} · ${num(b.requests)} requests, ${num(b.errors)} errors">
+        <div class="col" style="height:${height.toFixed(1)}%"></div>
+        <div class="lab${i % 3 ? " hide" : ""}">${label(b.local).slice(0, 2)}</div>
+      </div>`;
+    })
+    .join("");
+}
+
+// Codes come from Cloudflare, but they round-trip through the database, so
+// validate the shape before building a flag or trusting it in markup.
+const REGION = (() => {
+  try { return new Intl.DisplayNames(["en"], { type: "region" }); } catch { return null; }
+})();
+
+const isCode = (code) => /^[A-Za-z]{2}$/.test(code || "");
+
+function countryName(code) {
+  if (!isCode(code) || code.toUpperCase() === "XX") return "Unknown";
+  try { return REGION?.of(code.toUpperCase()) || code.toUpperCase(); } catch { return code.toUpperCase(); }
+}
+
+function flag(code) {
+  if (!isCode(code) || code.toUpperCase() === "XX") return "🌐";
+  return String.fromCodePoint(...[...code.toUpperCase()].map((c) => 0x1f1e6 + c.charCodeAt(0) - 65));
+}
+
+function renderGeo(countries) {
+  if (!countries.length) {
+    $("geo").innerHTML = '<tr><td colspan="4" style="color:var(--muted)">No regions recorded yet.</td></tr>';
+    return;
+  }
+  const peak = Math.max(...countries.map((c) => c.requests));
+  $("geo").innerHTML = countries
+    .map((c) => `<tr>
+        <td><span class="flag">${flag(c.country)}</span>${countryName(c.country)}
+            <span class="code">${isCode(c.country) ? c.country.toUpperCase() : ""}</span></td>
+        <td class="num">${num(c.visitors)}</td>
+        <td class="num">${num(c.requests)}</td>
+        <td class="chart"><div class="track" style="width:${((c.requests / peak) * 100).toFixed(1)}%"></div></td>
+      </tr>`)
+    .join("");
 }
 
 async function attempt(token) {

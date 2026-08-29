@@ -20,5 +20,9 @@ export async function visitorId(request, salt) {
 
 export const today = () => new Date().toISOString().slice(0, 10);
 
+// UTC, deliberately. Storing a local hour would bake in whichever timezone the
+// edge happened to pick; the dashboard converts to the viewer's own.
+export const utcHour = () => new Date().getUTCHours();
+
 export const daysAgo = (n) =>
   new Date(Date.now() - n * 86400000).toISOString().slice(0, 10);

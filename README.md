@@ -29,7 +29,7 @@ without them, because reads are served from the bundled dataset.
 npx wrangler login
 npx wrangler d1 create flaky                    # paste database_id into wrangler.toml
 npx wrangler kv namespace create RATE_LIMITS    # paste id into wrangler.toml
-npm run db:init                                 # create tables
+npm run db:migrate                              # create tables
 
 npx wrangler secret put VISITOR_SALT            # any long random string
 npx wrangler secret put ADMIN_TOKEN             # guards /v1/admin/stats
@@ -111,8 +111,9 @@ flaky/
 │   ├── dashboard.html        traffic dashboard (admin token required)
 │   └── docs/                 long-form docs go here
 │
-├── migrations/
-│   └── 0001_init.sql         D1 schema; add 0002_*.sql rather than editing this
+├── migrations/               applied in order by `npm run db:migrate`
+│   ├── 0001_init.sql         keys, sandboxes, usage and visitor rollups
+│   └── 0002_hourly_and_geo.sql  hour-of-day and per-country traffic
 │
 ├── scripts/
 │   └── generate-db.js        regenerates src/data/db.js deterministically
@@ -212,17 +213,47 @@ SELECT toDate(timestamp) AS day, uniq(index1) AS visitors
 FROM flaky_requests WHERE double3 = 0 GROUP BY day ORDER BY day
 ```
 
-**D1 rollups** (`usage_daily`, `daily_visitors`) hold a small per-day summary so
-the dashboard and the digest stay fast and free of API calls.
+**D1 rollups** hold small per-day summaries so the dashboard and the digest stay
+fast and free of API calls:
+
+| Table | Grain | Answers |
+|---|---|---|
+| `usage_daily` | day × key | how much traffic, how many errors |
+| `daily_visitors` | day × visitor (+ country) | how many unique people, from where |
+| `usage_hourly` | day × hour (UTC) | what time of day people show up |
+| `usage_geo` | day × country | which regions send the most requests |
+
+That is four upserts per request, batched into one D1 call inside `waitUntil`.
+Worth knowing before traffic grows: D1's free tier covers 100k writes a day, so
+the rollups become the write ceiling at roughly 25k requests a day, well before
+the Workers request limit does. When that gets close, drop `usage_geo` and read
+regions from Analytics Engine instead — it already has the same data per request
+with no write cost.
+
+Country is as fine-grained as the rollups go. City or region would start to make
+a low-traffic day identifying, which is exactly what the visitor hashing exists
+to prevent.
 
 Both run inside `ctx.waitUntil`, after the response is sent — telemetry can never
 slow down or break a request.
 
 ### Dashboard
 
-`/dashboard` — requests, unique visitors, error rate, keys issued, busiest keys.
-Asks for the admin token, keeps it in sessionStorage only. (Cloudflare's asset
-handler drops the `.html`, so `/dashboard.html` redirects here.)
+`/dashboard` — asks for the admin token, keeps it in sessionStorage only.
+(Cloudflare's asset handler drops the `.html`, so `/dashboard.html` redirects
+here.) It shows:
+
+- **Totals** — requests, unique visitors, error rate, keys issued
+- **Per day** — a row and a bar per day, error-heavy days in accent
+- **When people use it** — a 24-bar hour-of-day histogram, converted from stored
+  UTC into the *viewer's* timezone, half-hour offsets included, because "when
+  should I ship" is a local-time question
+- **Where they come from** — visitors and requests per country, with flags and
+  names resolved by `Intl.DisplayNames` rather than a bundled country table
+- **Busiest keys**
+
+To fill it with plausible numbers while developing, insert rows straight into
+the local D1 — `.wrangler/` is gitignored, so it can never reach production.
 
 ### Daily digest
 
