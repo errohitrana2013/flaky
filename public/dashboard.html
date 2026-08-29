@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="robots" content="noindex">
 <title>flaky — traffic</title>
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
 <style>
   :root {
     --bg: #fbfbf9; --panel: #fff; --ink: #16150f; --muted: #6b6a60;
@@ -22,7 +23,12 @@
     font: 15px/1.55 ui-sans-serif, -apple-system, "Segoe UI", Roboto, sans-serif;
   }
   .wrap { max-width: 900px; margin: 0 auto; padding: 48px 24px 80px; }
-  h1 { font-size: 22px; letter-spacing: -.02em; margin: 0 0 4px; }
+  h1 { font-size: 22px; letter-spacing: -.02em; margin: 0 0 4px; display: flex; align-items: center; gap: 10px; }
+  /* Static here — a looping animation next to live numbers reads as a chart
+     updating when it is not. */
+  .mark { width: 24px; height: 24px; display: block; }
+  .mark .bar { fill: currentColor; }
+  .mark .flake { fill: var(--accent); }
   .sub { color: var(--muted); font-size: 14px; margin: 0 0 32px; }
 
   .gate { display: flex; gap: 8px; max-width: 460px; }
@@ -56,7 +62,15 @@
 </head>
 <body>
 <div class="wrap">
-  <h1>flaky · traffic</h1>
+  <h1>
+    <svg class="mark" viewBox="0 0 32 32" aria-hidden="true">
+      <rect class="bar"   x="3"  y="18" width="5" height="9"  rx="2.5"/>
+      <rect class="bar"   x="10" y="12" width="5" height="15" rx="2.5"/>
+      <rect class="flake" x="17" y="22" width="5" height="5"  rx="2.5"/>
+      <rect class="bar"   x="24" y="4"  width="5" height="23" rx="2.5"/>
+    </svg>
+    flaky · traffic
+  </h1>
   <p class="sub">Reads the D1 rollups. Your token is kept in sessionStorage and never leaves this tab.</p>
 
   <div id="gate" class="gate">
