@@ -1,0 +1,184 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>JSONPlaceholder alternative — same data, plus failures you can ask for | flaky</title>
+<meta name="description" content="A drop-in JSONPlaceholder alternative with identical resource shapes, plus something it cannot do: force any status code, add latency, or make a percentage of requests fail from the query string.">
+<link rel="canonical" href="https://flakyapi.dev/docs/jsonplaceholder">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<link rel="alternate icon" href="/favicon.ico" sizes="32x32">
+<link rel="stylesheet" href="/app.css">
+<link rel="stylesheet" href="/docs.css">
+</head>
+<body>
+<div class="wrap">
+
+  <header class="doc-head">
+    <a class="brand" href="/" aria-label="flaky — home">
+      <svg class="mark" viewBox="0 0 32 32" aria-hidden="true">
+        <rect class="bar"   x="3"    y="18"  width="5"   height="9"  rx="2.5"/>
+        <rect class="bar"   x="10"   y="12"  width="5"   height="15" rx="2.5"/>
+        <rect class="ghost" x="17.6" y="8.6" width="4.8" height="11" rx="2.4"/>
+        <rect class="flake" x="17"   y="22"  width="5"   height="5"  rx="2.5"/>
+        <rect class="bar"   x="24"   y="4"   width="5"   height="23" rx="2.5"/>
+      </svg>
+      <span class="wordmark">flaky<span class="dot">.</span></span>
+    </a>
+    <h1>Moving from JSONPlaceholder</h1>
+    <p class="lede">
+      Same resources, same field names, same nested routes. The migration is one
+      string in your code. What you get for it is the thing JSONPlaceholder
+      cannot do: <strong>ask for the failure you are trying to test against.</strong>
+    </p>
+  </header>
+
+  <section>
+    <h2>The change</h2>
+    <pre><span class="tok-com">- fetch('https://jsonplaceholder.typicode.com/posts')</span>
+<span class="tok-str">+ fetch('https://flakyapi.dev/v1/posts')</span></pre>
+    <p class="mt-16">
+      Two differences in that line: the host, and a <code>/v1</code> prefix. The
+      prefix exists so the API can change later without breaking the URLs you
+      have already published — the exact problem JSONPlaceholder has, having
+      never versioned.
+    </p>
+    <p>
+      A find-and-replace across a project is usually enough:
+    </p>
+    <pre>sed -i '' 's|jsonplaceholder.typicode.com/|flakyapi.dev/v1/|g' src/**/*.js</pre>
+  </section>
+
+  <section>
+    <h2>What is identical</h2>
+    <p>
+      Every shared resource returns the same field names, so nothing downstream of
+      the fetch has to change — not your types, not your components, not your tests.
+    </p>
+    <div class="scroller">
+      <table>
+        <thead><tr><th>Resource</th><th>Fields</th><th class="num">JSONPlaceholder</th><th class="num">flaky</th></tr></thead>
+        <tbody>
+          <tr><td class="mono">posts</td><td class="mono small">id, userId, title, body</td><td class="num">100</td><td class="num">100</td></tr>
+          <tr><td class="mono">comments</td><td class="mono small">id, postId, name, email, body</td><td class="num">500</td><td class="num">500</td></tr>
+          <tr><td class="mono">albums</td><td class="mono small">id, userId, title</td><td class="num">100</td><td class="num">100</td></tr>
+          <tr><td class="mono">photos</td><td class="mono small">id, albumId, title, url, thumbnailUrl</td><td class="num">5,000</td><td class="num">1,000</td></tr>
+          <tr><td class="mono">todos</td><td class="mono small">id, userId, title, completed</td><td class="num">200</td><td class="num">200</td></tr>
+          <tr><td class="mono">users</td><td class="mono small">id, name, username, email, address, phone, website, company</td><td class="num">10</td><td class="num">10</td></tr>
+          <tr class="extra"><td class="mono">products</td><td class="mono small">id, title, price, rating, stock, brand, category…</td><td class="num">—</td><td class="num">100</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="mt-16">
+      Nested routes work the same way — <code>/v1/posts/1/comments</code>,
+      <code>/v1/albums/1/photos</code>, <code>/v1/users/1/todos</code> — and so
+      does filtering by any field, <code>/v1/todos?userId=3&amp;completed=true</code>.
+    </p>
+    <p>
+      Paging accepts both styles. <code>_start</code> and <code>_limit</code>, the
+      json-server form JSONPlaceholder uses, work unchanged; <code>_page</code> and
+      <code>_limit</code> also work if you prefer pages. So do <code>_sort</code>
+      and <code>_order</code>.
+    </p>
+  </section>
+
+  <section>
+    <h2>What is different, honestly</h2>
+    <div class="diffs">
+      <div class="diff">
+        <h3>photos has 1,000 rows, not 5,000</h3>
+        <p>
+          The dataset ships inside the Worker so a list request is an array slice
+          rather than a database read. Five thousand photo rows would be two thirds
+          of the bundle for a resource almost nobody paginates past the first page
+          of. If you genuinely need 5,000, say so and it can go up.
+        </p>
+      </div>
+      <div class="diff">
+        <h3>There are rate limits</h3>
+        <p>
+          1,000 requests a day anonymously; 10,000 with a free key that takes one
+          request to create and needs no confirmation email. JSONPlaceholder
+          publishes no limit. Every response carries
+          <code>x-ratelimit-remaining</code> so you are never guessing.
+        </p>
+      </div>
+      <div class="diff">
+        <h3>Writes are still fake — but they say so</h3>
+        <p>
+          <code>POST</code>, <code>PUT</code>, <code>PATCH</code> and
+          <code>DELETE</code> are echoed and not stored, exactly as on
+          JSONPlaceholder. The difference is the response carries
+          <code>x-mock-write: not-persisted</code>, so nobody loses an afternoon
+          discovering it. When you need writes that stick, take a sandbox.
+        </p>
+      </div>
+      <div class="diff">
+        <h3>An unknown <code>_param</code> is an error</h3>
+        <p>
+          JSONPlaceholder treats <code>?_typo=1</code> as a filter on a field
+          named <code>_typo</code>, matches nothing, and returns <code>[]</code>.
+          Here it returns a <code>400</code> naming the parameters that exist. An
+          empty array that means "you made a typo" costs more time than an error.
+        </p>
+      </div>
+    </div>
+  </section>
+
+  <section class="pitch">
+    <h2>The reason to switch</h2>
+    <p>
+      Every fake API hands you data. None of them let you ask for the thing you are
+      actually testing: the slow response, the 503, the endpoint that fails one time
+      in three. That is normally a local mock server, a branch in your code, or a
+      <code>setTimeout</code> you have to remember to delete.
+    </p>
+    <pre><span class="tok-com"># your loading state, with a real slow response</span>
+GET /v1/posts?_delay=3000
+
+<span class="tok-com"># your error boundary, with a real 503</span>
+GET /v1/posts?_status=503
+
+<span class="tok-com"># your retry logic, failing one request in three</span>
+GET /v1/posts?_fail_rate=0.3
+
+<span class="tok-com"># slow and unreliable at once, because that is what production is</span>
+GET /v1/products?_delay=1500&amp;_fail_rate=0.2</pre>
+    <p class="mt-16">
+      It works on every endpoint, including nested routes. No install, no config,
+      no branch in your code that has to be removed before you ship — and it works
+      from a browser console, a CodePen, or a colleague's machine with nothing set up.
+    </p>
+    <p>
+      Out-of-range values are rejected rather than ignored:
+      <code>?_status=999</code> returns a <code>400</code>, not a silent
+      <code>200</code>. A tool for testing failures should not fail quietly itself.
+    </p>
+  </section>
+
+  <section>
+    <h2>Try it before you change anything</h2>
+    <p>Paste either of these into a terminal — nothing to sign up for.</p>
+    <pre>curl '<span class="host">https://flakyapi.dev</span>/v1/posts?_limit=2'
+
+curl -i '<span class="host">https://flakyapi.dev</span>/v1/posts?_status=503'</pre>
+    <p class="mt-16">
+      Or use the <a href="/">live inspector on the home page</a>, which lets you
+      set the delay, status and failure rate and watch the response change.
+    </p>
+  </section>
+
+  <footer>
+    <p class="m-0">
+      JSONPlaceholder is genuinely good and has served millions of developers for a
+      decade. This exists because it does one thing it was never meant to do.
+      · <a href="/v1/meta">/v1/meta</a>
+      · <a href="https://github.com/errohitrana2013/flaky">source</a>
+    </p>
+  </footer>
+
+</div>
+<script src="/app.js" defer></script>
+<script src="/dwell.js" defer></script>
+</body>
+</html>

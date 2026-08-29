@@ -439,6 +439,28 @@ test("labels a requested failure differently from a validation rejection", async
   assert.equal(badRate.status, 400);
 });
 
+test("supports _start, the offset paging JSONPlaceholder users arrive with", async () => {
+  const offset = await body(await call("/v1/posts?_start=5&_limit=2"));
+  assert.equal(offset.length, 2);
+  assert.equal(offset[0].id, 6, "_start is an offset, not a page");
+
+  // When both styles are given, the explicit offset wins.
+  const both = await body(await call("/v1/posts?_start=10&_page=3&_limit=1"));
+  assert.equal(both[0].id, 11);
+});
+
+test("rejects an unknown underscore parameter instead of filtering on it", async () => {
+  // The bug this prevents: _start used to fall through to a field filter,
+  // match no records, and return [] — so a migrating caller got no data and no
+  // explanation.
+  const res = await call("/v1/posts?_nonsense=1");
+  assert.equal(res.status, 400);
+  assert.match((await body(res)).error.hint, /_limit/);
+
+  // A real field filter is untouched.
+  assert.equal((await call("/v1/todos?userId=3&_limit=2")).status, 200);
+});
+
 test("answers preflight requests", async () => {
   const res = await call("/v1/posts", { method: "OPTIONS" });
   assert.equal(res.status, 204);

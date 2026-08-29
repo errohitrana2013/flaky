@@ -10,7 +10,18 @@ import { fail, echo } from "./response.js";
 // rejected, because capping is the documented contract ("capped at your tier's
 // maxLimit") rather than a silent fallback.
 export function validatePaging(params, maxLimit) {
-  for (const [name, floor] of [["_limit", 1], ["_page", 1]]) {
+  // An unknown underscore param is a mistake, not a field name.
+  for (const [name] of params) {
+    if (name.startsWith("_") && !RESERVED_PARAMS.has(name)) {
+      return fail(
+        400,
+        `Unknown parameter ${echo(name)}`,
+        `Parameters starting with _ are reserved. Known: ${[...RESERVED_PARAMS].join(", ")}.`
+      );
+    }
+  }
+
+  for (const [name, floor] of [["_limit", 1], ["_page", 1], ["_start", 0]]) {
     const raw = params.get(name);
     if (raw === null || raw.trim() === "") continue;
 
@@ -21,7 +32,7 @@ export function validatePaging(params, maxLimit) {
         `Invalid ${name}`,
         name === "_limit"
           ? `${name}=${echo(raw)} is not valid. Expected a whole number of 1 or more; anything above your tier's ${maxLimit} is capped.`
-          : `${name}=${echo(raw)} is not valid. Expected a whole number of 1 or more.`
+          : `${name}=${echo(raw)} is not valid. Expected a whole number of ${floor} or more.`
       );
     }
   }
@@ -52,8 +63,14 @@ export function queryCollection(rows, params, maxLimit) {
 
   const total = result.length;
   const limit = Math.min(Number(params.get("_limit")) || DEFAULT_PAGE_SIZE, maxLimit);
+
+  // Two paging styles, because JSONPlaceholder speaks json-server's offset form
+  // and people migrating arrive with _start already in their code. When both
+  // appear, the explicit offset wins.
   const page = Math.max(Number(params.get("_page")) || 1, 1);
-  const start = (page - 1) * limit;
+  const start = params.has("_start")
+    ? Math.max(Number(params.get("_start")) || 0, 0)
+    : (page - 1) * limit;
 
   return { rows: result.slice(start, start + limit), total, page, limit, pages: Math.ceil(total / limit) || 1 };
 }

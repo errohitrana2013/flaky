@@ -1,0 +1,29 @@
+/* Layered on app.css, which supplies the palette, type and code styling. */
+
+.doc-head { padding: 56px 0 32px; }
+.doc-head h1 { margin-top: 26px; }
+.doc-head .brand { margin-bottom: 4px; }
+
+td.small { font-size: 12.5px; color: var(--muted); }
+tr.extra td { color: var(--accent); }
+tr.extra td.small { color: var(--muted); }
+
+/* Wide tables scroll inside their own container rather than pushing the page. */
+.scroller { overflow-x: auto; }
+.scroller table { min-width: 560px; }
+
+/* Each difference gets its own block. A bullet list would flatten them into
+   caveats to skim past; these are the questions someone weighing the switch
+   will actually stop on. */
+.diffs { display: grid; gap: 14px; }
+.diff {
+  background: var(--panel); border: 1px solid var(--line);
+  border-radius: 12px; padding: 20px 22px;
+}
+.diff h3 { margin: 0 0 6px; font-size: 16px; }
+.diff p { margin: 0; font-size: 15px; }
+
+/* The one section carrying the argument gets the accent; everything else stays
+   quiet so this reads as the point rather than one more heading. */
+.pitch { border-top-color: var(--accent); }
+.pitch h2 { color: var(--accent); }

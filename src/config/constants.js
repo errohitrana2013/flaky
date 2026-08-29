@@ -12,9 +12,16 @@ export const CORS_HEADERS = {
 // Query params the API interprets itself. Everything else is treated as a
 // field filter, so this set has to stay in sync with lib/query.js and
 // middleware/chaos.js.
+//
+// Anything else beginning with an underscore is rejected rather than filtered.
+// A caller writing `_start` means a control, not a field named "_start", and
+// treating it as a filter matches nothing and returns an empty array with no
+// explanation — which is how a JSONPlaceholder user migrating here would have
+// silently got no data.
 export const RESERVED_PARAMS = new Set([
   "_limit",
   "_page",
+  "_start",
   "_sort",
   "_order",
   "_q",
