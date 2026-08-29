@@ -13,7 +13,7 @@ import { resolveTier } from "./middleware/auth.js";
 import { checkRateLimit, rateHeaders } from "./middleware/ratelimit.js";
 import { applyChaos } from "./middleware/chaos.js";
 import { visitorId, classifyClient, logRequest, rollUp, sendDigest, purgeExpired } from "./middleware/analytics.js";
-import { today, utcHour } from "./lib/hash.js";
+import { today, utcHour, ipId } from "./lib/hash.js";
 
 async function handle(request, env, ctx, url) {
   const route = matchRoute(request.method, url.pathname);
@@ -67,6 +67,10 @@ function recordTelemetry(ctx, request, env, url, response, startedAt) {
         // 'XX' rather than empty, so an unknown region is a visible row in the
         // dashboard instead of a blank one that looks like a bug.
         country: request.cf?.country || "XX",
+        // State/province. Coarse on purpose — city plus a quiet day starts to
+        // identify a person, which the visitor hashing exists to prevent.
+        region: request.cf?.region || "",
+        ipHash: await ipId(request, env.VISITOR_SALT || "change-me"),
         durationMs: Date.now() - startedAt,
         bytes: Number(response.headers.get("content-length")) || 0,
       };

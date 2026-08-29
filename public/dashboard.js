@@ -21,6 +21,7 @@ function render(data) {
   $("t-req").textContent = num(data.totals.requests);
   $("t-err").textContent = (data.totals.errorRate * 100).toFixed(1) + "%";
   $("t-key").textContent = num(data.totals.keysIssued);
+  $("t-ip").textContent = num(data.totals.addresses);
 
   const visitorsByDay = Object.fromEntries(data.visitors.map((v) => [v.day, v.visitors]));
   $("t-vis").textContent = num(data.visitors.reduce((s, v) => s + v.visitors, 0));
@@ -43,6 +44,7 @@ function render(data) {
   renderHours(data.hourly);
   renderErrors(data.errors || []);
   renderGeo(data.countries);
+  renderRegions(data.regions || []);
 
   $("keys").innerHTML = data.topKeys.length
     ? data.topKeys.map((k) => `<tr><td class="mono">${k.key_id}</td><td class="num">${num(k.requests)}</td></tr>`).join("")
@@ -118,6 +120,24 @@ function renderErrors(errors) {
       </tr>`)
     .join("");
   applySizes($("errors"));
+}
+
+function renderRegions(regions) {
+  if (!regions.length) {
+    $("regions").innerHTML = '<tr><td colspan="4" class="muted">No regions recorded yet. Cloudflare does not always report one.</td></tr>';
+    return;
+  }
+  const peak = Math.max(...regions.map((r) => r.visitors));
+  $("regions").innerHTML = regions
+    .map((r) => `<tr>
+        <td><span class="flag">${flag(r.country)}</span>${String(r.region).replace(/[<>&"]/g, "").slice(0, 40)}
+            <span class="code">${isCode(r.country) ? r.country.toUpperCase() : ""}</span></td>
+        <td class="num">${num(r.visitors)}</td>
+        <td class="num">${num(r.addresses)}</td>
+        <td class="chart"><div class="track" data-w="${((r.visitors / peak) * 100).toFixed(1)}"></div></td>
+      </tr>`)
+    .join("");
+  applySizes($("regions"));
 }
 
 function renderGeo(countries) {

@@ -44,7 +44,7 @@ export async function getStats(ctx) {
   const days = Math.min(Math.max(Number(ctx.query.get("days")) || 14, 1), 90);
   const since = daysAgo(days);
 
-  const [daily, visitors, keys, topKeys, hourly, geoRequests, geoVisitors, errors_] = await Promise.all([
+  const [daily, visitors, keys, topKeys, hourly, geoRequests, geoVisitors, errors_, regions, addresses] = await Promise.all([
     ctx.env.DB.prepare(
       `SELECT day, SUM(requests) AS requests, SUM(errors) AS errors
        FROM usage_bucket WHERE day >= ? GROUP BY day ORDER BY day`
@@ -85,6 +85,18 @@ export async function getStats(ctx) {
        FROM error_bucket WHERE day >= ?
        GROUP BY status, path ORDER BY count DESC LIMIT 30`
     ).bind(since).all(),
+
+    // Region lives on daily_visitors rather than the hot rollup, so this counts
+    // people and addresses per region, not requests.
+    ctx.env.DB.prepare(
+      `SELECT country, region, COUNT(*) AS visitors, COUNT(DISTINCT ip_hash) AS addresses
+       FROM daily_visitors WHERE day >= ? AND region != ''
+       GROUP BY country, region ORDER BY visitors DESC LIMIT 40`
+    ).bind(since).all(),
+
+    ctx.env.DB.prepare(
+      "SELECT COUNT(DISTINCT ip_hash) AS count FROM daily_visitors WHERE day >= ? AND ip_hash != ''"
+    ).bind(since).first(),
   ]);
 
   const rows = daily.results || [];
@@ -119,6 +131,9 @@ export async function getStats(ctx) {
       errorRate: requests ? Number((errors / requests).toFixed(4)) : 0,
       keysIssued: keys?.count || 0,
       countries: countries.length,
+      // The gap between visitors and addresses answers "ten people, or one
+      // person with ten tabs".
+      addresses: addresses?.count || 0,
     },
     daily: rows,
     visitors: visitors.results || [],
@@ -127,6 +142,7 @@ export async function getStats(ctx) {
     countries,
     // What the error rate is actually made of.
     errors: errors_.results || [],
+    regions: regions.results || [],
   });
 }
 
@@ -172,6 +188,12 @@ const DATASETS = {
     sql: `SELECT day, COUNT(*) AS visitors FROM daily_visitors
           WHERE day >= ? GROUP BY day ORDER BY day`,
     columns: [["day", "day"], ["visitors", "visitors"]],
+  },
+  regions: {
+    sql: `SELECT country, region, COUNT(*) AS visitors, COUNT(DISTINCT ip_hash) AS addresses
+          FROM daily_visitors WHERE day >= ? AND region != ''
+          GROUP BY country, region ORDER BY visitors DESC`,
+    columns: [["country_code", "country"], ["region", "region"], ["visitors", "visitors"], ["addresses", "addresses"]],
   },
   errors: {
     sql: `SELECT day, status, path, SUM(count) AS count

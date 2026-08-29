@@ -18,6 +18,15 @@ export async function visitorId(request, salt) {
   return full.slice(0, 16); // 8 bytes
 }
 
+// Deliberately excludes the user agent, which visitorId includes. Two browsers
+// on one connection are two visitors but one address, and the difference is
+// exactly what makes the number worth having.
+export async function ipId(request, salt) {
+  const ip = request.headers.get("cf-connecting-ip") || "";
+  if (!ip) return "";
+  return (await sha256Hex(`${salt}:ip:${ip}`)).slice(0, 16);
+}
+
 export const today = () => new Date().toISOString().slice(0, 10);
 
 // UTC, deliberately. Storing a local hour would bake in whichever timezone the

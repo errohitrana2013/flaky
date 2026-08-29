@@ -85,12 +85,21 @@ export async function rollUp(env, ctx, meta) {
          errors   = errors + excluded.errors`
     ).bind(meta.day, meta.hour, keyId, meta.tier, meta.country, isError),
 
-    // Primary key makes this idempotent, so a repeat visitor costs one no-op.
-    // The country recorded is the one they first appeared from that day, which
-    // is enough to count unique visitors per region without a second table.
+    // One row per visitor per day. The country and region recorded are the ones
+    // they first appeared from.
+    //
+    // Not OR IGNORE: a row written before region and ip_hash existed would keep
+    // its blanks forever, because IGNORE never revisits an existing row. The
+    // guarded DO UPDATE backfills such a row once and then no-ops, so a repeat
+    // visitor still costs nothing on the steady path.
     env.DB.prepare(
-      "INSERT OR IGNORE INTO daily_visitors (day, visitor, country) VALUES (?, ?, ?)"
-    ).bind(meta.day, meta.visitor, meta.country),
+      `INSERT INTO daily_visitors (day, visitor, country, region, ip_hash)
+       VALUES (?, ?, ?, ?, ?)
+       ON CONFLICT (day, visitor) DO UPDATE SET
+         region  = excluded.region,
+         ip_hash = excluded.ip_hash
+       WHERE daily_visitors.ip_hash = '' OR daily_visitors.region = ''`
+    ).bind(meta.day, meta.visitor, meta.country, meta.region || "", meta.ipHash || ""),
   ]);
 }
 

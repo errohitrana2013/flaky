@@ -243,7 +243,7 @@ fast and free of API calls:
 |---|---|---|
 | `usage_bucket` | day × hour × key × country | traffic, errors, when, where, whose |
 | `error_bucket` | day × status × path | *what* is failing, written only on failures |
-| `daily_visitors` | day × visitor (+ country) | how many unique people, from where |
+| `daily_visitors` | day × visitor (+ country, region, address hash) | how many unique people and addresses, from where |
 
 Daily totals, the hour histogram and the per-country breakdown are all `GROUP
 BY`s over `usage_bucket`, so they cost one upsert between them rather than three.
@@ -275,6 +275,7 @@ here.) It shows:
   should I ship" is a local-time question
 - **Where they come from** — visitors and requests per country, with flags and
   names resolved by `Intl.DisplayNames` rather than a bundled country table
+- **States & provinces** — visitors and distinct addresses per region
 - **What is failing** — status and path per error, 5xx picked out from 4xx
 - **Busiest keys**
 
@@ -288,7 +289,7 @@ curl -H "authorization: Bearer $ADMIN_TOKEN" \
   'https://your-worker/v1/admin/export?dataset=countries&days=90' -o countries.csv
 ```
 
-Datasets: `daily`, `hourly`, `countries`, `visitors`, `errors`, `keys`. Files open in
+Datasets: `daily`, `hourly`, `countries`, `regions`, `visitors`, `errors`, `keys`. Files open in
 Excel and Sheets directly — UTF-8 BOM so accented country names survive, CRLF
 line endings, and any cell starting with `=`, `+`, `-` or `@` is prefixed with
 an apostrophe. That last one matters: without it a key id or email a stranger
@@ -348,7 +349,15 @@ documenting the hazard.
 ## Privacy
 
 Raw IPs are never stored. A visitor is a salted SHA-256 of IP + user-agent,
-truncated to 8 bytes — countable, not identifiable. Hashes are purged after 90
+truncated to 8 bytes, and an address is a salted SHA-256 of the IP alone —
+countable, not identifiable. The difference between the two counts answers
+"ten people, or one person with ten tabs".
+
+Geography stops at **region** (state or province). Country and region are coarse
+enough that a row describes millions of people. City is not, and on a quiet day
+a single city row plus a timestamp is close to naming someone — so it is not
+collected, and adding it later should be a deliberate decision rather than a
+convenience. Hashes are purged after 90
 days. Rotating `VISITOR_SALT` resets all visitor identity, which is the switch to
 pull if a deletion request ever arrives. This keeps the API itself clear of the
 DPDP Act and GDPR without a consent banner.
