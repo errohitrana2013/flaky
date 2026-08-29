@@ -83,3 +83,11 @@
    widths are set through the CSSOM in dashboard.js, which CSP does not
    restrict. */
 .muted { color: var(--muted); }
+
+/* 4xx is the caller's problem and often deliberate here — someone testing
+   _status=503 is the product working. 5xx is ours. Colouring them differently
+   stops a wall of expected 4xx hiding a single real 500. */
+.st { font-family: ui-monospace, monospace; font-weight: 600; font-size: 13px; }
+.st-4 { color: var(--muted); }
+.st-5 { color: var(--accent); }
+.track.sev { background: var(--accent); }

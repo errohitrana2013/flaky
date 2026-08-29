@@ -41,6 +41,7 @@ function render(data) {
 
   applySizes($("daily"));
   renderHours(data.hourly);
+  renderErrors(data.errors || []);
   renderGeo(data.countries);
 
   $("keys").innerHTML = data.topKeys.length
@@ -100,6 +101,23 @@ function countryName(code) {
 function flag(code) {
   if (!isCode(code) || code.toUpperCase() === "XX") return "🌐";
   return String.fromCodePoint(...[...code.toUpperCase()].map((c) => 0x1f1e6 + c.charCodeAt(0) - 65));
+}
+
+function renderErrors(errors) {
+  if (!errors.length) {
+    $("errors").innerHTML = '<tr><td colspan="4" class="muted">No errors recorded.</td></tr>';
+    return;
+  }
+  const peak = Math.max(...errors.map((e) => e.count));
+  $("errors").innerHTML = errors
+    .map((e) => `<tr>
+        <td><span class="st st-${String(e.status)[0]}">${Number(e.status) || "?"}</span></td>
+        <td class="mono">${String(e.path).replace(/[<>&"]/g, "")}</td>
+        <td class="num">${num(e.count)}</td>
+        <td class="chart"><div class="track${e.status >= 500 ? " sev" : ""}" data-w="${((e.count / peak) * 100).toFixed(1)}"></div></td>
+      </tr>`)
+    .join("");
+  applySizes($("errors"));
 }
 
 function renderGeo(countries) {

@@ -44,7 +44,7 @@ export async function getStats(ctx) {
   const days = Math.min(Math.max(Number(ctx.query.get("days")) || 14, 1), 90);
   const since = daysAgo(days);
 
-  const [daily, visitors, keys, topKeys, hourly, geoRequests, geoVisitors] = await Promise.all([
+  const [daily, visitors, keys, topKeys, hourly, geoRequests, geoVisitors, errors_] = await Promise.all([
     ctx.env.DB.prepare(
       `SELECT day, SUM(requests) AS requests, SUM(errors) AS errors
        FROM usage_bucket WHERE day >= ? GROUP BY day ORDER BY day`
@@ -78,6 +78,12 @@ export async function getStats(ctx) {
     ctx.env.DB.prepare(
       `SELECT country, COUNT(*) AS visitors
        FROM daily_visitors WHERE day >= ? GROUP BY country`
+    ).bind(since).all(),
+
+    ctx.env.DB.prepare(
+      `SELECT status, path, SUM(count) AS count
+       FROM error_bucket WHERE day >= ?
+       GROUP BY status, path ORDER BY count DESC LIMIT 30`
     ).bind(since).all(),
   ]);
 
@@ -119,6 +125,8 @@ export async function getStats(ctx) {
     topKeys: topKeys.results || [],
     hourly: hours, // hour is UTC; the dashboard converts to the viewer's zone
     countries,
+    // What the error rate is actually made of.
+    errors: errors_.results || [],
   });
 }
 
@@ -164,6 +172,12 @@ const DATASETS = {
     sql: `SELECT day, COUNT(*) AS visitors FROM daily_visitors
           WHERE day >= ? GROUP BY day ORDER BY day`,
     columns: [["day", "day"], ["visitors", "visitors"]],
+  },
+  errors: {
+    sql: `SELECT day, status, path, SUM(count) AS count
+          FROM error_bucket WHERE day >= ?
+          GROUP BY day, status, path ORDER BY day, count DESC`,
+    columns: [["day", "day"], ["status", "status"], ["path", "path"], ["count", "count"]],
   },
   keys: {
     sql: `SELECT key_id, tier, SUM(requests) AS requests, SUM(errors) AS errors

@@ -408,6 +408,17 @@ test("accepts multiple admin tokens so one can be rotated without downtime", asy
   assert.equal((await call("/v1/admin/stats", { headers: { authorization: "Bearer neither" } }, env)).status, 401);
 });
 
+test("groups error paths so record ids do not each become a row", async () => {
+  const { normalisePath } = await import("../src/middleware/analytics.js");
+
+  assert.equal(normalisePath("/v1/posts/9999"), "/v1/posts/:id");
+  assert.equal(normalisePath("/v1/posts/1/comments"), "/v1/posts/:id/comments");
+  assert.equal(normalisePath("/v1/sandbox/12e56f1b9ff640b8/posts"), "/v1/sandbox/:sandbox/posts");
+  assert.equal(normalisePath("/v1/posts"), "/v1/posts");
+  // Bounded, so a long junk path cannot make a wide row.
+  assert.ok(normalisePath("/v1/" + "x".repeat(500)).length <= 120);
+});
+
 test("answers preflight requests", async () => {
   const res = await call("/v1/posts", { method: "OPTIONS" });
   assert.equal(res.status, 204);

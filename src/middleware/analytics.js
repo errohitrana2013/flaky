@@ -44,12 +44,39 @@ export function logRequest(env, ctx, request, meta) {
 // Two writes per request, not four. Daily totals, the hour-of-day histogram
 // and the per-country breakdown are all GROUP BYs over the same row, so one
 // bucket serves all three. See migrations/0003 for why that ceiling matters.
+// /v1/posts/42 -> /v1/posts/:id, and sandbox ids likewise. Without this every
+// record id would be its own row and the breakdown would be unreadable as well
+// as unbounded.
+export function normalisePath(path) {
+  return path
+    .split("/")
+    .map((segment) => {
+      if (/^\d+$/.test(segment)) return ":id";
+      if (/^[0-9a-f]{16}$/.test(segment)) return ":sandbox";
+      return segment;
+    })
+    .join("/")
+    .slice(0, 120);
+}
+
 export async function rollUp(env, ctx, meta) {
   if (!env.DB) return;
   const keyId = meta.keyId || "anon";
   const isError = meta.status >= 400 ? 1 : 0;
 
+  // Only written on failures, so a healthy service pays nothing for it.
+  const errorDetail = isError
+    ? [
+        env.DB.prepare(
+          `INSERT INTO error_bucket (day, status, path, count)
+           VALUES (?, ?, ?, 1)
+           ON CONFLICT (day, status, path) DO UPDATE SET count = count + 1`
+        ).bind(meta.day, meta.status, normalisePath(meta.path)),
+      ]
+    : [];
+
   await env.DB.batch([
+    ...errorDetail,
     env.DB.prepare(
       `INSERT INTO usage_bucket (day, hour, key_id, tier, country, requests, errors)
        VALUES (?, ?, ?, ?, ?, 1, ?)

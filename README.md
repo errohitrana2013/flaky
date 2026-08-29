@@ -15,7 +15,7 @@ the failure you are trying to test against.
 
 ```bash
 npm install
-npm test          # 49 tests, ~0.4s, no network and no Cloudflare account
+npm test          # 50 tests, ~0.4s, no network and no Cloudflare account
 npm run dev       # http://localhost:8787
 ```
 
@@ -133,7 +133,7 @@ flaky/
 │   └── generate-db.js        regenerates src/data/db.js deterministically
 │
 ├── tests/
-│   └── api.test.mjs          49 tests, no dependencies, runs offline
+│   └── api.test.mjs          50 tests, no dependencies, runs offline
 │
 ├── wrangler.toml             bindings and cron
 ├── .dev.vars.example         copy to .dev.vars for local secrets
@@ -185,7 +185,7 @@ files.
 ## Tests
 
 ```bash
-npm test     # 49 tests, no network, no Cloudflare account needed
+npm test     # 50 tests, no network, no Cloudflare account needed
 ```
 
 Bindings (D1, KV, Analytics Engine, assets) are stubbed in memory at the top of
@@ -242,6 +242,7 @@ fast and free of API calls:
 | Table | Grain | Answers |
 |---|---|---|
 | `usage_bucket` | day × hour × key × country | traffic, errors, when, where, whose |
+| `error_bucket` | day × status × path | *what* is failing, written only on failures |
 | `daily_visitors` | day × visitor (+ country) | how many unique people, from where |
 
 Daily totals, the hour histogram and the per-country breakdown are all `GROUP
@@ -274,6 +275,7 @@ here.) It shows:
   should I ship" is a local-time question
 - **Where they come from** — visitors and requests per country, with flags and
   names resolved by `Intl.DisplayNames` rather than a bundled country table
+- **What is failing** — status and path per error, 5xx picked out from 4xx
 - **Busiest keys**
 
 Each section has a **CSV** button beside its heading. Downloads cover 90 days
@@ -286,7 +288,7 @@ curl -H "authorization: Bearer $ADMIN_TOKEN" \
   'https://your-worker/v1/admin/export?dataset=countries&days=90' -o countries.csv
 ```
 
-Datasets: `daily`, `hourly`, `countries`, `visitors`, `keys`. Files open in
+Datasets: `daily`, `hourly`, `countries`, `visitors`, `errors`, `keys`. Files open in
 Excel and Sheets directly — UTF-8 BOM so accented country names survive, CRLF
 line endings, and any cell starting with `=`, `+`, `-` or `@` is prefixed with
 an apostrophe. That last one matters: without it a key id or email a stranger
