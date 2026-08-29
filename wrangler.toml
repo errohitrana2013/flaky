@@ -1,0 +1,36 @@
+name = "flaky"
+main = "src/index.js"
+compatibility_date = "2025-08-01"
+
+# Everything outside /v1 is the static site. index.js falls through to this
+# binding, so the landing page and docs are served from the same Worker and
+# there is no second deploy target to keep in sync.
+[assets]
+directory = "public"
+binding = "ASSETS"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "flaky"
+database_id = "PASTE_AFTER_wrangler_d1_create_flaky"
+
+[[kv_namespaces]]
+binding = "RATE_LIMITS"
+id = "PASTE_AFTER_wrangler_kv_namespace_create_RATE_LIMITS"
+
+[[analytics_engine_datasets]]
+binding = "ANALYTICS"
+dataset = "flaky_requests"
+
+# 03:00 UTC: purge expired sandboxes, post yesterday's digest.
+[triggers]
+crons = ["0 3 * * *"]
+
+[observability]
+enabled = true
+
+# Secrets are NOT set here — they go in .dev.vars locally and
+# `wrangler secret put` in production:
+#   VISITOR_SALT     long random string; rotating it resets visitor identity
+#   ADMIN_TOKEN      guards /v1/admin/stats and dashboard.html
+#   DIGEST_WEBHOOK   optional Slack/Discord webhook for the nightly summary

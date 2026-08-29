@@ -1,0 +1,6 @@
+# Copy to .dev.vars for local development. .dev.vars is gitignored.
+# In production these are set with `wrangler secret put <NAME>`.
+
+VISITOR_SALT="any-long-random-string-change-me"
+ADMIN_TOKEN="local-admin-token"
+# DIGEST_WEBHOOK="https://hooks.slack.com/services/..."

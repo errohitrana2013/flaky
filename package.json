@@ -1,0 +1,22 @@
+{
+  "name": "flaky",
+  "version": "0.1.0",
+  "description": "A mock REST API that fails on purpose — control status, latency and failure rate per request.",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "seed": "node scripts/generate-db.js",
+    "test": "node --test \"tests/**/*.test.mjs\"",
+    "db:init": "wrangler d1 execute flaky --file=migrations/0001_init.sql --remote",
+    "db:init:local": "wrangler d1 execute flaky --file=migrations/0001_init.sql --local",
+    "tail": "wrangler tail"
+  },
+  "devDependencies": {
+    "wrangler": "^4.0.0"
+  }
+}

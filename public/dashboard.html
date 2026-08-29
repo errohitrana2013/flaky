@@ -1,0 +1,154 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>flaky — traffic</title>
+<style>
+  :root {
+    --bg: #fbfbf9; --panel: #fff; --ink: #16150f; --muted: #6b6a60;
+    --line: #e5e4de; --accent: #c2410c; --bar: #d4d2c8;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #111110; --panel: #1a1a18; --ink: #eceae1; --muted: #918f84;
+      --line: #2b2b28; --accent: #fb923c; --bar: #3a3a35;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--ink);
+    font: 15px/1.55 ui-sans-serif, -apple-system, "Segoe UI", Roboto, sans-serif;
+  }
+  .wrap { max-width: 900px; margin: 0 auto; padding: 48px 24px 80px; }
+  h1 { font-size: 22px; letter-spacing: -.02em; margin: 0 0 4px; }
+  .sub { color: var(--muted); font-size: 14px; margin: 0 0 32px; }
+
+  .gate { display: flex; gap: 8px; max-width: 460px; }
+  input {
+    flex: 1; font: 14px/1 ui-monospace, monospace; padding: 11px 12px;
+    border: 1px solid var(--line); border-radius: 8px; background: var(--panel); color: var(--ink);
+  }
+  button {
+    font: 600 13px/1 inherit; padding: 11px 18px; border: 0;
+    border-radius: 8px; background: var(--accent); color: #fff; cursor: pointer;
+  }
+  .err { color: var(--accent); font-size: 14px; margin-top: 10px; }
+
+  .tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; margin-bottom: 32px; }
+  .tile { background: var(--panel); border: 1px solid var(--line); border-radius: 11px; padding: 16px 18px; }
+  .tile .k { font-size: 11.5px; text-transform: uppercase; letter-spacing: .07em; color: var(--muted); }
+  .tile .v { font-size: 27px; font-weight: 600; letter-spacing: -.02em; font-variant-numeric: tabular-nums; margin-top: 4px; }
+
+  h2 { font-size: 12px; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); margin: 32px 0 12px; font-weight: 600; }
+  table { width: 100%; border-collapse: collapse; font-size: 14px; }
+  th, td { text-align: left; padding: 8px 10px 8px 0; border-bottom: 1px solid var(--line); }
+  th { font-size: 11.5px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); font-weight: 600; }
+  td.num { text-align: right; font-variant-numeric: tabular-nums; }
+  td.mono { font-family: ui-monospace, monospace; font-size: 13px; }
+
+  /* A bar per day, drawn with a div. No chart library for six numbers. */
+  .track { background: var(--bar); height: 7px; border-radius: 4px; min-width: 2px; }
+  .track.err { background: var(--accent); }
+  td.chart { width: 45%; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>flaky · traffic</h1>
+  <p class="sub">Reads the D1 rollups. Your token is kept in sessionStorage and never leaves this tab.</p>
+
+  <div id="gate" class="gate">
+    <input id="token" type="password" placeholder="ADMIN_TOKEN" autocomplete="off">
+    <button id="go">Load</button>
+  </div>
+  <div id="error" class="err" hidden></div>
+
+  <div id="panel" hidden>
+    <div class="tiles">
+      <div class="tile"><div class="k">Requests</div><div class="v" id="t-req">—</div></div>
+      <div class="tile"><div class="k">Visitors</div><div class="v" id="t-vis">—</div></div>
+      <div class="tile"><div class="k">Error rate</div><div class="v" id="t-err">—</div></div>
+      <div class="tile"><div class="k">Keys issued</div><div class="v" id="t-key">—</div></div>
+    </div>
+
+    <h2>Per day</h2>
+    <table>
+      <thead><tr><th>Day</th><th class="num">Requests</th><th class="num">Errors</th><th class="num">Visitors</th><th class="chart"></th></tr></thead>
+      <tbody id="daily"></tbody>
+    </table>
+
+    <h2>Busiest keys</h2>
+    <table>
+      <thead><tr><th>Key id</th><th class="num">Requests</th></tr></thead>
+      <tbody id="keys"></tbody>
+    </table>
+  </div>
+</div>
+
+<script>
+const $ = (id) => document.getElementById(id);
+const num = (n) => Number(n || 0).toLocaleString();
+
+async function load(token) {
+  const res = await fetch("/v1/admin/stats?days=14", {
+    headers: { authorization: "Bearer " + token },
+  });
+  if (!res.ok) throw new Error(res.status === 401 ? "Token rejected." : "Request failed: " + res.status);
+  return res.json();
+}
+
+function render(data) {
+  $("t-req").textContent = num(data.totals.requests);
+  $("t-err").textContent = (data.totals.errorRate * 100).toFixed(1) + "%";
+  $("t-key").textContent = num(data.totals.keysIssued);
+
+  const visitorsByDay = Object.fromEntries(data.visitors.map((v) => [v.day, v.visitors]));
+  $("t-vis").textContent = num(data.visitors.reduce((s, v) => s + v.visitors, 0));
+
+  const peak = Math.max(1, ...data.daily.map((d) => d.requests || 0));
+  $("daily").innerHTML = data.daily.length
+    ? data.daily
+        .map((d) => `<tr>
+            <td class="mono">${d.day}</td>
+            <td class="num">${num(d.requests)}</td>
+            <td class="num">${num(d.errors)}</td>
+            <td class="num">${num(visitorsByDay[d.day])}</td>
+            <td class="chart"><div class="track${d.errors > d.requests * 0.1 ? " err" : ""}"
+              style="width:${((d.requests / peak) * 100).toFixed(1)}%"></div></td>
+          </tr>`)
+        .join("")
+    : '<tr><td colspan="5" style="color:var(--muted)">No traffic yet.</td></tr>';
+
+  $("keys").innerHTML = data.topKeys.length
+    ? data.topKeys.map((k) => `<tr><td class="mono">${k.key_id}</td><td class="num">${num(k.requests)}</td></tr>`).join("")
+    : '<tr><td colspan="2" style="color:var(--muted)">No keyed traffic yet.</td></tr>';
+
+  $("gate").hidden = true;
+  $("panel").hidden = false;
+}
+
+async function attempt(token) {
+  $("error").hidden = true;
+  try {
+    render(await load(token));
+    sessionStorage.setItem("flaky_admin", token);
+  } catch (err) {
+    sessionStorage.removeItem("flaky_admin");
+    $("error").textContent = err.message;
+    $("error").hidden = false;
+  }
+}
+
+$("go").addEventListener("click", () => attempt($("token").value.trim()));
+$("token").addEventListener("keydown", (e) => { if (e.key === "Enter") $("go").click(); });
+
+// sessionStorage can throw in a private window; a failed read just shows the gate.
+try {
+  const saved = sessionStorage.getItem("flaky_admin");
+  if (saved) attempt(saved);
+} catch {}
+</script>
+</body>
+</html>

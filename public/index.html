@@ -1,0 +1,272 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>flaky — a mock REST API that fails on purpose</title>
+<meta name="description" content="Free fake REST API with real data. Unlike other mock APIs, you control the response: force any status code, add latency, or make a percentage of requests fail.">
+<style>
+  :root {
+    --bg: #fbfbf9; --panel: #fff; --ink: #16150f; --muted: #6b6a60;
+    --line: #e5e4de; --accent: #c2410c; --accent-soft: #fff2ec;
+    --code-bg: #16150f; --code-ink: #e8e6dd; --ok: #15803d; --warn: #b45309;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #111110; --panel: #1a1a18; --ink: #eceae1; --muted: #918f84;
+      --line: #2b2b28; --accent: #fb923c; --accent-soft: #2a1a10;
+      --code-bg: #0a0a09; --code-ink: #e8e6dd; --ok: #4ade80; --warn: #fbbf24;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--ink);
+    font: 16px/1.6 ui-sans-serif, -apple-system, "Segoe UI", Roboto, sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+  code, pre, .mono { font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; }
+  .wrap { max-width: 880px; margin: 0 auto; padding: 0 24px; }
+  a { color: var(--accent); }
+
+  header { padding: 72px 0 40px; }
+  .logo { font-size: 15px; font-weight: 700; letter-spacing: -.01em; }
+  .logo span { color: var(--accent); }
+  h1 { font-size: clamp(32px, 6vw, 46px); line-height: 1.1; letter-spacing: -.03em; margin: 24px 0 16px; }
+  .lede { font-size: 19px; color: var(--muted); max-width: 34em; margin: 0; }
+  .lede strong { color: var(--ink); font-weight: 600; }
+
+  pre {
+    background: var(--code-bg); color: var(--code-ink); padding: 16px 18px;
+    border-radius: 10px; overflow-x: auto; font-size: 13.5px; line-height: 1.7; margin: 0;
+  }
+  .tok-str { color: #86efac; } .tok-key { color: #93c5fd; } .tok-com { color: #6b7280; }
+
+  section { padding: 40px 0; border-top: 1px solid var(--line); }
+  h2 { font-size: 13px; text-transform: uppercase; letter-spacing: .09em; color: var(--muted); margin: 0 0 20px; font-weight: 600; }
+  h3 { font-size: 17px; margin: 28px 0 8px; letter-spacing: -.01em; }
+  p { color: var(--muted); }
+  p strong { color: var(--ink); font-weight: 600; }
+
+  /* inspector */
+  .inspector { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; overflow: hidden; }
+  .bar { display: flex; align-items: center; gap: 8px; padding: 12px; border-bottom: 1px solid var(--line); flex-wrap: wrap; }
+  .method { font: 600 12px/1 ui-monospace, monospace; padding: 8px 10px; border-radius: 6px; background: var(--accent-soft); color: var(--accent); }
+  input, select {
+    font: 13.5px/1 ui-monospace, monospace; padding: 9px 10px;
+    border: 1px solid var(--line); border-radius: 7px; background: var(--bg); color: var(--ink);
+  }
+  #path { flex: 1; min-width: 200px; }
+  button {
+    font: 600 13px/1 inherit; padding: 10px 18px; border: 0; border-radius: 7px;
+    background: var(--accent); color: #fff; cursor: pointer;
+  }
+  button:disabled { opacity: .5; cursor: wait; }
+  .controls { display: flex; gap: 18px; padding: 12px; flex-wrap: wrap; border-bottom: 1px solid var(--line); font-size: 12.5px; color: var(--muted); }
+  .ctl { display: flex; align-items: center; gap: 7px; }
+  .ctl input { width: 84px; padding: 6px 8px; }
+  .status { display: flex; gap: 16px; padding: 10px 14px; font: 12.5px/1 ui-monospace, monospace; border-bottom: 1px solid var(--line); color: var(--muted); }
+  .status b { font-weight: 600; }
+  .s-ok { color: var(--ok); } .s-err { color: var(--accent); }
+  #out { margin: 0; border-radius: 0; max-height: 340px; overflow: auto; }
+
+  table { width: 100%; border-collapse: collapse; font-size: 14.5px; }
+  th, td { text-align: left; padding: 9px 12px 9px 0; border-bottom: 1px solid var(--line); }
+  th { font-size: 12px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); font-weight: 600; }
+  td.mono { font-size: 13px; }
+  td.num { color: var(--muted); font-variant-numeric: tabular-nums; }
+
+  .note { background: var(--accent-soft); border-left: 3px solid var(--accent); padding: 14px 16px; border-radius: 0 8px 8px 0; font-size: 14.5px; color: var(--ink); }
+  footer { padding: 40px 0 72px; border-top: 1px solid var(--line); color: var(--muted); font-size: 14px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header>
+    <div class="logo">flaky<span>.</span></div>
+    <h1>A mock REST API that fails on purpose.</h1>
+    <p class="lede">
+      Real-looking data at real URLs, like every other fake API. The difference:
+      <strong>you decide how it behaves.</strong> Force a 503, add two seconds of
+      latency, make a third of requests fail — on any endpoint, from the query string.
+    </p>
+  </header>
+
+  <section>
+    <h2>Try it</h2>
+    <div class="inspector">
+      <div class="bar">
+        <span class="method">GET</span>
+        <input id="path" value="/v1/posts?_limit=3" spellcheck="false" aria-label="Request path">
+        <button id="send">Send</button>
+      </div>
+      <div class="controls">
+        <label class="ctl">_delay <input id="delay" type="number" min="0" max="10000" step="100" placeholder="ms"></label>
+        <label class="ctl">_status
+          <select id="status">
+            <option value="">normal</option>
+            <option>400</option><option>401</option><option>403</option>
+            <option>404</option><option>429</option><option>500</option><option>503</option>
+          </select>
+        </label>
+        <label class="ctl">_fail_rate <input id="fail" type="number" min="0" max="1" step="0.1" placeholder="0–1"></label>
+      </div>
+      <div class="status">
+        <span>status <b id="s-code">—</b></span>
+        <span>time <b id="s-time">—</b></span>
+        <span>tier <b id="s-tier">—</b></span>
+        <span>remaining <b id="s-left">—</b></span>
+      </div>
+      <pre id="out">Press Send.</pre>
+    </div>
+  </section>
+
+  <section>
+    <h2>The three parameters</h2>
+    <p>They work on every endpoint, including nested routes and sandboxes. Combine them freely.</p>
+    <pre><span class="tok-com"># a slow endpoint — test your loading state</span>
+GET /v1/posts?_delay=3000
+
+<span class="tok-com"># a hard failure — test your error boundary</span>
+GET /v1/posts?_status=503
+
+<span class="tok-com"># an intermittent one — test your retry logic</span>
+GET /v1/posts?_fail_rate=0.3
+
+<span class="tok-com"># slow AND flaky, because that is what production is</span>
+GET /v1/products?_delay=1500&amp;_fail_rate=0.2</pre>
+    <div class="note" style="margin-top:20px">
+      This is the part you would otherwise write a local mock server for. Here it is a
+      query parameter, so it works from a browser console, a curl one-liner, a CodePen,
+      or a colleague's machine with nothing installed.
+    </div>
+  </section>
+
+  <section>
+    <h2>Resources</h2>
+    <table id="resources">
+      <thead><tr><th>Resource</th><th>Rows</th><th>Nested</th></tr></thead>
+      <tbody><tr><td colspan="3" style="color:var(--muted)">Loading…</td></tr></tbody>
+    </table>
+    <h3>Filtering, search, sorting, paging</h3>
+    <pre>GET /v1/todos?userId=3&amp;completed=true   <span class="tok-com"># filter by any field</span>
+GET /v1/posts?_q=voluptate                <span class="tok-com"># full-text search</span>
+GET /v1/products?_sort=price&amp;_order=desc  <span class="tok-com"># sort</span>
+GET /v1/photos?_page=2&amp;_limit=50          <span class="tok-com"># paginate</span>
+GET /v1/posts/1/comments                  <span class="tok-com"># nested</span></pre>
+  </section>
+
+  <section>
+    <h2>Writes that actually stick</h2>
+    <p>
+      <strong>POST, PUT, PATCH and DELETE are echoed, not stored</strong> — same as every other
+      mock API, and the response says so in an <code>x-mock-write</code> header so nobody
+      loses an afternoon to it. When you need writes that persist, take a sandbox.
+    </p>
+    <pre><span class="tok-com"># 1. a free key (no confirmation email)</span>
+curl -X POST https://flaky.dev/v1/keys \
+  -H 'content-type: application/json' \
+  -d '{"email":"you@example.com"}'
+
+<span class="tok-com"># 2. a sandbox — your own writable copy, 24 hours</span>
+curl -X POST https://flaky.dev/v1/sandbox \
+  -H 'authorization: Bearer flk_...'
+
+<span class="tok-com"># 3. write to it. this one is real.</span>
+curl -X POST https://flaky.dev/v1/sandbox/&lt;id&gt;/posts \
+  -H 'content-type: application/json' \
+  -d '{"title":"this persists"}'</pre>
+    <p style="margin-top:16px">
+      A sandbox is an overlay, not a copy — only records you change are stored, so the
+      shared dataset stays cached at the edge and your sandbox stays fast.
+    </p>
+  </section>
+
+  <section>
+    <h2>Limits</h2>
+    <table>
+      <thead><tr><th>Tier</th><th>Requests/day</th><th>Max page</th><th>Sandboxes</th></tr></thead>
+      <tbody>
+        <tr><td>Anonymous</td><td class="num">1,000</td><td class="num">100</td><td class="num">—</td></tr>
+        <tr><td>Free key</td><td class="num">10,000</td><td class="num">250</td><td class="num">1</td></tr>
+        <tr><td>Pro</td><td class="num">1,000,000</td><td class="num">1,000</td><td class="num">25</td></tr>
+      </tbody>
+    </table>
+    <p style="margin-top:16px">
+      Limits reset at 00:00 UTC. Every response carries <code>x-ratelimit-remaining</code>.
+      Machine-readable description of all of this at <a href="/v1/meta">/v1/meta</a>.
+    </p>
+  </section>
+
+  <footer>
+    <p style="margin:0">
+      No signup to read. No tracking cookies — visitors are counted as a salted hash,
+      never an IP. <a href="/v1/meta">/v1/meta</a>
+    </p>
+  </footer>
+
+</div>
+
+<script>
+const $ = (id) => document.getElementById(id);
+
+function buildUrl() {
+  const url = new URL($("path").value.trim() || "/v1/posts", location.origin);
+  const delay = $("delay").value, status = $("status").value, fail = $("fail").value;
+  if (delay) url.searchParams.set("_delay", delay);
+  if (status) url.searchParams.set("_status", status);
+  if (fail) url.searchParams.set("_fail_rate", fail);
+  return url;
+}
+
+async function send() {
+  const button = $("send");
+  button.disabled = true;
+  $("out").textContent = "…";
+
+  const started = performance.now();
+  try {
+    const res = await fetch(buildUrl());
+    const elapsed = Math.round(performance.now() - started);
+    const text = await res.text();
+
+    $("s-code").textContent = res.status;
+    $("s-code").className = res.ok ? "s-ok" : "s-err";
+    $("s-time").textContent = elapsed + "ms";
+    $("s-tier").textContent = res.headers.get("x-tier") || "—";
+    $("s-left").textContent = res.headers.get("x-ratelimit-remaining") || "—";
+
+    try { $("out").textContent = JSON.stringify(JSON.parse(text), null, 2); }
+    catch { $("out").textContent = text; }
+  } catch (err) {
+    $("s-code").textContent = "network";
+    $("s-code").className = "s-err";
+    $("out").textContent = String(err);
+  } finally {
+    button.disabled = false;
+  }
+}
+
+$("send").addEventListener("click", send);
+$("path").addEventListener("keydown", (e) => { if (e.key === "Enter") send(); });
+
+// The resource table is rendered from /v1/meta so it can never drift from the
+// actual dataset.
+fetch("/v1/meta")
+  .then((r) => r.json())
+  .then((meta) => {
+    $("resources").querySelector("tbody").innerHTML = meta.resources
+      .map((r) => `<tr>
+        <td class="mono"><a href="/v1/${r.name}">/v1/${r.name}</a></td>
+        <td class="num">${r.count.toLocaleString()}</td>
+        <td class="mono" style="color:var(--muted)">${r.nested.join("<br>") || "—"}</td>
+      </tr>`)
+      .join("");
+  })
+  .catch(() => {
+    $("resources").querySelector("tbody").innerHTML =
+      '<tr><td colspan="3" style="color:var(--muted)">Could not reach /v1/meta.</td></tr>';
+  });
+</script>
+</body>
+</html>
