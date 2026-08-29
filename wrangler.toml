@@ -6,6 +6,23 @@ name = "api"
 main = "src/index.js"
 compatibility_date = "2025-08-01"
 
+# The Worker serves the site and the API from one host — assets outside /v1,
+# API on /v1 — so the apex is the whole address and no api. subdomain is
+# needed. That keeps every published code sample one label shorter.
+#
+# custom_domain = true makes Cloudflare create the DNS record and issue the
+# certificate itself; there is nothing to add in the DNS tab by hand.
+#
+# workers_dev must be stated explicitly: declaring `routes` flips it off by
+# default, which silently killed api.flaky.workers.dev on the first deploy of
+# this block. That URL has already been shared, so it stays alive.
+workers_dev = true
+
+routes = [
+  { pattern = "flakyapi.dev", custom_domain = true },
+  { pattern = "www.flakyapi.dev", custom_domain = true },
+]
+
 # Everything outside /v1 is the static site. index.js falls through to this
 # binding, so the landing page and docs are served from the same Worker and
 # there is no second deploy target to keep in sync.

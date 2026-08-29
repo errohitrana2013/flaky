@@ -1,5 +1,7 @@
 # flaky
 
+**Live at [flakyapi.dev](https://flakyapi.dev)** — `api.flaky.workers.dev` still works.
+
 A free mock REST API on Cloudflare Workers, with the differentiator built in:
 callers control the response — status, latency, failure rate — and can take a
 sandbox where writes actually persist.
@@ -286,7 +288,7 @@ for a trend rather than today.
 ```bash
 # same data without the browser, for a cron job or a notebook
 curl -H "authorization: Bearer $ADMIN_TOKEN" \
-  'https://your-worker/v1/admin/export?dataset=countries&days=90' -o countries.csv
+  'https://flakyapi.dev/v1/admin/export?dataset=countries&days=90' -o countries.csv
 ```
 
 Datasets: `daily`, `hourly`, `countries`, `regions`, `visitors`, `errors`, `keys`. Files open in
@@ -371,6 +373,5 @@ edge and never reaches the Worker. D1 and KV free tiers cover early usage.
 ## Before you launch
 
 - Set the Cloudflare billing alert (see above — this is the one that can hurt)
-- Point a domain at the Worker; endpoints are expected at `api.flaky.dev` with
-  the site on `flaky.dev`
+
 - Change the numbers in `config/tiers.js` if you want different limits
