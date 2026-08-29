@@ -1,4 +1,8 @@
-name = "flaky"
+# The Worker's name is the first label of the workers.dev URL, which is
+# <worker>.<account-subdomain>.workers.dev — so "api" under the "flaky"
+# subdomain gives api.flaky.workers.dev, and matches the api.flaky.dev shape a
+# custom domain would take later. Naming it "flaky" here would double up.
+name = "api"
 main = "src/index.js"
 compatibility_date = "2025-08-01"
 
@@ -12,14 +16,14 @@ binding = "ASSETS"
 [[d1_databases]]
 binding = "DB"
 database_name = "flaky"
-database_id = "PASTE_AFTER_wrangler_d1_create_flaky"
+database_id = "2a724332-4697-4998-868a-0dd8517a6cfb"
 # Lets `wrangler d1 migrations apply` track what has already run, so a schema
 # change is a new 000N_*.sql file and never a hand-run statement.
 migrations_dir = "migrations"
 
 [[kv_namespaces]]
 binding = "RATE_LIMITS"
-id = "PASTE_AFTER_wrangler_kv_namespace_create_RATE_LIMITS"
+id = "0d942a0caef542ce8494cf5cafd857f5"
 
 [[analytics_engine_datasets]]
 binding = "ANALYTICS"
