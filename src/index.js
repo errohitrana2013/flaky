@@ -68,6 +68,9 @@ function recordTelemetry(ctx, request, env, url, response, state) {
         tier: auth.tier,
         keyId: auth.keyId,
         referrer: request.headers.get("referer") || "",
+        // Compared against the referrer to spot the site's own try-it widget.
+        // Taken from the request so it holds on workers.dev and localhost too.
+        host: url.hostname.toLowerCase(),
         // 'XX' rather than empty, so an unknown region is a visible row in the
         // dashboard instead of a blank one that looks like a bug.
         country: request.cf?.country || "XX",

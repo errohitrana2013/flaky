@@ -82,9 +82,14 @@ export async function rollUp(env, ctx, meta) {
       ]
     : [];
 
-  // Written only when there is a referrer, which for an API is uncommon.
+  // A referrer from our own pages is the try-it widget, not a channel. It is
+  // counted separately below rather than sitting at the top of a table meant to
+  // show where people are arriving from.
   const host = referrerHost(meta.referrer);
-  const referrerRow = host
+  const onsite = host && meta.host && host === meta.host ? 1 : 0;
+  const usedChaos = meta.chaos?.delay || meta.chaos?.status || meta.chaos?.failRate ? 1 : 0;
+
+  const referrerRow = host && !onsite
     ? [
         env.DB.prepare(
           `INSERT INTO referrer_bucket (day, referrer, requests) VALUES (?, ?, 1)
@@ -100,18 +105,21 @@ export async function rollUp(env, ctx, meta) {
     // Top endpoints, latency, and whether the chaos parameters are actually
     // being used — the last of which is the product's central question.
     env.DB.prepare(
-      `INSERT INTO path_bucket (day, path, requests, sum_ms, max_ms, with_delay, with_status, with_fail_rate)
-       VALUES (?, ?, 1, ?, ?, ?, ?, ?)
+      `INSERT INTO path_bucket (day, path, requests, sum_ms, max_ms, with_delay, with_status, with_fail_rate, onsite, onsite_chaos)
+       VALUES (?, ?, 1, ?, ?, ?, ?, ?, ?, ?)
        ON CONFLICT (day, path) DO UPDATE SET
          requests       = requests + 1,
          sum_ms         = sum_ms + excluded.sum_ms,
          max_ms         = MAX(max_ms, excluded.max_ms),
          with_delay     = with_delay + excluded.with_delay,
          with_status    = with_status + excluded.with_status,
-         with_fail_rate = with_fail_rate + excluded.with_fail_rate`
+         with_fail_rate = with_fail_rate + excluded.with_fail_rate,
+         onsite         = onsite + excluded.onsite,
+         onsite_chaos   = onsite_chaos + excluded.onsite_chaos`
     ).bind(
       meta.day, normalisePath(meta.path), meta.durationMs, meta.durationMs,
-      meta.chaos?.delay ? 1 : 0, meta.chaos?.status ? 1 : 0, meta.chaos?.failRate ? 1 : 0
+      meta.chaos?.delay ? 1 : 0, meta.chaos?.status ? 1 : 0, meta.chaos?.failRate ? 1 : 0,
+      onsite, onsite && usedChaos ? 1 : 0
     ),
     env.DB.prepare(
       `INSERT INTO usage_bucket (day, hour, key_id, tier, country, requests, errors)

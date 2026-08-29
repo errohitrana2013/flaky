@@ -43,7 +43,7 @@
     <div class="verdict" id="verdict">
       <div class="verdict-num" id="chaos-share">—</div>
       <div class="verdict-text">
-        <p id="chaos-line">of requests reach for a chaos parameter</p>
+        <p id="chaos-line">of requests from outside this site reach for a chaos parameter</p>
         <p class="hint" id="chaos-hint"></p>
       </div>
     </div>
@@ -54,6 +54,7 @@
     </div>
 
     <h2>Where traffic comes from <button class="csv" data-csv="referrers">csv</button></h2>
+    <p class="lead">External referrers only. Requests from this site's own try-it widget are excluded — they would otherwise sit at the top of a table meant to show where people arrive from.</p>
     <table>
       <thead><tr><th>Referrer</th><th class="num">Requests</th><th class="chart"></th></tr></thead>
       <tbody id="referrers"></tbody>

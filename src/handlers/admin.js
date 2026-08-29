@@ -196,7 +196,8 @@ export async function getInsights(ctx) {
 
     ctx.env.DB.prepare(
       `SELECT SUM(requests) AS requests, SUM(with_delay) AS delay,
-              SUM(with_status) AS status, SUM(with_fail_rate) AS fail_rate
+              SUM(with_status) AS status, SUM(with_fail_rate) AS fail_rate,
+              SUM(onsite) AS onsite, SUM(onsite_chaos) AS onsite_chaos
        FROM path_bucket WHERE day >= ?`
     ).bind(since).first(),
 
@@ -224,13 +225,25 @@ export async function getInsights(ctx) {
     slowest: slowest.results || [],
     // The product question, as a number: what share of traffic reaches for the
     // thing that makes this different from every other mock API.
-    chaos: {
-      requests: total,
-      delay: chaos?.delay || 0,
-      status: chaos?.status || 0,
-      failRate: chaos?.fail_rate || 0,
-      anyShare: total ? Number((((chaos?.delay || 0) + (chaos?.status || 0) + (chaos?.fail_rate || 0)) / total).toFixed(4)) : 0,
-    },
+    chaos: (() => {
+      const used = (chaos?.delay || 0) + (chaos?.status || 0) + (chaos?.fail_rate || 0);
+      const onsite = chaos?.onsite || 0;
+      const onsiteChaos = chaos?.onsite_chaos || 0;
+      // The figure that matters is the one excluding our own try-it widget:
+      // clicking Send on the landing page is not someone adopting the feature.
+      const extRequests = Math.max(0, total - onsite);
+      const extUsed = Math.max(0, used - onsiteChaos);
+      return {
+        requests: total,
+        delay: chaos?.delay || 0,
+        status: chaos?.status || 0,
+        failRate: chaos?.fail_rate || 0,
+        anyShare: total ? Number((used / total).toFixed(4)) : 0,
+        onsite,
+        externalRequests: extRequests,
+        externalShare: extRequests ? Number((extUsed / extRequests).toFixed(4)) : 0,
+      };
+    })(),
   });
 }
 
