@@ -17,7 +17,7 @@ the failure you are trying to test against.
 
 ```bash
 npm install
-npm test          # 50 tests, ~0.4s, no network and no Cloudflare account
+npm test          # 51 tests, ~0.4s, no network and no Cloudflare account
 npm run dev       # http://localhost:8787
 ```
 
@@ -135,7 +135,7 @@ flaky/
 │   └── generate-db.js        regenerates src/data/db.js deterministically
 │
 ├── tests/
-│   └── api.test.mjs          50 tests, no dependencies, runs offline
+│   └── api.test.mjs          51 tests, no dependencies, runs offline
 │
 ├── wrangler.toml             bindings and cron
 ├── .dev.vars.example         copy to .dev.vars for local secrets
@@ -194,7 +194,7 @@ files.
 ## Tests
 
 ```bash
-npm test     # 50 tests, no network, no Cloudflare account needed
+npm test     # 51 tests, no network, no Cloudflare account needed
 ```
 
 Bindings (D1, KV, Analytics Engine, assets) are stubbed in memory at the top of
@@ -289,7 +289,10 @@ here.) It shows:
 - **Where they come from** — visitors and requests per country, with flags and
   names resolved by `Intl.DisplayNames` rather than a bundled country table
 - **States & provinces** — visitors and distinct addresses per region
-- **What is failing** — status and path per error, 5xx picked out from 4xx
+- **What is failing** — status and path per error, labelled by cause:
+  `requested` (the caller asked for it), `client` (a 4xx — their request was
+  wrong and the API said so), `server` (an unrequested 5xx — the only kind that
+  means something is broken)
 - **Busiest keys**
 
 Each section has a **CSV** button beside its heading. Downloads cover 90 days

@@ -20,7 +20,7 @@ function applySizes(root) {
 function render(data) {
   $("t-req").textContent = num(data.totals.requests);
   $("t-err").textContent = (data.totals.errorRate * 100).toFixed(1) + "%";
-  $("t-real").textContent = num(data.totals.realErrors);
+  $("t-real").textContent = num(data.totals.serverErrors);
   $("t-key").textContent = num(data.totals.keysIssued);
   $("t-ip").textContent = num(data.totals.addresses);
   $("t-bot").textContent = num(data.totals.bots);
@@ -120,6 +120,14 @@ function flag(code) {
   return String.fromCodePoint(...[...code.toUpperCase()].map((c) => 0x1f1e6 + c.charCodeAt(0) - 65));
 }
 
+// Three causes, not two. "real" was doing too much work: it sat on a 404 for a
+// mistyped path, which is the API answering correctly, and on a 500 that would
+// mean something is broken. Only the second is worth reacting to.
+function cause(e) {
+  if (e.injected) return "requested";
+  return e.status >= 500 ? "server" : "client";
+}
+
 function renderErrors(errors) {
   if (!errors.length) {
     $("errors").innerHTML = '<tr><td colspan="5" class="muted">No errors recorded.</td></tr>';
@@ -127,12 +135,12 @@ function renderErrors(errors) {
   }
   const peak = Math.max(...errors.map((e) => e.count));
   $("errors").innerHTML = errors
-    .map((e) => `<tr class="${e.injected ? "" : "real"}">
+    .map((e) => `<tr class="${cause(e) === "server" ? "real" : ""}">
         <td><span class="st st-${String(e.status)[0]}">${Number(e.status) || "?"}</span></td>
         <td class="mono">${String(e.path).replace(/[<>&"]/g, "")}</td>
-        <td><span class="cause ${e.injected ? "cause-req" : "cause-real"}">${e.injected ? "requested" : "real"}</span></td>
+        <td><span class="cause cause-${cause(e)}">${cause(e)}</span></td>
         <td class="num">${num(e.count)}</td>
-        <td class="chart"><div class="track${!e.injected && e.status >= 500 ? " sev" : ""}" data-w="${((e.count / peak) * 100).toFixed(1)}"></div></td>
+        <td class="chart"><div class="track${cause(e) === "server" ? " sev" : ""}" data-w="${((e.count / peak) * 100).toFixed(1)}"></div></td>
       </tr>`)
     .join("");
   applySizes($("errors"));

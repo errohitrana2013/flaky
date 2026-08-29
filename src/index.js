@@ -85,11 +85,13 @@ function recordTelemetry(ctx, request, env, url, response, state) {
           status: url.searchParams.has("_status"),
           failRate: url.searchParams.has("_fail_rate"),
         },
-        // A failure the caller requested is the product working, not a fault.
-        // Only _status and _fail_rate can cause one; _delay cannot.
+        // A failure the caller requested is the product working, not a fault —
+        // but only when they actually got what they asked for. ?_status=999 is
+        // rejected with a 400, and that 400 is a validation error, not an
+        // injected one. Merely carrying the parameter is not enough.
         injected:
-          response.status >= 400 &&
-          (url.searchParams.has("_status") || url.searchParams.has("_fail_rate")),
+          (response.status === Number(url.searchParams.get("_status")) ||
+            (response.status === 500 && Number(url.searchParams.get("_fail_rate")) > 0)),
         durationMs: state.durationMs,
         bytes: Number(response.headers.get("content-length")) || 0,
       };

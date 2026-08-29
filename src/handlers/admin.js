@@ -144,8 +144,15 @@ export async function getStats(ctx) {
       requests,
       errors,
       errorRate: requests ? Number((errors / requests).toFixed(4)) : 0,
-      // Errors the service produced on its own — the number worth reacting to.
-      realErrors: (errors_.results || []).filter((e) => !e.injected).reduce((n, e) => n + e.count, 0),
+      // Only unrequested 5xx. A 404 for a mistyped path is the API answering
+      // correctly, and counting it here would bury the one number that means
+      // something is actually broken.
+      serverErrors: (errors_.results || [])
+        .filter((e) => !e.injected && e.status >= 500)
+        .reduce((n, e) => n + e.count, 0),
+      clientErrors: (errors_.results || [])
+        .filter((e) => !e.injected && e.status < 500)
+        .reduce((n, e) => n + e.count, 0),
       keysIssued: keys?.count || 0,
       countries: countries.length,
       // The gap between visitors and addresses answers "ten people, or one

@@ -422,6 +422,23 @@ test("groups error paths so record ids do not each become a row", async () => {
   assert.ok(normalisePath("/v1/" + "x".repeat(500)).length <= 120);
 });
 
+test("labels a requested failure differently from a validation rejection", async () => {
+  // Merely carrying a chaos parameter is not enough — ?_status=999 is rejected
+  // with a 400, and that is the API being correct, not a failure anyone asked
+  // for. Getting this wrong made 21 validation errors read as "requested".
+  const got503 = await call("/v1/posts?_status=503");
+  assert.equal(got503.status, 503);
+
+  const rejected = await call("/v1/posts?_status=999");
+  assert.equal(rejected.status, 400);
+
+  const failed = await call("/v1/posts?_fail_rate=1");
+  assert.equal(failed.status, 500);
+
+  const badRate = await call("/v1/posts?_fail_rate=2");
+  assert.equal(badRate.status, 400);
+});
+
 test("answers preflight requests", async () => {
   const res = await call("/v1/posts", { method: "OPTIONS" });
   assert.equal(res.status, 204);

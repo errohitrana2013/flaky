@@ -111,6 +111,7 @@
 /* An error the caller asked for is the product working; one the service
    produced is not. They must not look alike. */
 .cause { font-size: 11px; letter-spacing: .05em; text-transform: uppercase; }
-.cause-req { color: var(--muted); }
-.cause-real { color: var(--accent); font-weight: 600; }
+.cause-requested { color: var(--muted); }
+.cause-client { color: var(--muted); }
+.cause-server { color: var(--accent); font-weight: 700; }
 tr.real td { background: var(--accent-soft, transparent); }
