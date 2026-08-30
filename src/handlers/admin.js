@@ -78,14 +78,16 @@ export async function getStats(ctx) {
     ).bind(since).all(),
 
     ctx.env.DB.prepare(
-      `SELECT country, COUNT(*) AS visitors
-       FROM daily_visitors WHERE day >= ? AND bot = 0 GROUP BY country`
+      `SELECT country,
+              SUM(CASE WHEN bot = 0 THEN 1 ELSE 0 END) AS visitors,
+              SUM(bot) AS bots
+       FROM daily_visitors WHERE day >= ? GROUP BY country`
     ).bind(since).all(),
 
     ctx.env.DB.prepare(
-      `SELECT status, path, injected, SUM(count) AS count
+      `SELECT status, path, injected, bot, SUM(count) AS count
        FROM error_bucket WHERE day >= ?
-       GROUP BY status, path, injected ORDER BY injected ASC, count DESC LIMIT 40`
+       GROUP BY status, path, injected, bot ORDER BY injected ASC, count DESC LIMIT 40`
     ).bind(since).all(),
 
     // Region lives on daily_visitors rather than the hot rollup, so this counts
@@ -95,9 +97,11 @@ export async function getStats(ctx) {
     // a number that does not reconcile reads as a bug even when it is not.
     ctx.env.DB.prepare(
       `SELECT country, CASE WHEN region = '' THEN 'Unknown' ELSE region END AS region,
-              COUNT(*) AS visitors, COUNT(DISTINCT NULLIF(ip_hash, '')) AS addresses
-       FROM daily_visitors WHERE day >= ? AND bot = 0
-       GROUP BY country, region ORDER BY visitors DESC LIMIT 40`
+              SUM(CASE WHEN bot = 0 THEN 1 ELSE 0 END) AS visitors,
+              SUM(bot) AS bots,
+              COUNT(DISTINCT NULLIF(ip_hash, '')) AS addresses
+       FROM daily_visitors WHERE day >= ?
+       GROUP BY country, region ORDER BY visitors DESC, bots DESC LIMIT 40`
     ).bind(since).all(),
 
     ctx.env.DB.prepare(
@@ -120,13 +124,14 @@ export async function getStats(ctx) {
 
   // Requests and visitors per country come from different tables, so join them
   // here rather than making the dashboard do it.
-  const visitorsPerCountry = Object.fromEntries(
-    (geoVisitors.results || []).map((row) => [row.country, row.visitors])
+  const perCountry = Object.fromEntries(
+    (geoVisitors.results || []).map((row) => [row.country, row])
   );
   const countries = (geoRequests.results || []).map((row) => ({
     country: row.country,
     requests: row.requests,
-    visitors: visitorsPerCountry[row.country] || 0,
+    visitors: perCountry[row.country]?.visitors || 0,
+    bots: perCountry[row.country]?.bots || 0,
   }));
 
   // Always all 24 buckets, even the empty ones — a histogram with hours missing
@@ -204,7 +209,8 @@ export async function getInsights(ctx) {
     ctx.env.DB.prepare(
       `SELECT SUM(requests) AS requests, SUM(with_delay) AS delay,
               SUM(with_status) AS status, SUM(with_fail_rate) AS fail_rate,
-              SUM(onsite) AS onsite, SUM(onsite_chaos) AS onsite_chaos
+              SUM(onsite) AS onsite, SUM(onsite_chaos) AS onsite_chaos,
+              SUM(bot_requests) AS bot_requests, SUM(bot_chaos) AS bot_chaos
        FROM path_bucket WHERE day >= ?`
     ).bind(since).first(),
 
@@ -278,8 +284,13 @@ export async function getInsights(ctx) {
       const onsiteChaos = chaos?.onsite_chaos || 0;
       // The figure that matters is the one excluding our own try-it widget:
       // clicking Send on the landing page is not someone adopting the feature.
-      const extRequests = Math.max(0, total - onsite);
-      const extUsed = Math.max(0, used - onsiteChaos);
+      // Neither our own widget nor anything automated. Test scripts run from
+      // curl, which is a bot, and counting them made a test suite look like
+      // adoption.
+      const botReq = chaos?.bot_requests || 0;
+      const botChaos = chaos?.bot_chaos || 0;
+      const extRequests = Math.max(0, total - onsite - botReq);
+      const extUsed = Math.max(0, used - onsiteChaos - botChaos);
       return {
         requests: total,
         delay: chaos?.delay || 0,
@@ -287,6 +298,7 @@ export async function getInsights(ctx) {
         failRate: chaos?.fail_rate || 0,
         anyShare: total ? Number((used / total).toFixed(4)) : 0,
         onsite,
+        bots: botReq,
         externalRequests: extRequests,
         externalShare: extRequests ? Number((extUsed / extRequests).toFixed(4)) : 0,
       };
@@ -360,10 +372,10 @@ const DATASETS = {
     columns: [["day","day"],["referrer","referrer"],["requests","requests"]],
   },
   errors: {
-    sql: `SELECT day, status, path, injected, SUM(count) AS count
+    sql: `SELECT day, status, path, injected, bot, SUM(count) AS count
           FROM error_bucket WHERE day >= ?
-          GROUP BY day, status, path, injected ORDER BY day, injected, count DESC`,
-    columns: [["day","day"],["status","status"],["path","path"],["requested","injected"],["count","count"]],
+          GROUP BY day, status, path, injected, bot ORDER BY day, injected, count DESC`,
+    columns: [["day","day"],["status","status"],["path","path"],["requested","injected"],["bot","bot"],["count","count"]],
   },
   keys: {
     sql: `SELECT key_id, tier, SUM(requests) AS requests, SUM(errors) AS errors

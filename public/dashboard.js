@@ -130,7 +130,7 @@ function cause(e) {
 
 function renderErrors(errors) {
   if (!errors.length) {
-    $("errors").innerHTML = '<tr><td colspan="5" class="muted">No errors recorded.</td></tr>';
+    $("errors").innerHTML = '<tr><td colspan="6" class="muted">No errors recorded.</td></tr>';
     return;
   }
   const peak = Math.max(...errors.map((e) => e.count));
@@ -139,6 +139,7 @@ function renderErrors(errors) {
         <td><span class="st st-${String(e.status)[0]}">${Number(e.status) || "?"}</span></td>
         <td class="mono">${String(e.path).replace(/[<>&"]/g, "")}</td>
         <td><span class="cause cause-${cause(e)}">${cause(e)}</span></td>
+        <td><span class="cause ${e.bot ? "cause-client" : ""}">${e.bot ? "bot" : "caller"}</span></td>
         <td class="num">${num(e.count)}</td>
         <td class="chart"><div class="track${cause(e) === "server" ? " sev" : ""}" data-w="${((e.count / peak) * 100).toFixed(1)}"></div></td>
       </tr>`)
@@ -166,7 +167,7 @@ function renderRegions(regions) {
 
 function renderGeo(countries) {
   if (!countries.length) {
-    $("geo").innerHTML = '<tr><td colspan="4" class="muted">No regions recorded yet.</td></tr>';
+    $("geo").innerHTML = '<tr><td colspan="5" class="muted">No regions recorded yet.</td></tr>';
     return;
   }
   const peak = Math.max(...countries.map((c) => c.requests));
@@ -175,6 +176,7 @@ function renderGeo(countries) {
         <td><span class="flag">${flag(c.country)}</span>${countryName(c.country)}
             <span class="code">${isCode(c.country) ? c.country.toUpperCase() : ""}</span></td>
         <td class="num">${num(c.visitors)}</td>
+        <td class="num">${num(c.bots)}</td>
         <td class="num">${num(c.requests)}</td>
         <td class="chart"><div class="track" data-w="${((c.requests / peak) * 100).toFixed(1)}"></div></td>
       </tr>`)

@@ -27,7 +27,11 @@ export async function recordBeacon(ctx) {
 
   const path = normalisePath(String(body.path).slice(0, 120));
 
-  await ctx.env.DB.prepare(
+  // Deferred, not awaited. A D1 write is a round trip, and it was making the
+  // beacon the slowest endpoint on the site at 243ms average — for a request
+  // whose entire point is that the browser has already navigated away and is not
+  // waiting for the answer.
+  const write = ctx.env.DB.prepare(
     `INSERT INTO page_time (day, path, visits, sum_seconds, max_seconds, bounced)
      VALUES (?, ?, 1, ?, ?, ?)
      ON CONFLICT (day, path) DO UPDATE SET
@@ -35,7 +39,10 @@ export async function recordBeacon(ctx) {
        sum_seconds = sum_seconds + excluded.sum_seconds,
        max_seconds = MAX(max_seconds, excluded.max_seconds),
        bounced     = bounced + excluded.bounced`
-  ).bind(today(), path, seconds, seconds, seconds < BOUNCE_UNDER ? 1 : 0).run();
+  ).bind(today(), path, seconds, seconds, seconds < BOUNCE_UNDER ? 1 : 0).run()
+   .catch(() => {}); // a lost beacon is not worth an error anyone will see
+
+  ctx.ctx?.waitUntil ? ctx.ctx.waitUntil(write) : await write;
 
   return json({ recorded: true });
 }

@@ -92,10 +92,11 @@ export async function rollUp(env, ctx, meta) {
   const errorDetail = isError
     ? [
         env.DB.prepare(
-          `INSERT INTO error_bucket (day, status, path, injected, count)
-           VALUES (?, ?, ?, ?, 1)
-           ON CONFLICT (day, status, path, injected) DO UPDATE SET count = count + 1`
-        ).bind(meta.day, meta.status, normalisePath(meta.path), meta.injected ? 1 : 0),
+          `INSERT INTO error_bucket (day, status, path, injected, bot, count)
+           VALUES (?, ?, ?, ?, ?, 1)
+           ON CONFLICT (day, status, path, injected, bot) DO UPDATE SET count = count + 1`
+        ).bind(meta.day, meta.status, normalisePath(meta.path),
+               meta.injected ? 1 : 0, meta.client === "bot" ? 1 : 0),
       ]
     : [];
 
@@ -105,6 +106,7 @@ export async function rollUp(env, ctx, meta) {
   const host = referrerHost(meta.referrer);
   const onsite = host && meta.host && host === meta.host ? 1 : 0;
   const usedChaos = meta.chaos?.delay || meta.chaos?.status || meta.chaos?.failRate ? 1 : 0;
+  const isBot = meta.client === "bot" ? 1 : 0;
 
   const referrerRow = host && !onsite
     ? [
@@ -122,8 +124,8 @@ export async function rollUp(env, ctx, meta) {
     // Top endpoints, latency, and whether the chaos parameters are actually
     // being used — the last of which is the product's central question.
     env.DB.prepare(
-      `INSERT INTO path_bucket (day, path, requests, sum_ms, max_ms, with_delay, with_status, with_fail_rate, onsite, onsite_chaos)
-       VALUES (?, ?, 1, ?, ?, ?, ?, ?, ?, ?)
+      `INSERT INTO path_bucket (day, path, requests, sum_ms, max_ms, with_delay, with_status, with_fail_rate, onsite, onsite_chaos, bot_requests, bot_chaos)
+       VALUES (?, ?, 1, ?, ?, ?, ?, ?, ?, ?, ?, ?)
        ON CONFLICT (day, path) DO UPDATE SET
          requests       = requests + 1,
          sum_ms         = sum_ms + excluded.sum_ms,
@@ -132,11 +134,14 @@ export async function rollUp(env, ctx, meta) {
          with_status    = with_status + excluded.with_status,
          with_fail_rate = with_fail_rate + excluded.with_fail_rate,
          onsite         = onsite + excluded.onsite,
-         onsite_chaos   = onsite_chaos + excluded.onsite_chaos`
+         onsite_chaos   = onsite_chaos + excluded.onsite_chaos,
+         bot_requests   = bot_requests + excluded.bot_requests,
+         bot_chaos      = bot_chaos + excluded.bot_chaos`
     ).bind(
       meta.day, normalisePath(meta.path), meta.durationMs, meta.durationMs,
       meta.chaos?.delay ? 1 : 0, meta.chaos?.status ? 1 : 0, meta.chaos?.failRate ? 1 : 0,
-      onsite, onsite && usedChaos ? 1 : 0
+      onsite, onsite && usedChaos ? 1 : 0,
+      isBot, isBot && usedChaos ? 1 : 0
     ),
     env.DB.prepare(
       `INSERT INTO usage_bucket (day, hour, key_id, tier, country, requests, errors)

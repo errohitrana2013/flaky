@@ -12,6 +12,7 @@ function render(d) {
   // Lead with external adoption. The all-traffic figure includes the try-it
   // widget on our own landing page, which is us, not adoption.
   $("chaos-share").textContent = (c.externalShare * 100).toFixed(1) + "%";
+  $("c-ext").textContent = num(c.externalRequests);
   $("c-delay").textContent = num(c.delay);
   $("c-status").textContent = num(c.status);
   $("c-fail").textContent = num(c.failRate);
@@ -22,14 +23,15 @@ function render(d) {
     "of requests from outside this site reach for a chaos parameter";
 
   const ext = c.externalRequests;
+  const excluded = `Excluded: ${c.onsite.toLocaleString()} from this site's try-it widget and ${(c.bots || 0).toLocaleString()} automated — test scripts run from curl, which is a bot.`;
   $("chaos-hint").textContent =
     ext < 100
-      ? `Only ${ext.toLocaleString()} request${ext === 1 ? "" : "s"} have come from outside this site, so there is nothing to read yet. The ${c.onsite.toLocaleString()} on-site request${c.onsite === 1 ? "" : "s"} are the try-it widget — your own clicks, excluded here on purpose.`
+      ? `Only ${ext.toLocaleString()} request${ext === 1 ? "" : "s"} have come from a human outside this site, so there is nothing to read yet. ${excluded}`
       : c.externalShare === 0
       ? "Nobody outside this site has used a chaos parameter. Either they have not found them, or the landing page is not making the case."
       : c.externalShare < 0.05
       ? "Low. People are using this as a plain mock API — the thing that makes it different is not landing."
-      : "People are reaching for the controls. This is the number to protect.";
+      : `People are reaching for the controls. This is the number to protect. ${excluded}`;
 
   renderReturning(d.returning);
   renderDwell(d.dwell || []);
