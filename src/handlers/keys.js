@@ -87,6 +87,9 @@ export async function createKey(ctx) {
       tier: "free",
       limits: TIERS.free,
       usage: "Send it as: Authorization: Bearer " + key,
+      // Asking for an address without saying what happens to it is the gap a
+      // privacy policy exists to close.
+      privacy: "https://flakyapi.dev/privacy — your address is stored only to contact or revoke this key, and is never emailed.",
       warning: "This is shown once. Store it now.",
     },
     { status: 201 }

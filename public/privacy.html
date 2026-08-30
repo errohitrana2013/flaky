@@ -1,0 +1,210 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Privacy and contact | flaky</title>
+<meta name="description" content="What flaky records, what it does not, how long it keeps it, and how to have it removed. No cookies, no raw IP addresses, no third-party scripts.">
+<link rel="canonical" href="https://flakyapi.dev/privacy">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<link rel="alternate icon" href="/favicon.ico" sizes="32x32">
+<link rel="stylesheet" href="/app.css">
+<link rel="stylesheet" href="/docs.css">
+</head>
+<body>
+<div class="wrap">
+
+  <header class="doc-head">
+    <a class="brand" href="/" aria-label="flaky — home">
+      <svg class="mark" viewBox="0 0 32 32" aria-hidden="true">
+        <rect class="bar"   x="3"    y="18"  width="5"   height="9"  rx="2.5"/>
+        <rect class="bar"   x="10"   y="12"  width="5"   height="15" rx="2.5"/>
+        <rect class="ghost" x="17.6" y="8.6" width="4.8" height="11" rx="2.4"/>
+        <rect class="flake" x="17"   y="22"  width="5"   height="5"  rx="2.5"/>
+        <rect class="bar"   x="24"   y="4"   width="5"   height="23" rx="2.5"/>
+      </svg>
+      <span class="wordmark">flaky<span class="dot">.</span></span>
+    </a>
+    <h1>Privacy and contact</h1>
+    <p class="lede">
+      Short version: <strong>no cookies, no advertising, no third-party scripts,
+      and your IP address is never written down.</strong> The long version is
+      below, and it describes what the code actually does — you can
+      <a href="https://github.com/errohitrana2013/flaky">read it</a> and check.
+    </p>
+  </header>
+
+  <section>
+    <h2>What is recorded</h2>
+
+    <h3>Every request</h3>
+    <p>
+      One row per request, holding: the path (with record ids replaced, so
+      <code>/v1/posts/42</code> becomes <code>/v1/posts/:id</code>), the method,
+      the status code, how long it took, the response size, your country and
+      region, whether the request looked automated, and — if you sent one — the
+      id of your API key.
+    </p>
+
+    <h3>A visitor identifier that is not an identity</h3>
+    <p>
+      To count how many people use the service rather than how many requests
+      arrive, each visitor gets a hash. It is built like this, and the salt is a
+      secret held on the server:
+    </p>
+    <pre>visitor = SHA-256(secret + your IP + your browser's user-agent)   <span class="tok-com"># first 8 bytes kept</span>
+address = SHA-256(secret + your IP)                              <span class="tok-com"># first 8 bytes kept</span></pre>
+    <p class="mt-16">
+      A hash cannot be turned back into an address. The two exist separately so
+      the service can tell "ten people" from "one person with ten browser tabs" —
+      that difference is the entire reason for the second one.
+    </p>
+    <p>
+      Rotating the secret invalidates every hash ever stored, which is the
+      switch that gets pulled if anyone asks for their data to be erased.
+    </p>
+
+    <h3>Referrer</h3>
+    <p>
+      The <em>host</em> of the page you came from, if any — <code>news.ycombinator.com</code>,
+      not the full address. A referrer can carry a search query or a private path
+      in the rest of the URL, so the rest is discarded before anything is stored.
+    </p>
+
+    <h3>Time on the page</h3>
+    <p>
+      The landing page measures how long it was visible and sends the number of
+      seconds when you leave. It is added to a daily total per page. It is not
+      attached to you, and time spent with the tab in the background is not
+      counted.
+    </p>
+
+    <h3>Your email, only if you ask for a key</h3>
+    <p>
+      <code>POST /v1/keys</code> stores the address you give it, so a key can be
+      contacted or revoked later. Nothing is sent to it — there is no mailing
+      list, and the key is issued immediately with no confirmation email. If you
+      would rather not, the anonymous tier needs no key at all.
+    </p>
+
+    <h3>Whatever you put in a sandbox</h3>
+    <p>
+      Records written to <code>/v1/sandbox/…</code> are stored as given and
+      deleted 24 hours later. It is a mock API: do not put anything real in it.
+    </p>
+  </section>
+
+  <section>
+    <h2>What is not recorded</h2>
+    <div class="diffs">
+      <div class="diff">
+        <h3>Your IP address</h3>
+        <p>Never written to storage. It goes into a hash and is discarded.</p>
+      </div>
+      <div class="diff">
+        <h3>Cookies — none at all</h3>
+        <p>
+          The site sets no cookies of any kind, which is why there is no consent
+          banner. The admin pages keep a token in your browser's local storage,
+          but that is only for the operator and never leaves your machine.
+        </p>
+      </div>
+      <div class="diff">
+        <h3>Your city</h3>
+        <p>
+          Country and region (state or province) only. City plus a quiet day
+          starts to identify a person, which is exactly what the hashing exists
+          to prevent, so it is not collected.
+        </p>
+      </div>
+      <div class="diff">
+        <h3>Anything from anyone else</h3>
+        <p>
+          No analytics scripts, no fonts, no trackers, no embeds. Every page
+          loads only files from this domain, enforced by a content security
+          policy of <code>'self'</code> — so nothing here can report your visit
+          to a third party.
+        </p>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <h2>How long it is kept</h2>
+    <div class="scroller">
+      <table>
+        <thead><tr><th>What</th><th class="num">Kept for</th><th>Then</th></tr></thead>
+        <tbody>
+          <tr><td>Sandbox records</td><td class="num">24 hours</td><td>deleted by a nightly job</td></tr>
+          <tr><td>Visitor and address hashes</td><td class="num">90 days</td><td>deleted</td></tr>
+          <tr><td>Per-request log</td><td class="num">90 days</td><td>expires automatically</td></tr>
+          <tr><td>Daily totals (no identity)</td><td class="num">400 days</td><td>deleted</td></tr>
+          <tr><td>API keys and their email</td><td class="num">until you ask</td><td>deleted on request</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section>
+    <h2>Who else can see it</h2>
+    <p>
+      The service runs on <strong>Cloudflare Workers</strong>, so Cloudflare
+      handles the traffic and — like any host — sees connections as they arrive.
+      Their handling is governed by
+      <a href="https://www.cloudflare.com/privacypolicy/">Cloudflare's privacy policy</a>.
+    </p>
+    <p>
+      There is nobody else. Nothing is sold, shared, or sent anywhere. There is no
+      advertising, and no third party has access to any of it.
+    </p>
+  </section>
+
+  <section>
+    <h2>Asking for your data to be removed</h2>
+    <p>
+      Email the address below. In practice:
+    </p>
+    <p>
+      <strong>An API key and its email</strong> can be deleted outright — say
+      which address you used.
+      <strong>Visitor hashes</strong> cannot be looked up individually, because
+      they are hashes and there is deliberately no way to work back from a person
+      to one. What can be done, and will be on request, is rotating the secret,
+      which invalidates every stored hash at once.
+    </p>
+    <p>
+      Everything else is either aggregate counts with no identity in them, or it
+      has already expired on the schedule above.
+    </p>
+  </section>
+
+  <section class="pitch">
+    <h2>Contact</h2>
+    <p>
+      Run by <strong>Rohit Rana</strong>. For anything at all — privacy requests,
+      bugs, an endpoint behaving oddly, or a feature you want:
+    </p>
+    <p>
+      <strong>Email:</strong>
+      <a href="mailto:er.rohitrana2013@gmail.com">er.rohitrana2013@gmail.com</a><br>
+      <strong>Issues:</strong>
+      <a href="https://github.com/errohitrana2013/flaky/issues">github.com/errohitrana2013/flaky/issues</a>
+    </p>
+    <p class="mt-16">
+      flaky is free, has no paid tier, and is open source under the MIT licence.
+      If it goes away, the code and the data generator go with you.
+    </p>
+  </section>
+
+  <footer>
+    <p class="m-0">
+      Last updated 30 August 2026 · <a href="/">home</a> ·
+      <a href="/docs/jsonplaceholder">moving from JSONPlaceholder</a> ·
+      <a href="https://github.com/errohitrana2013/flaky">source</a>
+    </p>
+  </footer>
+
+</div>
+<script src="/dwell.js" defer></script>
+</body>
+</html>
