@@ -13,7 +13,24 @@ export { visitorId };
 
 const BOT = /bot|crawl|spider|slurp|curl|wget|python-requests|httpie|postman|insomnia|axios\/|go-http|java\/|okhttp/i;
 
-export function classifyClient(request) {
+// What a request asks for is stronger evidence than what it claims to be.
+// Credential sweeps send ordinary browser user-agents, so a UA check alone
+// counted them as people — 49 "US visitors" turned out to be concentrated in
+// Virginia, Oregon and Iowa, which are datacenter regions rather than places
+// people live.
+//
+// Nobody browsing a mock API asks for .env. One of these is enough, and the bot
+// flag is sticky for the day, so the rest of that visitor's traffic is
+// classified correctly too.
+const PROBE =
+  /^\/(\.env|\.git|\.aws|\.ssh|\.config|\.vscode|\.idea|wp-|admin|phpmyadmin|vendor|storage|backup|db|dump|config\.|settings\.|credentials|secrets|\.DS_Store)|\/(env|config|credentials|secrets|phpinfo|shell|eval-stdin)\.(js|json|php|ya?ml|txt|bak|old)$|\.(sql|sqlite|bak|old|zip|tar|gz|pem|key)$/i;
+
+export const isProbe = (path) => PROBE.test(path);
+
+export function classifyClient(request, path = "") {
+  // Checked first: a browser user-agent asking for /.env is not a browser.
+  if (path && isProbe(path)) return "bot";
+
   const agent = request.headers.get("user-agent") || "";
   if (!agent) return "unknown";
   if (BOT.test(agent)) return "bot";

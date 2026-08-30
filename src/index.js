@@ -61,7 +61,7 @@ function recordTelemetry(ctx, request, env, url, response, state) {
       const auth = state.auth || { tier: "anonymous", keyId: null };
       const meta = {
         visitor: await visitorId(request, env.VISITOR_SALT || "change-me"),
-        client: classifyClient(request),
+        client: classifyClient(request, url.pathname),
         path: url.pathname,
         method: request.method,
         status: response.status,

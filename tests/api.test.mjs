@@ -461,6 +461,23 @@ test("rejects an unknown underscore parameter instead of filtering on it", async
   assert.equal((await call("/v1/todos?userId=3&_limit=2")).status, 200);
 });
 
+test("classifies a credential sweep as a bot despite a browser user agent", async () => {
+  const { classifyClient, isProbe } = await import("../src/middleware/analytics.js");
+  const browser = new Request("https://flaky.test/", { headers: { "user-agent": "Mozilla/5.0 Chrome/120" } });
+
+  // What it asks for beats what it claims to be.
+  for (const path of ["/.env", "/.env.production", "/.git/config", "/config.json", "/js/env.js", "/backup.sql"]) {
+    assert.equal(classifyClient(browser, path), "bot", `${path} should read as a probe`);
+    assert.ok(isProbe(path));
+  }
+
+  // Real paths from the same user agent stay a browser.
+  for (const path of ["/", "/docs/jsonplaceholder", "/v1/posts", "/v1/posts/1/comments", "/dashboard"]) {
+    assert.equal(classifyClient(browser, path), "browser", `${path} must not be a probe`);
+    assert.ok(!isProbe(path));
+  }
+});
+
 test("answers preflight requests", async () => {
   const res = await call("/v1/posts", { method: "OPTIONS" });
   assert.equal(res.status, 204);
