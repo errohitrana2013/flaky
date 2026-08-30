@@ -3,3 +3,8 @@ node_modules/
 .dev.vars
 .DS_Store
 *.log
+
+# Local Claude Code context. Kept out of git deliberately: the repo is public and
+# .claude/skills/flaky/SKILL.md names infrastructure and internal reasoning that
+# does not belong in a public README.
+.claude/
