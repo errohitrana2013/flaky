@@ -19,6 +19,69 @@ good answer that happens to contain one lasts a decade.
 
 ---
 
+## How to actually do this
+
+### 0. Check the account first
+
+Answering needs no reputation, so a new account works. But know the limits:
+
+- **Commenting needs 50 rep**, so you cannot ask a clarifying question first.
+  Answer only questions you already understand completely.
+- **A new account posting links gets scrutinised.** One link, disclosed, in an
+  answer that would stand without it.
+- Fill in the profile. An empty profile posting a link reads as a throwaway.
+
+### 1. Find a question — 20 minutes, not 2
+
+Sorted by votes, then filter to what is still getting views:
+
+    https://stackoverflow.com/search?q=%5Bjavascript%5D+simulate+slow+api+response&tab=votes
+    https://stackoverflow.com/search?q=%5Breactjs%5D+test+loading+state&tab=votes
+    https://stackoverflow.com/search?q=%5Bjavascript%5D+mock+500+error&tab=votes
+    https://stackoverflow.com/search?q=jsonplaceholder+alternative&tab=votes
+
+**Take one that is genuinely under-answered.** Good signs: no accepted answer; or
+an accepted answer from 2016 that says "use setTimeout"; or answers that solve a
+different question than the one asked. Bad sign: three good answers already —
+adding a fourth with your link is promotion and will be read as promotion.
+
+Answering an old question is fine. Stack Overflow has no penalty for it, and a
+2019 question with 40k views is worth more than a fresh one with 6.
+
+### 2. Write it yourself — this is the part that matters
+
+The drafts below are **research, not text**. Their policy prohibits AI-written
+answers and enforces it, and the account carrying your link is the thing at risk.
+
+The method that works:
+
+1. Read the relevant draft once, for the technical content.
+2. **Close this file.**
+3. Write the answer from scratch, in your own words, as you would explain it to a
+   colleague. Include a mistake you actually made if you have one — that is the
+   thing no generated answer contains.
+4. Reopen the draft only to check you did not get a technical detail wrong.
+
+If the finished answer contains a sentence you would not say out loud, cut it.
+
+### 3. Structure that survives moderation
+
+- **Solve their problem in the first paragraph.** Not background, not your tool.
+- Give the answer that would be right even if flaky did not exist — usually MSW
+  for tests, DevTools throttling for a quick look.
+- Mention flaky only where it genuinely adds something they cannot get otherwise.
+- **Disclose:** "Disclosure: I built this." One line, at the end. Not optional —
+  it is required, and it is also what stops the answer reading as an advert.
+
+### 4. After posting
+
+- Do not edit for an hour; edits bump the question and look like promotion.
+- If it is downvoted with no comment, leave it. Arguing costs more than the vote.
+- If it is flagged and deleted, **do not repost.** Work out why first.
+- Then wait. One answer, then a week.
+
+---
+
 ## Finding the right questions
 
 Search these, sorted by votes, then filter to ones still getting traffic:
