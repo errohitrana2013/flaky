@@ -39,6 +39,24 @@ function matchPath(pattern, segments) {
   return params;
 }
 
+// Which methods a *specific* path accepts — only routes with no :params count.
+//
+// The distinction matters because /v1/meta is also matched by the catch-all
+// `* /v1/:resource`, which sent POST /v1/meta into the resource handler to be
+// told "Unknown resource 'meta'". That is false: the path is right and the
+// method is wrong. Returns null when no exact route exists, i.e. when the
+// catch-all is genuinely the right answer.
+export function allowedMethods(pathname) {
+  const segments = pathname.split("/").filter(Boolean);
+  const methods = new Set();
+  for (const route of ROUTES) {
+    if (route.path.includes(":")) continue;
+    if (!matchPath(route.path, segments)) continue;
+    methods.add(route.method);
+  }
+  return methods.size ? [...methods] : null;
+}
+
 export function matchRoute(method, pathname) {
   const segments = pathname.split("/").filter(Boolean);
 

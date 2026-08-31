@@ -503,6 +503,36 @@ test("serves an OpenAPI spec generated from the same source as /v1/meta", async 
   assert.equal(meta.openapi, "/v1/openapi.json", "/v1/meta should point at the spec");
 });
 
+test("a known path with the wrong method is a 405, not a 404", async () => {
+  // POST /v1/meta used to answer "Unknown resource 'meta'", which sends someone
+  // hunting for a typo in a URL that was correct.
+  const res = await call("/v1/meta", { method: "POST" });
+  assert.equal(res.status, 405);
+  assert.equal(res.headers.get("allow"), "GET");
+  assert.match((await body(res)).error.hint, /accepts GET/);
+
+  assert.equal((await call("/v1/keys", { method: "DELETE" })).status, 405);
+  assert.equal((await call("/v1/openapi.json", { method: "PUT" })).status, 405);
+
+  // A path that genuinely does not exist is still a 404.
+  assert.equal((await call("/v1/no-such-thing/deep/path")).status, 404);
+  // And resources accept any method, so they never 405.
+  assert.equal((await call("/v1/posts", { method: "POST", body: "{}" })).status, 201);
+});
+
+test("spots a percent-encoded credential probe", async () => {
+  const { isProbe } = await import("../src/middleware/analytics.js");
+  // Scanners encode precisely to slip past filters like this one.
+  for (const p of ["/.env", "/%2eenv", "/%2f%2eenv", "/.git/config", "/%2egit/config"]) {
+    assert.ok(isProbe(p), `${p} should read as a probe`);
+  }
+  for (const p of ["/v1/posts", "/docs/jsonplaceholder", "/"]) {
+    assert.ok(!isProbe(p), `${p} must not`);
+  }
+  // A malformed escape must not throw.
+  assert.doesNotThrow(() => isProbe("/%zz"));
+});
+
 test("answers preflight requests", async () => {
   const res = await call("/v1/posts", { method: "OPTIONS" });
   assert.equal(res.status, 204);

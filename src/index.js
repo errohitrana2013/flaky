@@ -5,7 +5,7 @@
 //                                                          ↓
 //                                          response ← telemetry (after send)
 
-import { matchRoute } from "./router.js";
+import { matchRoute, allowedMethods } from "./router.js";
 import { validatePaging } from "./lib/query.js";
 import { TIERS } from "./config/tiers.js";
 import { preflight, fail, withHeaders, harden } from "./lib/response.js";
@@ -17,6 +17,19 @@ import { today, utcHour, ipId } from "./lib/hash.js";
 
 async function handle(request, env, ctx, url, state) {
   const route = matchRoute(request.method, url.pathname);
+
+  // A known path with the wrong method is a 405, not a 404 — answering 404 sends
+  // someone hunting for a typo in a URL that was correct. Checked even when a
+  // route matched, because the catch-all `* /v1/:resource` swallows /v1/meta and
+  // friends and would otherwise report them as unknown resources.
+  const allowed = allowedMethods(url.pathname);
+  if (allowed && !allowed.includes(request.method)) {
+    return withHeaders(
+      fail(405, `${request.method} is not allowed here`, `This path accepts ${allowed.join(", ")}.`),
+      { allow: allowed.join(", ") }
+    );
+  }
+
   if (!route) return fail(404, "No such route", "See GET /v1/meta for what this API offers.");
 
   const context = { request, env, ctx, url, query: url.searchParams, params: route.params, auth: null };

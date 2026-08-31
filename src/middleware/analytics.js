@@ -25,7 +25,20 @@ const BOT = /bot|crawl|spider|slurp|curl|wget|python-requests|httpie|postman|ins
 const PROBE =
   /^\/(\.env|\.git|\.aws|\.ssh|\.config|\.vscode|\.idea|wp-|admin|phpmyadmin|vendor|storage|backup|db|dump|config\.|settings\.|credentials|secrets|\.DS_Store)|\/(env|config|credentials|secrets|phpinfo|shell|eval-stdin)\.(js|json|php|ya?ml|txt|bak|old)$|\.(sql|sqlite|bak|old|zip|tar|gz|pem|key)$/i;
 
-export const isProbe = (path) => PROBE.test(path);
+// Tested against the decoded path as well as the raw one: /%2eenv is /.env, and
+// scanners encode precisely to slip past filters like this. A malformed escape
+// throws, so the decode is guarded and the raw path still gets checked.
+export function isProbe(path) {
+  if (PROBE.test(path)) return true;
+  try {
+    // Collapse repeated slashes too: /%2f%2eenv decodes to //.env, and the
+    // doubled slash was enough to slip past on its own.
+    const decoded = decodeURIComponent(path).replace(/\/{2,}/g, "/");
+    return decoded !== path && PROBE.test(decoded);
+  } catch {
+    return false;
+  }
+}
 
 export function classifyClient(request, path = "") {
   // Checked first: a browser user-agent asking for /.env is not a browser.

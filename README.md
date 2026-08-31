@@ -17,7 +17,7 @@ the failure you are trying to test against.
 
 ```bash
 npm install
-npm test          # 55 tests, ~0.4s, no network and no Cloudflare account
+npm test          # 57 tests, ~0.4s, no network and no Cloudflare account
 npm run dev       # http://localhost:8787
 ```
 
@@ -142,7 +142,7 @@ flaky/
 │   └── generate-db.js        regenerates src/data/db.js deterministically
 │
 ├── tests/
-│   └── api.test.mjs          55 tests, no dependencies, runs offline
+│   └── api.test.mjs          57 tests, no dependencies, runs offline
 │
 ├── wrangler.toml             bindings and cron
 ├── .dev.vars.example         copy to .dev.vars for local secrets
@@ -201,7 +201,7 @@ files.
 ## Tests
 
 ```bash
-npm test     # 55 tests, no network, no Cloudflare account needed
+npm test     # 57 tests, no network, no Cloudflare account needed
 ```
 
 Bindings (D1, KV, Analytics Engine, assets) are stubbed in memory at the top of
