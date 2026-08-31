@@ -38,6 +38,7 @@ const QUERY_PARAMS = [
   { name: "_sort", description: "Field to sort by.", schema: { type: "string" } },
   { name: "_order", description: "asc (default) or desc.", schema: { type: "string", enum: ["asc", "desc"] } },
   { name: "_q", description: "Full-text search across the whole record.", schema: { type: "string" } },
+  { name: "_select", description: "Comma-separated fields to return; id is always included. Also accepted as `select`, DummyJSON's spelling.", schema: { type: "string", example: "title,price" } },
 ];
 
 const param = (p) => ({ name: p.name, in: "query", required: false, description: p.description, schema: p.schema });

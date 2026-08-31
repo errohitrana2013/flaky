@@ -533,6 +533,20 @@ test("spots a percent-encoded credential probe", async () => {
   assert.doesNotThrow(() => isProbe("/%zz"));
 });
 
+test("returns only the requested fields, keeping id", async () => {
+  const rows = await body(await call("/v1/products?_select=title,price&_limit=2"));
+  assert.deepEqual(Object.keys(rows[0]).sort(), ["id", "price", "title"]);
+
+  // DummyJSON spells it without the underscore; someone migrating sends that,
+  // and it must not be treated as a filter on a field named "select".
+  const same = await body(await call("/v1/products?select=title&_limit=1"));
+  assert.deepEqual(Object.keys(same[0]).sort(), ["id", "title"]);
+
+  // An unknown field simply is not there — no error, nothing invented.
+  const partial = await body(await call("/v1/posts?_select=title,nope&_limit=1"));
+  assert.deepEqual(Object.keys(partial[0]).sort(), ["id", "title"]);
+});
+
 test("answers preflight requests", async () => {
   const res = await call("/v1/posts", { method: "OPTIONS" });
   assert.equal(res.status, 204);

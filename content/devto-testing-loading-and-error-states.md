@@ -49,7 +49,9 @@ of ceremony for a ten-second question.
 ## The thing that's missing
 
 What you actually want is to make **one request** behave badly, from the URL,
-without changing anything else.
+without changing anything else. Some hosted mock APIs will delay a response for
+you — DummyJSON takes a `?delay=` — but delay is the easy third of the problem.
+The two that find bugs are a *specific* failure and an *intermittent* one.
 
 That's what I ended up building. [flaky](https://flakyapi.dev) is a fake REST
 API — the same shape as JSONPlaceholder, same resources, same field names — with

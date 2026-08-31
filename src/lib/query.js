@@ -61,6 +61,19 @@ export function queryCollection(rows, params, maxLimit) {
       a[sortField] > b[sortField] ? dir : a[sortField] < b[sortField] ? -dir : 0);
   }
 
+  // Sparse fieldsets. id is always kept — a record you cannot identify is not
+  // useful, and every client assumes it is there.
+  const select = params.get("_select") || params.get("select");
+  if (select) {
+    const fields = new Set(select.split(",").map((f) => f.trim()).filter(Boolean));
+    if (fields.size) {
+      fields.add("id");
+      result = result.map((row) =>
+        Object.fromEntries(Object.entries(row).filter(([k]) => fields.has(k)))
+      );
+    }
+  }
+
   const total = result.length;
   const limit = Math.min(Number(params.get("_limit")) || DEFAULT_PAGE_SIZE, maxLimit);
 

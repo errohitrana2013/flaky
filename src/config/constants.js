@@ -25,6 +25,11 @@ export const RESERVED_PARAMS = new Set([
   "_sort",
   "_order",
   "_q",
+  "_select",
+  // Accepted unprefixed too: it is DummyJSON's spelling, and someone arriving
+  // from there would otherwise have it treated as a filter on a field named
+  // "select", match nothing, and get an empty array with no explanation.
+  "select",
   "_delay",
   "_status",
   "_fail_rate",

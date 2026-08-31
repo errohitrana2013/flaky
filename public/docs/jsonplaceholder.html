@@ -93,6 +93,12 @@
       <code>_limit</code> also work if you prefer pages. So do <code>_sort</code>
       and <code>_order</code>.
     </p>
+    <p>
+      Coming from DummyJSON instead? <code>?select=title,price</code> works here too,
+      spelled either way — <code>_select</code> is the house style and bare
+      <code>select</code> is accepted so a pasted URL does not silently return an
+      empty array.
+    </p>
   </section>
 
   <section>
@@ -142,10 +148,11 @@
   <section class="pitch">
     <h2>The reason to switch</h2>
     <p>
-      Every fake API hands you data. None of them let you ask for the thing you are
-      actually testing: the slow response, the 503, the endpoint that fails one time
-      in three. That is normally a local mock server, a branch in your code, or a
-      <code>setTimeout</code> you have to remember to delete.
+      Every fake API hands you data. A couple will slow a response down —
+      DummyJSON takes a <code>?delay=</code> — but none of them let you ask for the
+      part that actually finds bugs: <strong>a specific failure, and an
+      intermittent one.</strong> That is normally a local mock server, a branch in
+      your code, or a <code>setTimeout</code> you have to remember to delete.
     </p>
     <pre><span class="tok-com"># your loading state, with a real slow response</span>
 GET /v1/posts?_delay=3000
