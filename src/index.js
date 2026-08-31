@@ -11,7 +11,7 @@ import { TIERS } from "./config/tiers.js";
 import { preflight, fail, withHeaders, harden } from "./lib/response.js";
 import { resolveTier } from "./middleware/auth.js";
 import { checkRateLimit, rateHeaders } from "./middleware/ratelimit.js";
-import { applyChaos } from "./middleware/chaos.js";
+import { applyChaos, truncate } from "./middleware/chaos.js";
 import { visitorId, classifyClient, logRequest, rollUp, sendDigest, purgeExpired } from "./middleware/analytics.js";
 import { today, utcHour, ipId } from "./lib/hash.js";
 
@@ -60,7 +60,26 @@ async function handle(request, env, ctx, url, state) {
   const injected = await applyChaos(url.searchParams);
   if (injected) return withHeaders(injected, headers);
 
-  return withHeaders(await route.handler(context), headers);
+  let response = withHeaders(await route.handler(context), headers);
+
+  // Applied after the handler, because both need a real response to damage.
+  const truthy = (v) => v === "1" || v === "true";
+  if (truthy(url.searchParams.get("_malformed"))) response = await truncate(response);
+
+  // CORS is enforced by the browser, not the server, so "breaking" it means
+  // omitting the headers and letting the browser refuse. From curl this looks
+  // identical to a normal response — which is itself the lesson, and why the
+  // header below says what happened.
+  if (url.searchParams.get("_cors") === "off") {
+    const stripped = new Headers(response.headers);
+    for (const key of [...stripped.keys()]) {
+      if (key.startsWith("access-control-")) stripped.delete(key);
+    }
+    stripped.set("x-cors", "omitted by _cors=off; a browser will refuse this cross-origin");
+    response = new Response(response.body, { status: response.status, headers: stripped });
+  }
+
+  return response;
 }
 
 // Telemetry runs after the response is returned, so it costs the caller

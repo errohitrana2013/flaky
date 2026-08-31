@@ -547,6 +547,50 @@ test("returns only the requested fields, keeping id", async () => {
   assert.deepEqual(Object.keys(partial[0]).sort(), ["id", "title"]);
 });
 
+test("sends Retry-After on the statuses that mean come back later", async () => {
+  // A client that backs off correctly reads this. Nothing else returning these
+  // codes provides one, so there is nothing to test backoff against.
+  const busy = await call("/v1/posts?_status=429");
+  assert.equal(busy.status, 429);
+  assert.equal(busy.headers.get("retry-after"), "5");
+
+  const down = await call("/v1/posts?_status=503&_retry_after=30");
+  assert.equal(down.headers.get("retry-after"), "30");
+
+  // Not on codes where it would be meaningless.
+  assert.equal((await call("/v1/posts?_status=404")).headers.get("retry-after"), null);
+});
+
+test("returns a truncated body for _malformed, not random bytes", async () => {
+  const res = await call("/v1/posts?_malformed=1&_limit=5");
+  assert.equal(res.status, 200);
+  assert.equal(res.headers.get("x-truncated"), "deliberately, by _malformed=1");
+
+  const text = await res.text();
+  // The realistic failure is a connection dropped mid-body: it starts as valid
+  // JSON and stops. That is the .json() catch path nobody tests.
+  assert.ok(text.startsWith("["), "still looks like the real response");
+  assert.throws(() => JSON.parse(text), "must not parse");
+
+  const intact = await call("/v1/posts?_limit=5");
+  assert.ok((await intact.text()).length > text.length, "shorter than the real body");
+});
+
+test("omits CORS headers for _cors=off, and says so", async () => {
+  const res = await call("/v1/posts?_cors=off&_limit=1");
+  assert.equal(res.status, 200, "the server still answers — a browser is what refuses");
+  assert.equal(res.headers.get("access-control-allow-origin"), null);
+  assert.match(res.headers.get("x-cors"), /browser will refuse/);
+
+  assert.equal((await call("/v1/posts?_limit=1")).headers.get("access-control-allow-origin"), "*");
+});
+
+test("validates the new parameters like the rest", async () => {
+  for (const q of ["_malformed=yes", "_malformed=2", "_cors=on", "_cors=true"]) {
+    assert.equal((await call(`/v1/posts?${q}`)).status, 400, `${q} should be a 400`);
+  }
+});
+
 test("answers preflight requests", async () => {
   const res = await call("/v1/posts", { method: "OPTIONS" });
   assert.equal(res.status, 204);

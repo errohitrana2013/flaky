@@ -29,6 +29,21 @@ const CHAOS_PARAMS = [
     description: "Probability from 0 to 1 that this request returns 500. Rolled independently per request.",
     schema: { type: "number", minimum: 0, maximum: 1, example: 0.3 },
   },
+  {
+    name: "_retry_after",
+    description: "Seconds to put in the Retry-After header. Only meaningful with _status=429 or 503, where it defaults to 5.",
+    schema: { type: "integer", minimum: 0, maximum: 3600, example: 30 },
+  },
+  {
+    name: "_malformed",
+    description: "Truncate the body mid-record, as a dropped connection would. Valid-looking JSON that stops — the .json() failure path.",
+    schema: { type: "integer", enum: [0, 1] },
+  },
+  {
+    name: "_cors",
+    description: "Set to `off` to omit the CORS headers, so a browser refuses the response cross-origin. From a server or curl it looks normal, because CORS is enforced by the browser.",
+    schema: { type: "string", enum: ["off"] },
+  },
 ];
 
 const QUERY_PARAMS = [

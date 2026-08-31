@@ -17,7 +17,7 @@ the failure you are trying to test against.
 
 ```bash
 npm install
-npm test          # 58 tests, ~0.4s, no network and no Cloudflare account
+npm test          # 62 tests, ~0.4s, no network and no Cloudflare account
 npm run dev       # http://localhost:8787
 ```
 
@@ -79,7 +79,16 @@ An unknown `_param` is a `400` rather than a filter on a field of that name — 
 latter matches nothing and returns `[]`, which reads as "no data" when it means
 "you made a typo".
 
-Response controls, on any request: `?_delay=2000`, `?_status=503`, `?_fail_rate=0.3`
+Response controls, on any request:
+
+| | |
+|---|---|
+| `?_delay=2000` | stall before responding |
+| `?_status=503` | force a status; `429`/`503` also get a `Retry-After` |
+| `?_fail_rate=0.3` | fail this share of requests, rolled per request |
+| `?_retry_after=30` | seconds for the `Retry-After` header |
+| `?_malformed=1` | truncate the body mid-record, as a dropped connection would |
+| `?_cors=off` | omit the CORS headers so a browser refuses it
 
 These are validated strictly and an out-of-range value is a `400`, never a
 silent fallback. `_delay` takes 0–10000 ms, `_fail_rate` a probability of 0–1,
@@ -142,7 +151,7 @@ flaky/
 │   └── generate-db.js        regenerates src/data/db.js deterministically
 │
 ├── tests/
-│   └── api.test.mjs          58 tests, no dependencies, runs offline
+│   └── api.test.mjs          62 tests, no dependencies, runs offline
 │
 ├── wrangler.toml             bindings and cron
 ├── .dev.vars.example         copy to .dev.vars for local secrets
@@ -201,7 +210,7 @@ files.
 ## Tests
 
 ```bash
-npm test     # 58 tests, no network, no Cloudflare account needed
+npm test     # 62 tests, no network, no Cloudflare account needed
 ```
 
 Bindings (D1, KV, Analytics Engine, assets) are stubbed in memory at the top of
