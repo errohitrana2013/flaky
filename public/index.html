@@ -45,6 +45,10 @@
       latency, make a third of requests fail — on any endpoint, from the query string.
     </p>
     <p class="lede mt-16">
+      Free, no signup to read, and <a href="#key">a key takes one request</a> if you
+      want a higher limit.
+    </p>
+    <p class="lede mt-16">
       Coming from JSONPlaceholder? <a href="/docs/jsonplaceholder">Same resources, same
       fields — here is the one-line migration</a>.
     </p>
@@ -141,12 +145,41 @@ curl -X POST <span class="host">https://flaky.dev</span>/v1/sandbox/&lt;id&gt;/p
   </section>
 
   <section>
+    <h2 id="key">A key, if you want one</h2>
+    <p>
+      <strong>Everything above works with no key and no signup.</strong> A key is
+      not a gate — it raises the daily limit tenfold and unlocks sandboxes. One
+      request, no confirmation email, no password, nothing to click.
+    </p>
+    <pre>curl -X POST <span class="host">https://flakyapi.dev</span>/v1/keys \
+  -H 'content-type: application/json' \
+  -d '{"email":"you@example.com"}'
+
+<span class="tok-com"># → {"key":"flk_...", "tier":"free"}  — use it straight away</span></pre>
+    <p class="mt-16">
+      Send it on any request and the tier changes:
+    </p>
+    <pre>curl <span class="host">https://flakyapi.dev</span>/v1/posts \
+  -H 'authorization: Bearer flk_...'</pre>
+    <p class="mt-16">
+      The address is stored only so the key can be revoked or you can be contacted
+      about it. Nothing is ever sent to it — no mailing list, no confirmation, no
+      newsletter. <a href="/privacy">The privacy page</a> says exactly what is kept
+      and for how long.
+    </p>
+    <div class="note mt-20">
+      Watch <code>x-ratelimit-remaining</code> on any response. If you are getting
+      close to zero, that is the moment a key is worth the one request.
+    </div>
+  </section>
+
+  <section>
     <h2>Limits</h2>
     <table>
       <thead><tr><th>Tier</th><th>Requests/day</th><th>Max page</th><th>Sandboxes</th></tr></thead>
       <tbody>
         <tr><td>Anonymous</td><td class="num">1,000</td><td class="num">100</td><td class="num">—</td></tr>
-        <tr><td>Free key</td><td class="num">10,000</td><td class="num">250</td><td class="num">1</td></tr>
+        <tr><td><a href="#key">Free key</a></td><td class="num">10,000</td><td class="num">250</td><td class="num">1</td></tr>
         <tr><td>Pro</td><td class="num">1,000,000</td><td class="num">1,000</td><td class="num">25</td></tr>
       </tbody>
     </table>
