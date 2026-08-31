@@ -14,6 +14,7 @@ export function getMeta(ctx) {
     name: "flaky",
     tagline: "A mock REST API that fails on purpose.",
     version: "1",
+    openapi: "/v1/openapi.json",
     resources: RESOURCES.map((name) => ({
       name,
       count: COUNTS[name],

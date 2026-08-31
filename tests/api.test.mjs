@@ -478,6 +478,31 @@ test("classifies a credential sweep as a bot despite a browser user agent", asyn
   }
 });
 
+test("serves an OpenAPI spec generated from the same source as /v1/meta", async () => {
+  const spec = await body(await call("/v1/openapi.json"));
+  assert.equal(spec.openapi, "3.1.0");
+  assert.equal(spec.servers[0].url, "https://flakyapi.dev/v1");
+
+  // Every resource is described, so adding one cannot leave the spec behind.
+  const meta = await body(await call("/v1/meta"));
+  for (const r of meta.resources) {
+    assert.ok(spec.paths[`/${r.name}`], `${r.name} missing from the spec`);
+    assert.ok(spec.paths[`/${r.name}/{id}`], `${r.name}/{id} missing`);
+    for (const nested of r.nested) {
+      const path = nested.replace("/v1", "").replace(":id", "{id}");
+      assert.ok(spec.paths[path], `${path} missing from the spec`);
+    }
+  }
+
+  // The chaos parameters are the point; they must be documented on a list route.
+  const names = spec.paths["/posts"].get.parameters.map((p) => p.name);
+  for (const p of ["_delay", "_status", "_fail_rate", "_start", "_page", "_limit"]) {
+    assert.ok(names.includes(p), `${p} not documented`);
+  }
+
+  assert.equal(meta.openapi, "/v1/openapi.json", "/v1/meta should point at the spec");
+});
+
 test("answers preflight requests", async () => {
   const res = await call("/v1/posts", { method: "OPTIONS" });
   assert.equal(res.status, 204);

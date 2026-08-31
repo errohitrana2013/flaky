@@ -2,6 +2,7 @@ import { readResource, echoWrite } from "./handlers/resources.js";
 import { createSandbox, handleSandbox } from "./handlers/sandbox.js";
 import { createKey } from "./handlers/keys.js";
 import { getMeta } from "./handlers/meta.js";
+import { getOpenApi } from "./handlers/openapi.js";
 import { getStats, exportCsv, getInsights } from "./handlers/admin.js";
 import { recordBeacon } from "./handlers/beacon.js";
 
@@ -15,6 +16,7 @@ const ROUTES = [
   { method: "POST", path: "/v1/beacon",                               handler: recordBeacon },
   { method: "POST", path: "/v1/keys",                                 handler: createKey },
   { method: "GET",  path: "/v1/meta",                                 handler: getMeta },
+  { method: "GET",  path: "/v1/openapi.json",                         handler: getOpenApi },
   { method: "POST", path: "/v1/sandbox",                              handler: createSandbox },
   { method: "*",    path: "/v1/sandbox/:sandboxId/:resource",         handler: handleSandbox },
   { method: "*",    path: "/v1/sandbox/:sandboxId/:resource/:id",     handler: handleSandbox },
