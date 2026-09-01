@@ -32,3 +32,7 @@
 
 td.ms { font-family: ui-monospace, monospace; font-size: 13px; font-variant-numeric: tabular-nums; }
 td.ms.slow { color: var(--accent); font-weight: 600; }
+
+/* Everyone who came back at all. That is the row that matters — a first visit
+   is traffic, a second is interest. */
+tr.repeat td:first-child { color: var(--accent); font-weight: 600; }

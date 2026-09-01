@@ -85,17 +85,28 @@ function renderReturning(r) {
   $("r-back").textContent = num(back);
   $("r-rate").textContent = total ? ((back / total) * 100).toFixed(0) + "%" : "—";
 
+  // Ordinals rather than "2 days", which makes the reader do the translation.
+  // A day is the unit because a visitor is counted once per day — two visits in
+  // one afternoon is one row, and the note above the table says so.
+  const ordinal = (n) =>
+    n === 1 ? "Once — never returned"
+    : n === 2 ? "Twice"
+    : n === 3 ? "Three times"
+    : `${n} times`;
+
   const rows = r.frequency;
+  const total = rows.reduce((sum, f) => sum + f.people, 0);
   $("frequency").innerHTML = rows.length
     ? (() => {
         const peak = Math.max(...rows.map((f) => f.people));
-        return rows.map((f) => `<tr>
-            <td>${f.days} day${f.days === 1 ? "" : "s"}${f.days === 1 ? " only" : ""}</td>
+        return rows.map((f) => `<tr${f.days > 1 ? ' class="repeat"' : ""}>
+            <td>${ordinal(f.days)}</td>
             <td class="num">${num(f.people)}</td>
-            <td class="chart"><div class="track" data-w="${((f.people / peak) * 100).toFixed(1)}"></div></td>
+            <td class="num">${total ? ((f.people / total) * 100).toFixed(1) + "%" : "—"}</td>
+            <td class="chart"><div class="track${f.days > 1 ? " sev" : ""}" data-w="${((f.people / peak) * 100).toFixed(1)}"></div></td>
           </tr>`).join("");
       })()
-    : '<tr><td colspan="3" class="muted">Nobody recorded yet.</td></tr>';
+    : '<tr><td colspan="4" class="muted">Nobody recorded yet.</td></tr>';
   applySizes($("frequency"));
 }
 
