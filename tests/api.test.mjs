@@ -591,6 +591,29 @@ test("validates the new parameters like the rest", async () => {
   }
 });
 
+test("classifies a scanner sweep however it prefixes the path", async () => {
+  const { isProbe } = await import("../src/middleware/analytics.js");
+
+  // The same sweep, with and without a directory in front. Anchoring to the
+  // root caught only the bare form and filed the rest as human traffic.
+  for (const p of [
+    "/wp-includes/wlwmanifest.xml",
+    "/blog/wp-includes/wlwmanifest.xml",
+    "/shop/wp-includes/wlwmanifest.xml",
+    "/wp-admin/install.php",
+    "/test.php",
+    "/phpinfo.php",
+  ]) {
+    assert.ok(isProbe(p), `${p} should read as a probe`);
+  }
+
+  // Nothing we actually serve may be swept up by widening it.
+  for (const p of ["/", "/v1/posts", "/docs/jsonplaceholder", "/privacy",
+                   "/app.js", "/og.png", "/v1/openapi.json", "/sitemap.xml"]) {
+    assert.ok(!isProbe(p), `${p} must not`);
+  }
+});
+
 test("answers preflight requests", async () => {
   const res = await call("/v1/posts", { method: "OPTIONS" });
   assert.equal(res.status, 204);

@@ -12,7 +12,11 @@ import { normalisePath } from "../middleware/analytics.js";
 // overnight is not a four-hour reading session, and an open endpoint that
 // increments counters must not let anyone write arbitrary numbers into them.
 
-const MAX_SECONDS = 1800;    // 30 minutes; beyond this it is an abandoned tab
+// Ten minutes, lowered from thirty. A single abandoned tab hitting the old cap
+// was 30 of a 30-minute total across three visits, making the average read as
+// ten minutes of reading. Nobody reads a docs page for ten minutes either, so
+// anything at the cap is a tab left open and the cap is where it stops counting.
+const MAX_SECONDS = 600;
 const BOUNCE_UNDER = 10;     // seconds
 
 export async function recordBeacon(ctx) {

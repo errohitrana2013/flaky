@@ -22,12 +22,20 @@ const BOT = /bot|crawl|spider|slurp|curl|wget|python-requests|httpie|postman|ins
 // Nobody browsing a mock API asks for .env. One of these is enough, and the bot
 // flag is sticky for the day, so the rest of that visitor's traffic is
 // classified correctly too.
-const PROBE =
-  /^\/(\.env|\.git|\.aws|\.ssh|\.config|\.vscode|\.idea|wp-|admin|phpmyadmin|vendor|storage|backup|db|dump|config\.|settings\.|credentials|secrets|\.DS_Store)|\/(env|config|credentials|secrets|phpinfo|shell|eval-stdin)\.(js|json|php|ya?ml|txt|bak|old)$|\.(sql|sqlite|bak|old|zip|tar|gz|pem|key)$/i;
+const PROBE = new RegExp([
+  // Anchored: things only ever asked for at the root.
+  "^\\/(\\.env|\\.git|\\.aws|\\.ssh|\\.config|\\.vscode|\\.idea|\\.DS_Store|\\.npmrc|\\.bash_history)",
+  // Anywhere in the path. Scanners prepend directories — /blog/wp-includes/…,
+  // /shop/wp-includes/… — and anchoring to the root missed every one of them
+  // while catching the bare version, so the same sweep landed half in "human".
+  "(wp-includes|wp-admin|wp-login|wp-content|phpmyadmin|phpinfo|\\/vendor\\/|\\/storage\\/)",
+  // We are a Worker. Any .php request is somebody looking for a different site.
+  "\\.php($|\\?)",
+  // Credential and backup file shapes, wherever they appear.
+  "(env|config|credentials|secrets|settings|shell|eval-stdin)\\.(js|json|php|ya?ml|txt|bak|old)$",
+  "\\.(sql|sqlite|bak|old|zip|tar|gz|pem|key)$",
+].join("|"), "i");
 
-// Tested against the decoded path as well as the raw one: /%2eenv is /.env, and
-// scanners encode precisely to slip past filters like this. A malformed escape
-// throws, so the decode is guarded and the raw path still gets checked.
 export function isProbe(path) {
   if (PROBE.test(path)) return true;
   try {
