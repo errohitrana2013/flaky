@@ -95,14 +95,14 @@ function renderReturning(r) {
     : `${n} times`;
 
   const rows = r.frequency;
-  const total = rows.reduce((sum, f) => sum + f.people, 0);
+  const everyone = rows.reduce((sum, f) => sum + f.people, 0);
   $("frequency").innerHTML = rows.length
     ? (() => {
         const peak = Math.max(...rows.map((f) => f.people));
         return rows.map((f) => `<tr${f.days > 1 ? ' class="repeat"' : ""}>
             <td>${ordinal(f.days)}</td>
             <td class="num">${num(f.people)}</td>
-            <td class="num">${total ? ((f.people / total) * 100).toFixed(1) + "%" : "—"}</td>
+            <td class="num">${everyone ? ((f.people / everyone) * 100).toFixed(1) + "%" : "—"}</td>
             <td class="chart"><div class="track${f.days > 1 ? " sev" : ""}" data-w="${((f.people / peak) * 100).toFixed(1)}"></div></td>
           </tr>`).join("");
       })()
