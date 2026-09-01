@@ -13,6 +13,7 @@
     "seed": "node scripts/generate-db.js",
     "test": "npm run check:public && node --test \"tests/**/*.test.mjs\"",
     "check:public": "node scripts/check-public.mjs",
+    "check:render": "node scripts/check-render.mjs",
     "db:migrate": "wrangler d1 migrations apply flaky --remote",
     "db:migrate:local": "wrangler d1 migrations apply flaky --local",
     "tail": "wrangler tail",

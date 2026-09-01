@@ -1,6 +1,16 @@
 const $ = (id) => document.getElementById(id);
 const num = (n) => Number(n || 0).toLocaleString();
 
+// Every scrollable table gets a line underneath it that does not scroll. Named
+// summary, not total: `total` is exactly the variable name a renderer reaches
+// for, and shadowing it turns this into a runtime error at render time.
+function summary(id, parts) {
+  const el = $(id);
+  if (el) el.innerHTML = parts.filter(Boolean).join("");
+}
+const part = (label, value, cls = "") =>
+  `<span>${label} <b class="${cls}">${typeof value === "number" ? num(value) : value}</b></span>`;
+
 async function load(token) {
   const res = await fetch("/v1/admin/stats?days=14", {
     headers: { authorization: "Bearer " + token },
@@ -43,11 +53,22 @@ function render(data) {
     : '<tr><td colspan="5" class="muted">No traffic yet.</td></tr>';
 
   applySizes($("daily"));
+  summary("daily-total", [
+    part("days", data.daily.length),
+    part("requests", data.totals.requests),
+    part("errors", data.totals.errors),
+    part("error rate", (data.totals.errorRate * 100).toFixed(1) + "%"),
+  ]);
   LATEST = data;
   renderHours(data.hourly, data.hourlyVisitors, MODE);
   renderErrors(data.errors || []);
   renderGeo(data.countries);
   renderRegions(data.regions || []);
+
+  summary("keys-total", [
+    part("keys with traffic", data.topKeys.length),
+    part("requests from keys", data.topKeys.reduce((n, k) => n + k.requests, 0)),
+  ]);
 
   $("keys").innerHTML = data.topKeys.length
     ? data.topKeys.map((k) => `<tr><td class="mono">${k.key_id}</td><td class="num">${num(k.requests)}</td></tr>`).join("")
@@ -145,6 +166,17 @@ function renderErrors(errors) {
       </tr>`)
     .join("");
   applySizes($("errors"));
+
+  // Server errors are called out separately because they are the only kind that
+  // means something is broken; the rest is scanners and correct rejections.
+  const server = errors.filter((e) => cause(e) === "server").reduce((n, e) => n + e.count, 0);
+  summary("errors-total", [
+    part("distinct", errors.length),
+    part("total", errors.reduce((n, e) => n + e.count, 0)),
+    part("requested", errors.filter((e) => e.injected).reduce((n, e) => n + e.count, 0)),
+    part("from bots", errors.filter((e) => e.bot).reduce((n, e) => n + e.count, 0)),
+    part("server", server, server ? "warn" : ""),
+  ]);
 }
 
 function renderRegions(regions) {
@@ -163,6 +195,11 @@ function renderRegions(regions) {
       </tr>`)
     .join("");
   applySizes($("regions"));
+  summary("regions-total", [
+    part("regions", regions.length),
+    part("people", regions.reduce((n, r) => n + r.visitors, 0)),
+    part("addresses", regions.reduce((n, r) => n + r.addresses, 0)),
+  ]);
 }
 
 function renderGeo(countries) {
@@ -182,6 +219,12 @@ function renderGeo(countries) {
       </tr>`)
     .join("");
   applySizes($("geo"));
+  summary("geo-total", [
+    part("countries", countries.length),
+    part("people", countries.reduce((n, c) => n + c.visitors, 0)),
+    part("bots", countries.reduce((n, c) => n + (c.bots || 0), 0)),
+    part("requests", countries.reduce((n, c) => n + c.requests, 0)),
+  ]);
 }
 
 // Held in memory only, for the export requests. It still needs the admin

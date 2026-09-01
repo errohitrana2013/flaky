@@ -115,3 +115,32 @@
 .cause-client { color: var(--muted); }
 .cause-server { color: var(--accent); font-weight: 700; }
 tr.real td { background: var(--accent-soft, transparent); }
+
+/* Ten rows, then scroll. These tables reach forty rows on a normal day, and a
+   page you have to scroll past to reach the next section stops being scannable.
+   The header sticks so the columns stay labelled on the way down. */
+.tablebox {
+  max-height: 400px; overflow: auto;
+  border: 1px solid var(--line); border-radius: 10px 10px 0 0;
+}
+.tablebox table { margin: 0; }
+.tablebox th {
+  position: sticky; top: 0; z-index: 1;
+  background: var(--bg); padding: 10px 14px 10px 0;
+  box-shadow: inset 0 -1px 0 var(--line);
+}
+.tablebox th:first-child, .tablebox td:first-child { padding-left: 14px; }
+.tablebox td { padding-right: 14px; }
+.tablebox tr:last-child td { border-bottom: 0; }
+
+/* The total sits outside the scroll on purpose: it is the one number you want
+   without hunting, and scrolling it away would defeat that. */
+.tabletotal {
+  display: flex; flex-wrap: wrap; gap: 6px 20px;
+  padding: 10px 14px; font-size: 12.5px; color: var(--muted);
+  background: var(--panel);
+  border: 1px solid var(--line); border-top: 0; border-radius: 0 0 10px 10px;
+  font-variant-numeric: tabular-nums;
+}
+.tabletotal b { color: var(--ink); font-weight: 600; }
+.tabletotal .warn { color: var(--accent); }

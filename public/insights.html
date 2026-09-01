@@ -61,10 +61,17 @@
       <div class="tile"><div class="k">Returning today</div><div class="v" id="r-back">—</div></div>
       <div class="tile"><div class="k">Return rate</div><div class="v" id="r-rate">—</div></div>
     </div>
-    <table>
+    <div class="tablebox">
+      <div class="tablebox">
+        <div class="tablebox">
+          <div class="tablebox">
+            <div class="tablebox">
+              <table>
       <thead><tr><th>Came back</th><th class="num">People</th><th class="num">Share</th><th class="chart"></th></tr></thead>
       <tbody id="frequency"></tbody>
     </table>
+            </div>
+            <div class="tabletotal" id="frequency-total"></div>
 
     <h2>Time on page</h2>
     <p class="lead">Measured in the browser and sent on unload. Background tabs do not count — the clock stops when the page is hidden.</p>
@@ -72,6 +79,8 @@
       <thead><tr><th>Page</th><th class="num">Visits</th><th class="num">Average</th><th class="num">Longest</th><th class="num">Bounced</th></tr></thead>
       <tbody id="dwell"></tbody>
     </table>
+          </div>
+          <div class="tabletotal" id="dwell-total"></div>
 
     <h2>Where traffic comes from <button class="csv" data-csv="referrers">csv</button></h2>
     <p class="lead">External referrers only. Requests from this site's own try-it widget are excluded — they would otherwise sit at the top of a table meant to show where people arrive from.</p>
@@ -79,12 +88,16 @@
       <thead><tr><th>Referrer</th><th class="num">Requests</th><th class="chart"></th></tr></thead>
       <tbody id="referrers"></tbody>
     </table>
+        </div>
+        <div class="tabletotal" id="referrers-total"></div>
 
     <h2>Most-used endpoints <button class="csv" data-csv="paths">csv</button></h2>
     <table>
       <thead><tr><th>Path</th><th class="num">Requests</th><th class="num">Avg</th><th class="num">Slowest</th><th class="chart"></th></tr></thead>
       <tbody id="paths"></tbody>
     </table>
+    </div>
+    <div class="tabletotal" id="paths-total"></div>
 
     <h2>Slowest responses</h2>
     <p class="lead">Ranked by worst single response, not by average — a mean of 8&nbsp;ms hides a 4-second outlier, and the outlier is the bug.</p>
@@ -92,6 +105,8 @@
       <thead><tr><th>Path</th><th class="num">Slowest</th><th class="num">Avg</th><th class="num">Requests</th></tr></thead>
       <tbody id="slowest"></tbody>
     </table>
+      </div>
+      <div class="tabletotal" id="slowest-total"></div>
 
     <h2>Raw request logs</h2>
     <p class="lead">
