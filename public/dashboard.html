@@ -45,17 +45,11 @@
     </div>
 
     <h2>Per day <span class="tzlabel">· days are UTC</span> <button class="csv" data-csv="daily">csv</button></h2>
-    <div class="tablebox">
-      <div class="tablebox">
-        <div class="tablebox">
-          <div class="tablebox">
-            <div class="tablebox">
-              <table>
+    <table>
       <thead><tr><th>Day</th><th class="num">Requests</th><th class="num">Errors</th><th class="num">Visitors</th><th class="chart"></th></tr></thead>
       <tbody id="daily"></tbody>
     </table>
-          </div>
-          <div class="tabletotal" id="daily-total"></div>
+    <div class="tabletotal" id="daily-total"></div>
 
     <h2>When people use it <span id="tz" class="tzlabel"></span>
       <span class="toggle">
@@ -70,7 +64,6 @@
       <thead><tr><th>Region</th><th class="num">People</th><th class="num">Bots</th><th class="num">Requests</th><th class="chart"></th></tr></thead>
       <tbody id="geo"></tbody>
     </table>
-    </div>
     <div class="tabletotal" id="geo-total"></div>
 
     <h2>States &amp; provinces <button class="csv" data-csv="regions">csv</button></h2>
@@ -78,24 +71,21 @@
       <thead><tr><th>Region</th><th class="num">Visitors</th><th class="num">Addresses</th><th class="chart"></th></tr></thead>
       <tbody id="regions"></tbody>
     </table>
-      </div>
-      <div class="tabletotal" id="regions-total"></div>
+    <div class="tabletotal" id="regions-total"></div>
 
     <h2>What is failing <button class="csv" data-csv="errors">csv</button></h2>
     <table>
       <thead><tr><th>Status</th><th>Path</th><th>Cause</th><th>From</th><th class="num">Count</th><th class="chart"></th></tr></thead>
       <tbody id="errors"></tbody>
     </table>
-        </div>
-        <div class="tabletotal" id="errors-total"></div>
+    <div class="tabletotal" id="errors-total"></div>
 
     <h2>Busiest keys <button class="csv" data-csv="keys">csv</button></h2>
     <table>
       <thead><tr><th>Key id</th><th class="num">Requests</th></tr></thead>
       <tbody id="keys"></tbody>
     </table>
-            </div>
-            <div class="tabletotal" id="keys-total"></div>
+    <div class="tabletotal" id="keys-total"></div>
   </div>
 </div>
 
