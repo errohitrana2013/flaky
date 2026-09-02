@@ -6,7 +6,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import worker from "../src/index.js";
 
-function makeEnv({ keys = [], sandboxes = [], records = [] } = {}) {
+function makeEnv({ keys = [], sandboxes = [], records = [], customs = [] } = {}) {
   const kv = new Map();
   const points = [];
 
@@ -17,6 +17,7 @@ function makeEnv({ keys = [], sandboxes = [], records = [] } = {}) {
     if (s.startsWith("SELECT COUNT(*) AS count FROM sandboxes")) return { count: sandboxes.filter((b) => b.key_id === args[0]).length };
     if (s.startsWith("SELECT id, expires_at FROM sandboxes")) return sandboxes.find((b) => b.id === args[0]) || null;
     if (s.startsWith("SELECT body FROM sandbox_records")) return records.find((r) => r.record_id === String(args[2])) || null;
+    if (s.startsWith("SELECT body, expires_at FROM custom_apis")) return customs.find((c) => c.id === args[0]) || null;
     return null;
   };
 
@@ -612,6 +613,90 @@ test("classifies a scanner sweep however it prefixes the path", async () => {
                    "/app.js", "/og.png", "/v1/openapi.json", "/sitemap.xml"]) {
     assert.ok(!isProbe(p), `${p} must not`);
   }
+});
+
+const CUSTOM = {
+  id: "a1b2c3d4e5f60718",
+  body: JSON.stringify({ employees: [{ id: 1, name: "Asha", dept: "Platform" }, { id: 2, name: "Wei", dept: "Product" }] }),
+  expires_at: Date.now() + 60000,
+};
+
+test("turns pasted JSON into an API", async () => {
+  const res = await call("/v1/custom", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ employees: [{ id: 1, name: "Asha" }], projects: [] }),
+  });
+  assert.equal(res.status, 201);
+
+  const made = await body(res);
+  assert.match(made.id, /^[a-f0-9]{16}$/);
+  assert.deepEqual(made.resources.map((r) => r.name), ["employees", "projects"]);
+  assert.match(made.export, /format=json-server/);
+});
+
+test("accepts a bare array and names it items", async () => {
+  const made = await body(await call("/v1/custom", {
+    method: "POST", headers: { "content-type": "application/json" },
+    body: JSON.stringify([{ id: 1 }, { id: 2 }]),
+  }));
+  assert.deepEqual(made.resources.map((r) => r.name), ["items"]);
+});
+
+test("rejects JSON it cannot serve, and says why", async () => {
+  const broken = await call("/v1/custom", { method: "POST", body: "{oops" });
+  assert.equal(broken.status, 400);
+  // Someone pasting by hand needs the position, not "invalid input".
+  assert.match((await body(broken)).error.message, /not valid JSON/);
+
+  const noArrays = await call("/v1/custom", { method: "POST", body: JSON.stringify({ a: 1 }) });
+  assert.equal(noArrays.status, 400);
+  assert.match((await body(noArrays)).error.hint, /becomes an endpoint/);
+});
+
+test("serves a custom API with the usual query parameters", async () => {
+  const env = makeEnv({ customs: [CUSTOM] });
+  const base = `/v1/custom/${CUSTOM.id}`;
+
+  assert.equal((await body(await call(`${base}/employees`, {}, env))).length, 2);
+  assert.equal((await body(await call(`${base}/employees?dept=Product`, {}, env)))[0].name, "Wei");
+  assert.equal((await body(await call(`${base}/employees/1`, {}, env))).name, "Asha");
+  assert.equal((await body(await call(`${base}/employees?_select=name`, {}, env)))[0].dept, undefined);
+
+  const missing = await call(`${base}/nothing`, {}, env);
+  assert.equal(missing.status, 404);
+  assert.match((await body(missing)).error.hint, /employees/);
+});
+
+test("chaos works on a custom API — the reason it belongs here", async () => {
+  const env = makeEnv({ customs: [CUSTOM] });
+  const base = `/v1/custom/${CUSTOM.id}`;
+  assert.equal((await call(`${base}/employees?_status=503`, {}, env)).status, 503);
+  assert.equal((await call(`${base}/employees?_fail_rate=1`, {}, env)).status, 500);
+  assert.equal((await call(`${base}/employees?_status=999`, {}, env)).status, 400);
+});
+
+test("exports something that runs locally and never expires", async () => {
+  const env = makeEnv({ customs: [CUSTOM] });
+  const base = `/v1/custom/${CUSTOM.id}`;
+
+  const db = await call(`${base}/export?format=json-server`, {}, env);
+  assert.match(db.headers.get("content-disposition"), /filename="db.json"/);
+  assert.deepEqual(Object.keys(JSON.parse(await db.text())), ["employees"]);
+
+  const msw = await call(`${base}/export?format=msw`, {}, env);
+  const file = await msw.text();
+  assert.match(file, /import \{ http, HttpResponse \} from "msw"/);
+  assert.match(file, /http\.get\("\*\/employees"/);
+
+  assert.equal((await call(`${base}/export?format=nope`, {}, env)).status, 400);
+});
+
+test("an expired custom API is gone, not empty", async () => {
+  const env = makeEnv({ customs: [{ ...CUSTOM, expires_at: Date.now() - 1000 }] });
+  const res = await call(`/v1/custom/${CUSTOM.id}/employees`, {}, env);
+  assert.equal(res.status, 410);
+  assert.match((await body(res)).error.hint, /24 hours/);
 });
 
 test("answers preflight requests", async () => {

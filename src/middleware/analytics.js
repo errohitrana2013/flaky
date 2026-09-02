@@ -218,6 +218,7 @@ export async function purgeExpired(env) {
       "DELETE FROM sandbox_records WHERE sandbox_id IN (SELECT id FROM sandboxes WHERE expires_at < ?)"
     ).bind(now),
     env.DB.prepare("DELETE FROM sandboxes WHERE expires_at < ?").bind(now),
+    env.DB.prepare("DELETE FROM custom_apis WHERE expires_at < ?").bind(now),
 
     // Visitor hashes: the privacy clock, and the shortest of the three.
     env.DB.prepare("DELETE FROM daily_visitors WHERE day < ?").bind(visitorCutoff),
