@@ -2,6 +2,7 @@ import { json, fail, echo } from "../lib/response.js";
 import { queryCollection, pageHeaders } from "../lib/query.js";
 import { today } from "../lib/hash.js";
 import { TIERS, MAX_CUSTOM_BYTES, CUSTOM_TTL_MS, CUSTOM_PER_IP_PER_DAY } from "../config/tiers.js";
+import { nodeRunner, pythonRunner } from "./runner.js";
 
 // Paste JSON, get a REST API for it, for 24 hours.
 //
@@ -94,7 +95,12 @@ export async function createCustom(ctx) {
         url: `${base}/${name}`,
       })),
       chaos: `Every control works here too, e.g. ${base}/${Object.keys(data)[0]}?_status=503`,
-      export: `${base}/export?format=json-server`,
+      export: {
+        server: `${base}/export?format=node`,
+        python: `${base}/export?format=python`,
+        jsonServer: `${base}/export?format=json-server`,
+        msw: `${base}/export?format=msw`,
+      },
       note: "Deleted 24 hours from now. Export it if you want to keep it — the export runs locally and never expires.",
     },
     { status: 201 }
@@ -164,6 +170,29 @@ function exportCustom(ctx, data, id) {
     });
   }
 
+  // A whole server, not just data. json-server can serve db.json but cannot fail
+  // on purpose, so a runner that carries the chaos controls is the only way the
+  // local copy behaves like the hosted one.
+  if (format === "node") {
+    return new Response(nodeRunner(data), {
+      headers: {
+        "content-type": "text/javascript; charset=utf-8",
+        "content-disposition": 'attachment; filename="mock-server.mjs"',
+        "x-run-with": "node mock-server.mjs",
+      },
+    });
+  }
+
+  if (format === "python") {
+    return new Response(pythonRunner(data), {
+      headers: {
+        "content-type": "text/x-python; charset=utf-8",
+        "content-disposition": 'attachment; filename="mock_server.py"',
+        "x-run-with": "python3 mock_server.py",
+      },
+    });
+  }
+
   if (format === "msw") {
     const handlers = Object.entries(data)
       .map(([name]) => `  http.get("*/${name}", () => HttpResponse.json(db.${name})),`)
@@ -185,5 +214,5 @@ ${handlers}
     });
   }
 
-  return fail(400, `Unknown format '${echo(format)}'`, "Available: json-server, msw.");
+  return fail(400, `Unknown format '${echo(format)}'`, "Available: node, python, json-server, msw.");
 }

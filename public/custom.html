@@ -95,14 +95,25 @@
       offline, in CI, and long after this service is gone.
     </p>
     <div class="exports">
-      <button id="dl-json" class="ghostbtn" type="button">Download db.json</button>
-      <button id="dl-msw" class="ghostbtn" type="button">Download MSW handlers</button>
+      <button id="dl-node" class="ghostbtn primary" type="button">Download server (Node)</button>
+      <button id="dl-python" class="ghostbtn" type="button">Download server (Python)</button>
+      <button id="dl-json" class="ghostbtn" type="button">db.json</button>
+      <button id="dl-msw" class="ghostbtn" type="button">MSW handlers</button>
     </div>
-    <pre class="mt-16"><span class="tok-com"># db.json — a complete local server, no config</span>
-npx json-server db.json
+    <pre class="mt-16"><span class="tok-com"># one file, no install, no network — and the chaos controls still work</span>
+node mock-server.mjs
+python3 mock_server.py
 
-<span class="tok-com"># handlers.js — intercepts fetch in your test suite</span>
-npm i -D msw</pre>
+<span class="tok-com"># then, on your own machine:</span>
+curl 'http://localhost:4000/todos?_status=503'
+curl 'http://localhost:4000/todos?_fail_rate=0.3'</pre>
+    <p class="mt-16">
+      The two servers are self-contained: your data is embedded in the file and
+      parsed at startup, so there is nothing to install and nothing to fetch.
+      <strong>They carry the same controls as the hosted API</strong>, which is the
+      part <code>json-server</code> cannot do — it will serve <code>db.json</code>
+      happily, but it cannot fail on demand.
+    </p>
   </section>
 
   <footer>

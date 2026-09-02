@@ -202,11 +202,26 @@ curl -X POST https://flakyapi.dev/v1/custom \
   -d '{"todos":[{"id":1,"title":"try flaky","done":false}]}'
 ```
 
-The export matters more than the hosting. `?format=json-server` returns a
-`db.json` that `npx json-server db.json` runs; `?format=msw` returns handlers for
-a test suite. Both work offline, in CI, and after this service is gone — and
-being able to walk away with the data is the strongest argument for trusting it
-in the first place.
+The export matters more than the hosting, and there are four:
+
+| `?format=` | You get | Run it with |
+|---|---|---|
+| `node` | a complete server, data embedded | `node mock-server.mjs` |
+| `python` | the same, standard library only | `python3 mock_server.py` |
+| `json-server` | `db.json` | `npx json-server db.json` |
+| `msw` | request handlers | in your test suite |
+
+The two runners are the point. They have no dependencies, need no network, and
+**carry the same chaos controls** — so `?_status=503` works against localhost
+exactly as it does here, which `json-server` cannot do at all. Being able to walk
+away with a working server is the strongest argument for trusting the hosted one.
+
+One detail worth keeping: data is embedded as a JSON *string* and parsed at
+startup, never as a literal. In Python that is required — JSON's `true`/`false`/
+`null` are not `True`/`False`/`None`, and interpolating them produces a file that
+raises `NameError` on the first boolean. The Python runner also compares values
+the way JSON spells them, because `str(True)` is `"True"` and `?done=true` would
+otherwise match nothing.
 
 Stored as one row per document rather than per record: they are read in full,
 never queried across, and one read beats many. 256 KB a document, ten a day per

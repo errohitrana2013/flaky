@@ -222,12 +222,14 @@ export function getOpenApi(ctx) {
     get: {
       summary: "Download it as files that run locally",
       description:
-        "json-server returns a db.json you run with `npx json-server db.json`; msw returns handlers " +
-        "for a test suite. Both work offline, in CI, and after this service is gone.",
+        "node and python return a complete single-file server with your data embedded — no install, no " +
+        "network, and the chaos parameters work locally exactly as they do here, which json-server " +
+        "cannot do. json-server returns a db.json; msw returns handlers for a test suite. All four " +
+        "work offline, in CI, and after this service is gone.",
       tags: ["custom"],
       parameters: [
         { name: "id", in: "path", required: true, schema: { type: "string" } },
-        { name: "format", in: "query", schema: { type: "string", enum: ["json-server", "msw"], default: "json-server" } },
+        { name: "format", in: "query", schema: { type: "string", enum: ["node", "python", "json-server", "msw"], default: "json-server" } },
       ],
       responses: { 200: { description: "A file, as an attachment." }, 400: errorResponse("Unknown format.") },
     },

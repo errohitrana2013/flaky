@@ -62,3 +62,8 @@
 .scroller { overflow-x: auto; }
 td.mono a { text-decoration: none; }
 td.mono a:hover { text-decoration: underline; }
+
+/* The runners are the recommendation; db.json and MSW are for people who
+   already know they want them. */
+.ghostbtn.primary { background: var(--accent); color: #fff; border-color: transparent; }
+.ghostbtn.primary:hover { color: #fff; opacity: .9; }

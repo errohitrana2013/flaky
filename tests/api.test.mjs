@@ -632,7 +632,8 @@ test("turns pasted JSON into an API", async () => {
   const made = await body(res);
   assert.match(made.id, /^[a-f0-9]{16}$/);
   assert.deepEqual(made.resources.map((r) => r.name), ["employees", "projects"]);
-  assert.match(made.export, /format=json-server/);
+  assert.match(made.export.server, /format=node/);
+  assert.match(made.export.python, /format=python/);
 });
 
 test("accepts a bare array and names it items", async () => {
@@ -690,6 +691,26 @@ test("exports something that runs locally and never expires", async () => {
   assert.match(file, /http\.get\("\*\/employees"/);
 
   assert.equal((await call(`${base}/export?format=nope`, {}, env)).status, 400);
+
+  // The runners are whole servers, and they must at least be syntactically
+  // valid — a download that does not run is worse than no download.
+  const node = await call(`${base}/export?format=node`, {}, env);
+  assert.match(node.headers.get("content-disposition"), /mock-server\.mjs/);
+  // Structure only here. Whether it *runs* is checked by actually running it —
+  // see scripts/check-runners.mjs — because new Function() cannot evaluate an ES
+  // module with a shebang, and an approximation that fails on valid code is
+  // worse than no check.
+  const nodeSrc = await node.text();
+  assert.match(nodeSrc, /createServer/, "node runner must be a server");
+  assert.match(nodeSrc, /_fail_rate/, "the chaos controls are the point of it");
+
+  const py = await call(`${base}/export?format=python`, {}, env);
+  assert.match(py.headers.get("content-disposition"), /mock_server\.py/);
+  const pySrc = await py.text();
+  // JSON true/false/null are not Python literals, so the data must be embedded
+  // as a string and parsed — interpolating it directly is a NameError waiting.
+  assert.match(pySrc, /DB = json\.loads\("/, "data must be parsed, not inlined");
+  assert.ok(!/=\s*\{[^}]*\btrue\b/.test(pySrc), "no raw JSON booleans in Python source");
 });
 
 test("an expired custom API is gone, not empty", async () => {
