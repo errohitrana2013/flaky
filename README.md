@@ -68,6 +68,9 @@ npm run deploy
 | `POST /v1/keys` | Issue a free API key |
 | `POST /v1/sandbox` | Create a 24h sandbox (needs a key) |
 | `* /v1/sandbox/:id/:resource` | Full CRUD that persists |
+| `POST /v1/custom` | Turn your own JSON into a mock API for 24 hours |
+| `GET /v1/custom/:id/:resource` | Read it, with every query and chaos parameter |
+| `GET /v1/custom/:id/export?format=` | Download it as `json-server` or `msw` files |
 | `GET /v1/meta` | Resource counts, tier limits, your tier |
 | `GET /v1/openapi.json` | OpenAPI 3.1 spec, generated from the same values as `/v1/meta` |
 | `GET /v1/admin/stats?days=14` | Traffic rollups (admin token required) |
@@ -139,6 +142,7 @@ flaky/
 │
 ├── public/                   static site, served for anything outside /v1
 │   ├── index.html            landing page with the live response inspector
+│   ├── custom.html           paste your own JSON, get an API for it
 │   ├── dashboard.html        traffic dashboard (admin token required)
 │   └── docs/                 long-form docs go here
 │
@@ -183,6 +187,30 @@ no existing file grows.
 | A new mock resource | `scripts/generate-db.js` + `data/relations.js` only |
 | A new nested route | `data/relations.js` only |
 | A new tier | `config/tiers.js` only |
+
+## Your own JSON
+
+`POST /v1/custom` takes an array, or an object whose values are arrays, and every
+array becomes an endpoint for 24 hours. No account. The point is not that it
+serves your data — plenty of things do — but that **the chaos controls work on
+it**, so you can force a 503 against your own shapes rather than someone else's
+sample records.
+
+```bash
+curl -X POST https://flakyapi.dev/v1/custom \
+  -H 'content-type: application/json' \
+  -d '{"todos":[{"id":1,"title":"try flaky","done":false}]}'
+```
+
+The export matters more than the hosting. `?format=json-server` returns a
+`db.json` that `npx json-server db.json` runs; `?format=msw` returns handlers for
+a test suite. Both work offline, in CI, and after this service is gone — and
+being able to walk away with the data is the strongest argument for trusting it
+in the first place.
+
+Stored as one row per document rather than per record: they are read in full,
+never queried across, and one read beats many. 256 KB a document, ten a day per
+address, purged by the same nightly job as sandboxes.
 
 ## The dataset
 

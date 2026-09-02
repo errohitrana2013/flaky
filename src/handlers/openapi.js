@@ -179,6 +179,60 @@ export function getOpenApi(ctx) {
     ], responses: { 201: { description: "The stored record." }, 413: errorResponse("Record larger than 64 KB.") } },
   };
 
+  paths["/custom"] = {
+    post: {
+      summary: "Turn your own JSON into a mock API",
+      description:
+        "Send an array, or an object whose values are arrays; each array becomes an endpoint. " +
+        "No account needed. Lives 24 hours, then is deleted — export it to keep it. Every query " +
+        "and chaos parameter works on the result, which is the point: your shapes, failing how you ask.",
+      tags: ["custom"],
+      requestBody: {
+        required: true,
+        content: { "application/json": { schema: { oneOf: [{ type: "array" }, { type: "object" }] } } },
+      },
+      responses: {
+        201: { description: "The id, the endpoints it created, and an export link." },
+        400: errorResponse("Not valid JSON, or no arrays in it to serve."),
+        413: errorResponse("Larger than 256 KB."),
+        429: errorResponse("Too many custom APIs from this address today."),
+      },
+    },
+  };
+
+  paths["/custom/{id}/{resource}"] = {
+    get: {
+      summary: "Read one of your own resources",
+      description: "Filtering, sorting, paging, _select and every chaos parameter apply here exactly as they do to the built-in resources.",
+      tags: ["custom"],
+      parameters: [
+        { name: "id", in: "path", required: true, schema: { type: "string", pattern: "^[0-9a-f]{16}$" } },
+        { name: "resource", in: "path", required: true, schema: { type: "string" } },
+        ...[...QUERY_PARAMS, ...CHAOS_PARAMS].map(param),
+      ],
+      responses: {
+        200: { description: "Your records." },
+        404: errorResponse("No such API, or no such resource in it."),
+        410: errorResponse("It expired. They last 24 hours."),
+      },
+    },
+  };
+
+  paths["/custom/{id}/export"] = {
+    get: {
+      summary: "Download it as files that run locally",
+      description:
+        "json-server returns a db.json you run with `npx json-server db.json`; msw returns handlers " +
+        "for a test suite. Both work offline, in CI, and after this service is gone.",
+      tags: ["custom"],
+      parameters: [
+        { name: "id", in: "path", required: true, schema: { type: "string" } },
+        { name: "format", in: "query", schema: { type: "string", enum: ["json-server", "msw"], default: "json-server" } },
+      ],
+      responses: { 200: { description: "A file, as an attachment." }, 400: errorResponse("Unknown format.") },
+    },
+  };
+
   paths["/meta"] = {
     get: {
       summary: "Machine-readable description of the API",
@@ -209,6 +263,7 @@ export function getOpenApi(ctx) {
       tags: [
         ...RESOURCES.map((name) => ({ name, description: `${COUNTS[name]} records` })),
         { name: "sandbox", description: "Writes that persist for 24 hours" },
+        { name: "custom", description: "Your own JSON, served as an API for 24 hours" },
         { name: "account", description: "Keys and API description" },
       ],
       components: {

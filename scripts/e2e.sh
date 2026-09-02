@@ -13,7 +13,7 @@ code() { curl -s -o /dev/null -w '%{http_code}' --max-time 25 "$@"; }
 echo "── target: $U"
 
 echo; echo "PAGES & ASSETS"
-for p in / /dashboard /app.css /app.js /dashboard.css /dashboard.js /favicon.svg /logo.svg; do
+for p in / /custom /dashboard /app.css /app.js /custom.css /custom.js /dashboard.css /dashboard.js /favicon.svg /logo.svg; do
   is "GET $p" "$(code "$U$p")" "200"
 done
 is "unknown page 404s" "$(code "$U/no-such-page")" "404"
@@ -87,6 +87,22 @@ if [ -n "$ADMIN" ]; then
   is "csv with token" "$(code "$U/v1/admin/export?dataset=countries" -H "authorization: Bearer $ADMIN")" "200"
   is "bad dataset 400" "$(code "$U/v1/admin/export?dataset=nope" -H "authorization: Bearer $ADMIN")" "400"
 fi
+
+echo; echo "CUSTOM APIs"
+CID=$(curl -s --max-time 25 -X POST "$U/v1/custom" -H 'content-type: application/json' \
+  -d '{"widgets":[{"id":1,"name":"a"},{"id":2,"name":"b"}]}' | sed -n 's/.*"id":"\([a-f0-9]\{16\}\)".*/\1/p')
+[ -n "$CID" ] && ok "created a custom API" || bad "create" "no id returned"
+if [ -n "$CID" ]; then
+  is "reads it back"        "$(curl -s --max-time 25 "$U/v1/custom/$CID/widgets" | grep -c '"name":"a"')" "1"
+  is "filters it"           "$(curl -s --max-time 25 "$U/v1/custom/$CID/widgets?name=b" | grep -c '"id":2')" "1"
+  is "chaos applies to it"  "$(code "$U/v1/custom/$CID/widgets?_status=503")" "503"
+  is "validates on it"      "$(code "$U/v1/custom/$CID/widgets?_status=999")" "400"
+  is "exports json-server"  "$(code "$U/v1/custom/$CID/export?format=json-server")" "200"
+  is "exports msw"          "$(code "$U/v1/custom/$CID/export?format=msw")" "200"
+  is "unknown resource 404" "$(code "$U/v1/custom/$CID/nope")" "404"
+fi
+is "rejects invalid JSON"   "$(code -X POST "$U/v1/custom" -H 'content-type: application/json' -d '{oops')" "400"
+is "rejects arrayless JSON" "$(code -X POST "$U/v1/custom" -H 'content-type: application/json' -d '{"a":1}')" "400"
 
 echo; echo "CORS"
 is "preflight 204" "$(code -X OPTIONS "$U/v1/posts")" "204"
