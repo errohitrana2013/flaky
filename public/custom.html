@@ -1,0 +1,121 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Your own JSON as a mock API | flaky</title>
+<meta name="description" content="Paste any JSON and get a working REST API for it in one click. Filtering, sorting and paging included — plus the chaos controls, so you can force a 503 against your own data. Free, no account, 24 hours.">
+<link rel="canonical" href="https://flakyapi.dev/custom">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://flakyapi.dev/custom">
+<meta property="og:title" content="Paste JSON, get a mock API — with failures you can ask for">
+<meta property="og:description" content="One click, no account. Your own data, served as endpoints, with the chaos controls that make flaky different. Export it and keep it forever.">
+<meta property="og:image" content="https://flakyapi.dev/og.png">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<link rel="alternate icon" href="/favicon.ico" sizes="32x32">
+<link rel="stylesheet" href="/app.css">
+<link rel="stylesheet" href="/custom.css">
+</head>
+<body>
+<div class="wrap">
+
+  <header class="doc-head">
+    <a class="brand" href="/" aria-label="flaky — home">
+      <svg class="mark" viewBox="0 0 32 32" aria-hidden="true">
+        <rect class="bar"   x="3"    y="18"  width="5"   height="9"  rx="2.5"/>
+        <rect class="bar"   x="10"   y="12"  width="5"   height="15" rx="2.5"/>
+        <rect class="ghost" x="17.6" y="8.6" width="4.8" height="11" rx="2.4"/>
+        <rect class="flake" x="17"   y="22"  width="5"   height="5"  rx="2.5"/>
+        <rect class="bar"   x="24"   y="4"   width="5"   height="23" rx="2.5"/>
+      </svg>
+      <span class="wordmark">flaky<span class="dot">.</span></span>
+    </a>
+
+    <nav class="tabs" aria-label="Which API">
+      <a href="/">Ready-made API</a>
+      <a href="/custom" class="on" aria-current="page">Your own JSON</a>
+    </nav>
+
+    <h1>Paste your JSON. Get an API.</h1>
+    <p class="lede">
+      No account, no schema, no configuration. Every array in what you paste
+      becomes an endpoint — and <strong>the chaos controls work on it</strong>, so
+      you can force a 503 against your own shapes rather than someone else's
+      sample data.
+    </p>
+  </header>
+
+  <section>
+    <div class="editor">
+      <div class="editor-top">
+        <span class="label">Your JSON</span>
+        <div class="editor-actions">
+          <button id="sample" class="ghostbtn" type="button">Use an example</button>
+          <span id="size" class="size"></span>
+        </div>
+      </div>
+      <textarea id="json" spellcheck="false" aria-label="JSON to turn into an API"
+        placeholder='{
+  "todos": [
+    { "id": 1, "title": "Test the loading state", "done": false },
+    { "id": 2, "title": "Test the error state",   "done": true }
+  ]
+}'></textarea>
+      <div class="editor-bottom">
+        <button id="create">Create the API</button>
+        <span class="hint">Free · lives 24 hours · nothing to sign up for</span>
+      </div>
+    </div>
+    <div id="error" class="error" hidden></div>
+  </section>
+
+  <section id="result" hidden>
+    <h2>It is live</h2>
+    <p class="lede small">
+      Expires <b id="expires"></b>. Export it below if you want to keep it — that
+      file runs on your machine and never expires.
+    </p>
+
+    <h3>Your endpoints</h3>
+    <div class="scroller">
+      <table>
+        <thead><tr><th>Resource</th><th class="num">Records</th><th>URL</th></tr></thead>
+        <tbody id="endpoints"></tbody>
+      </table>
+    </div>
+
+    <h3>Now break it on purpose</h3>
+    <p>This is the part no other mock service does — your data, failing how you ask.</p>
+    <pre id="chaos"></pre>
+
+    <h3>Keep it</h3>
+    <p>
+      A hosted mock that expires in a day is useful for a day. These files run
+      offline, in CI, and long after this service is gone.
+    </p>
+    <div class="exports">
+      <button id="dl-json" class="ghostbtn" type="button">Download db.json</button>
+      <button id="dl-msw" class="ghostbtn" type="button">Download MSW handlers</button>
+    </div>
+    <pre class="mt-16"><span class="tok-com"># db.json — a complete local server, no config</span>
+npx json-server db.json
+
+<span class="tok-com"># handlers.js — intercepts fetch in your test suite</span>
+npm i -D msw</pre>
+  </section>
+
+  <footer>
+    <p class="m-0">
+      <a href="/">Ready-made API</a> ·
+      <a href="/docs/jsonplaceholder">Moving from JSONPlaceholder</a> ·
+      <a href="/privacy">Privacy &amp; contact</a> ·
+      <a href="https://github.com/errohitrana2013/flaky">Source</a>
+    </p>
+  </footer>
+
+</div>
+<script src="/custom.js" defer></script>
+<script src="/dwell.js" defer></script>
+</body>
+</html>

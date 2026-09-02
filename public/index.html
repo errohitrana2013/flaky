@@ -23,6 +23,7 @@
 <link rel="alternate icon" href="/favicon.ico" sizes="32x32">
 <link rel="apple-touch-icon" href="/favicon.png">
 <link rel="stylesheet" href="/app.css">
+<link rel="stylesheet" href="/custom.css">
 </head>
 <body>
 <div class="wrap">
@@ -38,6 +39,12 @@
       </svg>
       <span class="wordmark">flaky<span class="dot">.</span></span>
     </a>
+
+    <nav class="tabs" aria-label="Which API">
+      <a href="/" class="on" aria-current="page">Ready-made API</a>
+      <a href="/custom">Your own JSON</a>
+    </nav>
+
     <h1>A mock REST API that fails on purpose.</h1>
     <p class="lede">
       Real-looking data at real URLs, like every other fake API. The difference:
@@ -110,6 +117,12 @@ GET /v1/products?_delay=1500&amp;_fail_rate=0.2</pre>
       <thead><tr><th>Resource</th><th>Rows</th><th>Nested</th></tr></thead>
       <tbody><tr><td colspan="3" class="muted">Loading…</td></tr></tbody>
     </table>
+    <div class="note mt-20">
+      Need your own shapes instead? <a href="/custom">Paste any JSON and get an API
+      for it</a> — same query parameters, same chaos controls, and you can export
+      it to run locally.
+    </div>
+
     <h3>Filtering, search, sorting, paging</h3>
     <pre>GET /v1/todos?userId=3&amp;completed=true   <span class="tok-com"># filter by any field</span>
 GET /v1/posts?_q=voluptate                <span class="tok-com"># full-text search</span>
