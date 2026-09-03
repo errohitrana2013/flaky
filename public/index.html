@@ -104,6 +104,38 @@ GET /v1/posts?_fail_rate=0.3
 
 <span class="tok-com"># slow AND flaky, because that is what production is</span>
 GET /v1/products?_delay=1500&amp;_fail_rate=0.2</pre>
+    <h3>A failure that stops</h3>
+    <p>
+      The three above are a coin toss, a permanent outage, and a wait. None of them
+      can test <strong>retry logic or a circuit breaker</strong>, because both need
+      a <em>sequence</em>: fail, fail, then work — so a test can assert
+      <em>which</em> attempt recovered rather than that one eventually did.
+    </p>
+    <pre>curl -X POST <span class="host">https://flakyapi.dev</span>/v1/scenario -d '{"fail":2}'
+<span class="tok-com"># → {"id":"66b6…"}</span>
+
+GET /v1/posts?_scenario=66b6…   <span class="tok-com"># 503 · x-scenario-attempt: 1</span>
+GET /v1/posts?_scenario=66b6…   <span class="tok-com"># 503 · x-scenario-attempt: 2</span>
+GET /v1/posts?_scenario=66b6…   <span class="tok-com"># 200 — your backoff worked</span>
+
+<span class="tok-com"># rewind between tests, without spending an attempt</span>
+POST /v1/scenario/66b6…/reset</pre>
+    <p class="mt-16">
+      This is what people currently write a throwaway fake server for, and it is the
+      one control no other mock API has at all.
+    </p>
+
+    <h3>Three more, for failures nothing else reproduces</h3>
+    <pre><span class="tok-com"># a 429 that actually says when to come back</span>
+GET /v1/posts?_status=429                  <span class="tok-com"># Retry-After: 5</span>
+GET /v1/posts?_status=503&amp;_retry_after=30
+
+<span class="tok-com"># a body that stops mid-record — the .json() catch path nobody tests</span>
+GET /v1/posts?_malformed=1
+
+<span class="tok-com"># the CORS error, on purpose. only a browser will refuse it</span>
+GET /v1/posts?_cors=off</pre>
+
     <div class="note mt-20">
       This is the part you would otherwise write a local mock server for. Here it is a
       query parameter, so it works from a browser console, a curl one-liner, a CodePen,
@@ -128,6 +160,8 @@ GET /v1/products?_delay=1500&amp;_fail_rate=0.2</pre>
 GET /v1/posts?_q=voluptate                <span class="tok-com"># full-text search</span>
 GET /v1/products?_sort=price&amp;_order=desc  <span class="tok-com"># sort</span>
 GET /v1/photos?_page=2&amp;_limit=50          <span class="tok-com"># paginate</span>
+GET /v1/photos?_start=40&amp;_limit=10        <span class="tok-com"># or offset, json-server style</span>
+GET /v1/products?_select=title,price      <span class="tok-com"># only these fields</span>
 GET /v1/posts/1/comments                  <span class="tok-com"># nested</span></pre>
   </section>
 
