@@ -35,6 +35,11 @@ const CHAOS_PARAMS = [
     schema: { type: "integer", minimum: 0, maximum: 3600, example: 30 },
   },
   {
+    name: "_scenario",
+    description: "A scenario id from POST /v1/scenario. Fails a fixed number of times, then recovers — the deterministic sequence retry and circuit-breaker tests need.",
+    schema: { type: "string", pattern: "^[0-9a-f]{16}$" },
+  },
+  {
     name: "_malformed",
     description: "Truncate the body mid-record, as a dropped connection would. Valid-looking JSON that stops — the .json() failure path.",
     schema: { type: "integer", enum: [0, 1] },
@@ -179,6 +184,36 @@ export function getOpenApi(ctx) {
     ], responses: { 201: { description: "The stored record." }, 413: errorResponse("Record larger than 64 KB.") } },
   };
 
+  paths["/scenario"] = {
+    post: {
+      summary: "Create a failure sequence: fail N times, then recover",
+      description:
+        "_fail_rate is random and cannot be asserted on; _status never recovers. A scenario is a counter, " +
+        "which is what retry logic and circuit breakers actually need — fail twice and succeed on the third " +
+        "so a test can prove the backoff worked, or fail N consecutive times to force a breaker open and " +
+        "then let it close. Responses carry x-scenario-attempt.",
+      tags: ["scenario"],
+      requestBody: {
+        content: { "application/json": { schema: { type: "object", properties: {
+          fail: { type: "integer", minimum: 0, maximum: 50, default: 2 },
+          status: { type: "integer", minimum: 400, maximum: 599, default: 503 },
+        } } } },
+      },
+      responses: { 201: { description: "The id, and how to use and reset it." }, 400: errorResponse("Bad policy.") },
+    },
+  };
+  paths["/scenario/{id}"] = {
+    get: { summary: "How far through the sequence you are", tags: ["scenario"],
+      parameters: [{ name: "id", in: "path", required: true, schema: { type: "string" } }],
+      responses: { 200: { description: "Attempts so far and whether the next one fails." }, 404: errorResponse("No such scenario.") } },
+  };
+  paths["/scenario/{id}/reset"] = {
+    post: { summary: "Rewind the counter without spending an attempt", tags: ["scenario"],
+      description: "For a test's beforeEach. The inline ?_scenario_reset=1 rewinds too, but that request then becomes attempt 1.",
+      parameters: [{ name: "id", in: "path", required: true, schema: { type: "string" } }],
+      responses: { 200: { description: "Rewound." }, 404: errorResponse("No such scenario.") } },
+  };
+
   paths["/custom"] = {
     post: {
       summary: "Turn your own JSON into a mock API",
@@ -266,6 +301,7 @@ export function getOpenApi(ctx) {
         ...RESOURCES.map((name) => ({ name, description: `${COUNTS[name]} records` })),
         { name: "sandbox", description: "Writes that persist for 24 hours" },
         { name: "custom", description: "Your own JSON, served as an API for 24 hours" },
+        { name: "scenario", description: "Failure sequences that recover, for retry and circuit-breaker tests" },
         { name: "account", description: "Keys and API description" },
       ],
       components: {

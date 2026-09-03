@@ -91,7 +91,8 @@ Response controls, on any request:
 | `?_fail_rate=0.3` | fail this share of requests, rolled per request |
 | `?_retry_after=30` | seconds for the `Retry-After` header |
 | `?_malformed=1` | truncate the body mid-record, as a dropped connection would |
-| `?_cors=off` | omit the CORS headers so a browser refuses it
+| `?_cors=off` | omit the CORS headers so a browser refuses it |
+| `?_scenario=<id>` | fail a fixed number of times, then recover
 
 These are validated strictly and an out-of-range value is a `400`, never a
 silent fallback. `_delay` takes 0–10000 ms, `_fail_rate` a probability of 0–1,
@@ -187,6 +188,28 @@ no existing file grows.
 | A new mock resource | `scripts/generate-db.js` + `data/relations.js` only |
 | A new nested route | `data/relations.js` only |
 | A new tier | `config/tiers.js` only |
+
+## Failures that recover
+
+`_fail_rate` is a coin toss and `_status` never recovers, so neither can test the
+two things people most often hand-roll a fake for: **retry logic** and **circuit
+breakers**. Both need a sequence.
+
+```bash
+curl -X POST https://flakyapi.dev/v1/scenario -d '{"fail":2,"status":503}'
+# → {"id":"66b6…"}
+
+curl 'https://flakyapi.dev/v1/posts?_scenario=66b6…'   # 503, attempt 1
+curl 'https://flakyapi.dev/v1/posts?_scenario=66b6…'   # 503, attempt 2
+curl 'https://flakyapi.dev/v1/posts?_scenario=66b6…'   # 200 — the backoff worked
+```
+
+Every response carries `x-scenario-attempt`, so a test can assert *which* attempt
+succeeded rather than just that one eventually did. `POST /v1/scenario/:id/reset`
+rewinds between tests without spending an attempt — put it in `beforeEach`.
+
+This is the only stateful thing in the API: one row, one write per request that
+uses one, and nothing at all for anyone who does not.
 
 ## Your own JSON
 

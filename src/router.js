@@ -6,6 +6,7 @@ import { getOpenApi } from "./handlers/openapi.js";
 import { getStats, exportCsv, getInsights } from "./handlers/admin.js";
 import { recordBeacon } from "./handlers/beacon.js";
 import { createCustom, readCustom } from "./handlers/custom.js";
+import { createScenario, readScenario, resetScenario } from "./handlers/scenario.js";
 
 // Routes are matched top to bottom, first match wins. Static segments beat
 // dynamic ones, so specific paths are listed before the generic catch-alls.
@@ -19,6 +20,9 @@ const ROUTES = [
   { method: "GET",  path: "/v1/meta",                                 handler: getMeta },
   { method: "GET",  path: "/v1/openapi.json",                         handler: getOpenApi },
   { method: "POST", path: "/v1/sandbox",                              handler: createSandbox },
+  { method: "POST", path: "/v1/scenario",                             handler: createScenario },
+  { method: "GET",  path: "/v1/scenario/:id",                         handler: readScenario },
+  { method: "POST", path: "/v1/scenario/:id/reset",                   handler: resetScenario },
   { method: "POST", path: "/v1/custom",                               handler: createCustom },
   { method: "GET",  path: "/v1/custom/:id",                           handler: readCustom },
   { method: "GET",  path: "/v1/custom/:id/:resource",                 handler: readCustom },

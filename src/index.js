@@ -12,6 +12,7 @@ import { preflight, fail, withHeaders, harden } from "./lib/response.js";
 import { resolveTier } from "./middleware/auth.js";
 import { checkRateLimit, rateHeaders } from "./middleware/ratelimit.js";
 import { applyChaos, truncate } from "./middleware/chaos.js";
+import { applyScenario } from "./handlers/scenario.js";
 import { visitorId, classifyClient, logRequest, rollUp, sendDigest, purgeExpired } from "./middleware/analytics.js";
 import { today, utcHour, ipId } from "./lib/hash.js";
 
@@ -60,7 +61,12 @@ async function handle(request, env, ctx, url, state) {
   const injected = await applyChaos(url.searchParams);
   if (injected) return withHeaders(injected, headers);
 
-  let response = withHeaders(await route.handler(context), headers);
+  // After chaos, so a scenario can be combined with _delay to test a retry that
+  // is both slow and failing — which is the case people actually hit.
+  const scripted = await applyScenario(context);
+  if (scripted) return withHeaders(scripted, headers);
+
+  let response = withHeaders(await route.handler(context), { ...headers, ...(context.scenarioHeaders || {}) });
 
   // Applied after the handler, because both need a real response to damage.
   const truthy = (v) => v === "1" || v === "true";

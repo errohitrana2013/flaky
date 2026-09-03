@@ -6,7 +6,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import worker from "../src/index.js";
 
-function makeEnv({ keys = [], sandboxes = [], records = [], customs = [] } = {}) {
+function makeEnv({ keys = [], sandboxes = [], records = [], customs = [], scenario = null } = {}) {
   const kv = new Map();
   const points = [];
 
@@ -18,6 +18,18 @@ function makeEnv({ keys = [], sandboxes = [], records = [], customs = [] } = {})
     if (s.startsWith("SELECT id, expires_at FROM sandboxes")) return sandboxes.find((b) => b.id === args[0]) || null;
     if (s.startsWith("SELECT body FROM sandbox_records")) return records.find((r) => r.record_id === String(args[2])) || null;
     if (s.startsWith("SELECT body, expires_at FROM custom_apis")) return customs.find((c) => c.id === args[0]) || null;
+    if (s.startsWith("SELECT fail_count, status, attempts, expires_at FROM scenarios")) return scenario;
+    // The counter advances in the same statement that reads it.
+    if (s.startsWith("UPDATE scenarios SET attempts = attempts + 1")) {
+      if (!scenario || scenario.expires_at < Date.now()) return null;
+      scenario.attempts += 1;
+      return { attempts: scenario.attempts, fail_count: scenario.fail_count, status: scenario.status };
+    }
+    if (s.startsWith("UPDATE scenarios SET attempts = 0")) {
+      if (!scenario) return null;
+      scenario.attempts = 0;
+      return { fail_count: scenario.fail_count, status: scenario.status };
+    }
     return null;
   };
 
@@ -718,6 +730,59 @@ test("an expired custom API is gone, not empty", async () => {
   const res = await call(`/v1/custom/${CUSTOM.id}/employees`, {}, env);
   assert.equal(res.status, 410);
   assert.match((await body(res)).error.hint, /24 hours/);
+});
+
+test("a scenario fails a fixed number of times, then recovers", async () => {
+  // _fail_rate is a coin toss and cannot be asserted on. Retry logic needs a
+  // sequence: fail, fail, succeed — so a test can prove the backoff recovered.
+  const env = makeEnv({ scenario: { fail_count: 2, status: 503, attempts: 0, expires_at: Date.now() + 60000 } });
+  const url = "/v1/posts?_limit=1&_scenario=a1b2c3d4e5f60718";
+
+  const first = await call(url, {}, env);
+  assert.equal(first.status, 503);
+  assert.equal(first.headers.get("x-scenario-attempt"), "1");
+  assert.equal(first.headers.get("retry-after"), "1", "503 tells a client when to come back");
+
+  assert.equal((await call(url, {}, env)).status, 503);
+
+  const third = await call(url, {}, env);
+  assert.equal(third.status, 200, "recovers on the attempt after the last failure");
+  assert.equal(third.headers.get("x-scenario-attempt"), "3");
+  assert.equal((await call(url, {}, env)).status, 200, "and stays recovered");
+});
+
+test("a scenario can be rewound without spending an attempt", async () => {
+  const scenario = { fail_count: 1, status: 500, attempts: 0, expires_at: Date.now() + 60000 };
+  const env = makeEnv({ scenario });
+  const url = "/v1/posts?_scenario=a1b2c3d4e5f60718";
+
+  assert.equal((await call(url, {}, env)).status, 500);
+  assert.equal((await call(url, {}, env)).status, 200);
+
+  // A beforeEach needs the counter back at zero without the resetting request
+  // itself becoming attempt 1.
+  const reset = await call("/v1/scenario/a1b2c3d4e5f60718/reset", { method: "POST" }, env);
+  assert.equal(reset.status, 200);
+  assert.equal((await body(reset)).attempts, 0);
+
+  assert.equal((await call(url, {}, env)).status, 500, "the sequence repeats exactly");
+});
+
+test("rejects a scenario id it never issued", async () => {
+  const res = await call("/v1/posts?_scenario=not-a-real-id");
+  assert.equal(res.status, 400);
+  assert.match((await body(res)).error.hint, /POST \/v1\/scenario/);
+
+  const gone = await call("/v1/posts?_scenario=a1b2c3d4e5f60718", {}, makeEnv({ scenario: null }));
+  assert.equal(gone.status, 404);
+});
+
+test("validates the scenario policy on creation", async () => {
+  for (const b of [{ fail: -1 }, { fail: 999 }, { fail: "lots" }, { status: 200 }, { status: 700 }]) {
+    const res = await call("/v1/scenario", { method: "POST", body: JSON.stringify(b) });
+    assert.equal(res.status, 400, `${JSON.stringify(b)} should be a 400`);
+  }
+  assert.equal((await call("/v1/scenario", { method: "POST", body: JSON.stringify({ fail: 3, status: 429 }) })).status, 201);
 });
 
 test("answers preflight requests", async () => {

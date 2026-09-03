@@ -93,6 +93,23 @@ if [ -n "$ADMIN" ]; then
   is "bad dataset 400" "$(code "$U/v1/admin/export?dataset=nope" -H "authorization: Bearer $ADMIN")" "400"
 fi
 
+echo; echo "SCENARIOS"
+SID=$(curl -s --max-time 25 -X POST "$U/v1/scenario" -H 'content-type: application/json' \
+  -d '{"fail":2,"status":503}' | sed -n 's/.*"id":"\([a-f0-9]\{16\}\)".*/\1/p')
+[ -n "$SID" ] && ok "created a scenario" || bad "create" "no id returned"
+if [ -n "$SID" ]; then
+  is "attempt 1 fails"     "$(code "$U/v1/posts?_scenario=$SID")" "503"
+  is "attempt 2 fails"     "$(code "$U/v1/posts?_scenario=$SID")" "503"
+  is "attempt 3 recovers"  "$(code "$U/v1/posts?_scenario=$SID")" "200"
+  is "and stays recovered" "$(code "$U/v1/posts?_scenario=$SID")" "200"
+  is "reset rewinds it"    "$(code -X POST "$U/v1/scenario/$SID/reset")" "200"
+  is "sequence repeats"    "$(code "$U/v1/posts?_scenario=$SID")" "503"
+  has "reports the attempt" "$(curl -sD - -o /dev/null --max-time 25 "$U/v1/posts?_scenario=$SID" | tr 'A-Z' 'a-z')" "x-scenario-attempt"
+fi
+is "rejects an unknown scenario" "$(code "$U/v1/posts?_scenario=ffffffffffffffff")" "404"
+is "rejects a malformed id"      "$(code "$U/v1/posts?_scenario=nope")" "400"
+is "rejects a bad policy"        "$(code -X POST "$U/v1/scenario" -H 'content-type: application/json' -d '{"fail":999}')" "400"
+
 echo; echo "CUSTOM APIs"
 CID=$(curl -s --max-time 25 -X POST "$U/v1/custom" -H 'content-type: application/json' \
   -d '{"widgets":[{"id":1,"name":"a"},{"id":2,"name":"b"}]}' | sed -n 's/.*"id":"\([a-f0-9]\{16\}\)".*/\1/p')

@@ -36,6 +36,8 @@ export const RESERVED_PARAMS = new Set([
   "_malformed",
   "_cors",
   "_retry_after",
+  "_scenario",
+  "_scenario_reset",
 ]);
 
 export const DEFAULT_PAGE_SIZE = 30;
