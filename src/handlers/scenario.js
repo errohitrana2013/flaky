@@ -1,33 +1,64 @@
 import { json, fail, echo } from "../lib/response.js";
-import { SCENARIO_TTL_MS, MAX_SCENARIO_FAILURES } from "../config/tiers.js";
+import { SCENARIO_TTL_MS, MAX_SCENARIO_THRESHOLD } from "../config/tiers.js";
 
-// A failure that stops.
+// A failure that stops, or one that starts.
 //
 // Everything else here is stateless: _status always fails, _fail_rate fails at
 // random. Neither can express "fail twice, then work", which is what retry logic
 // and circuit breakers actually have to be tested against — a coin toss cannot
 // be asserted on, and a permanent 503 never lets a breaker close again.
 //
-// So a scenario is a counter. Create one, then pass ?_scenario=<id> on any
-// request: the first N attempts return your chosen status, and everything after
-// succeeds. Reset it between tests and the sequence repeats exactly.
+// So a scenario is a counter, and it runs in either direction:
+//
+//   {"fail": 2}     fail, fail, then succeed for good   — retries, breakers
+//   {"succeed": 3}  work, work, work, then fail for good — rate limits, quotas,
+//                                                          trials, token expiry
+//
+// Pass ?_scenario=<id> on any request. Reset it between tests and the sequence
+// repeats exactly.
 
 const ID = /^[0-9a-f]{16}$/;
 
-// POST /v1/scenario  { fail: 2, status: 503 }
+// Reads either shape into one number. `fail_count` is the threshold in both
+// directions — see 0016_scenario_invert.sql for why the column kept its name.
+function policyFrom(body) {
+  const hasFail = body.fail !== undefined && body.fail !== null;
+  const hasSucceed = body.succeed !== undefined && body.succeed !== null;
+
+  if (hasFail && hasSucceed) {
+    return { error: ["Pick one direction", "Send fail (fail N, then recover) or succeed (work N, then fail) — not both."] };
+  }
+
+  const invert = hasSucceed ? 1 : 0;
+  const word = invert ? "succeed" : "fail";
+  const threshold = Math.trunc(Number(invert ? body.succeed : body.fail ?? 2));
+
+  if (!Number.isFinite(threshold) || threshold < 0 || threshold > MAX_SCENARIO_THRESHOLD) {
+    return {
+      error: [
+        `Invalid ${word} count`,
+        `Expected a whole number from 0 to ${MAX_SCENARIO_THRESHOLD}. ` +
+          (invert
+            ? "0 means it fails from the very first request."
+            : "0 means it never fails, which is occasionally useful as a control."),
+      ],
+    };
+  }
+
+  return { threshold, invert };
+}
+
+// POST /v1/scenario  { fail: 2, status: 503 }  or  { succeed: 3, status: 429 }
 export async function createScenario(ctx) {
   const body = await ctx.request.json().catch(() => ({}));
 
-  const failCount = Math.trunc(Number(body.fail ?? 2));
-  if (!Number.isFinite(failCount) || failCount < 0 || failCount > MAX_SCENARIO_FAILURES) {
-    return fail(
-      400,
-      "Invalid fail count",
-      `Expected a whole number from 0 to ${MAX_SCENARIO_FAILURES}. 0 means it never fails, which is occasionally useful as a control.`
-    );
-  }
+  const policy = policyFrom(body);
+  if (policy.error) return fail(400, policy.error[0], policy.error[1]);
+  const { threshold, invert } = policy;
 
-  const status = Math.trunc(Number(body.status ?? 503));
+  // A rate limit is the obvious reason to invert one, so default to its status
+  // rather than making everybody spell out 429.
+  const status = Math.trunc(Number(body.status ?? (invert ? 429 : 503)));
   if (!Number.isInteger(status) || status < 400 || status > 599) {
     return fail(400, "Invalid status", "Expected a failure status from 400 to 599.");
   }
@@ -36,15 +67,19 @@ export async function createScenario(ctx) {
   const expiresAt = Date.now() + SCENARIO_TTL_MS;
 
   await ctx.env.DB.prepare(
-    "INSERT INTO scenarios (id, fail_count, status, attempts, created_at, expires_at) VALUES (?, ?, ?, 0, ?, ?)"
-  ).bind(id, failCount, status, Date.now(), expiresAt).run();
+    "INSERT INTO scenarios (id, fail_count, status, invert, attempts, created_at, expires_at) VALUES (?, ?, ?, ?, 0, ?, ?)"
+  ).bind(id, threshold, status, invert, Date.now(), expiresAt).run();
 
   return json(
     {
       id,
-      policy: { fail: failCount, status, thenSucceeds: true },
-      usage: `Add ?_scenario=${id} to any request. The first ${failCount} return ${status}; the rest succeed.`,
-        reset: `POST /v1/scenario/${id}/reset — rewind between tests without spending an attempt.`,
+      policy: invert
+        ? { succeed: threshold, thenFailsWith: status, recovers: false }
+        : { fail: threshold, status, thenSucceeds: true },
+      usage: invert
+        ? `Add ?_scenario=${id} to any request. The first ${threshold} succeed; every one after returns ${status}.`
+        : `Add ?_scenario=${id} to any request. The first ${threshold} return ${status}; the rest succeed.`,
+      reset: `POST /v1/scenario/${id}/reset — rewind between tests without spending an attempt.`,
       resetInline: `?_scenario=${id}&_scenario_reset=1 — rewinds first, so that request becomes attempt 1.`,
       inspect: `/v1/scenario/${id}`,
       expiresAt: new Date(expiresAt).toISOString(),
@@ -53,24 +88,39 @@ export async function createScenario(ctx) {
   );
 }
 
+// True when this attempt should fail. The whole feature is this one comparison.
+const failsOn = (attempts, threshold, invert) =>
+  invert ? attempts > threshold : attempts <= threshold;
+
+// What is left before the behaviour flips, named for the direction it flips in.
+function remaining(row) {
+  const left = Math.max(0, row.fail_count - row.attempts);
+  return row.invert ? { successes: left } : { failures: left };
+}
+
 // GET /v1/scenario/:id — how far through the sequence you are, without advancing it.
 export async function readScenario(ctx) {
   const { id } = ctx.params;
   if (!ID.test(id)) return fail(404, "No such scenario", "Ids are 16 hex characters.");
 
   const row = await ctx.env.DB.prepare(
-    "SELECT fail_count, status, attempts, expires_at FROM scenarios WHERE id = ?"
+    "SELECT fail_count, status, invert, attempts, expires_at FROM scenarios WHERE id = ?"
   ).bind(id).first();
 
   if (!row) return fail(404, "No such scenario", "Create one at POST /v1/scenario.");
   if (row.expires_at < Date.now()) return fail(410, "That scenario expired", "They last 24 hours.");
 
+  const left = remaining(row);
   return json({
     id,
-    policy: { fail: row.fail_count, status: row.status },
+    policy: row.invert
+      ? { succeed: row.fail_count, thenFailsWith: row.status }
+      : { fail: row.fail_count, status: row.status },
     attempts: row.attempts,
-    remainingFailures: Math.max(0, row.fail_count - row.attempts),
-    nextWillFail: row.attempts < row.fail_count,
+    ...(row.invert ? { remainingSuccesses: left.successes } : { remainingFailures: left.failures }),
+    // Deliberately the same key in both directions: a test asserting on the
+    // sequence should not have to know which way round the scenario runs.
+    nextWillFail: failsOn(row.attempts + 1, row.fail_count, row.invert),
   });
 }
 
@@ -85,7 +135,7 @@ export async function resetScenario(ctx) {
   if (!ID.test(id)) return fail(404, "No such scenario", "Ids are 16 hex characters.");
 
   const row = await ctx.env.DB.prepare(
-    "UPDATE scenarios SET attempts = 0 WHERE id = ? AND expires_at > ? RETURNING fail_count, status"
+    "UPDATE scenarios SET attempts = 0 WHERE id = ? AND expires_at > ? RETURNING fail_count, status, invert"
   ).bind(id, Date.now()).first();
 
   if (!row) return fail(404, "No such scenario", "It may have expired. Create another at POST /v1/scenario.");
@@ -93,7 +143,9 @@ export async function resetScenario(ctx) {
   return json({
     id,
     attempts: 0,
-    policy: { fail: row.fail_count, status: row.status },
+    policy: row.invert
+      ? { succeed: row.fail_count, thenFailsWith: row.status }
+      : { fail: row.fail_count, status: row.status },
     note: "Rewound. The next request carrying this scenario is attempt 1.",
   });
 }
@@ -121,23 +173,28 @@ export async function applyScenario(ctx) {
   const row = await ctx.env.DB.prepare(
     `UPDATE scenarios SET attempts = attempts + 1
      WHERE id = ? AND expires_at > ?
-     RETURNING attempts, fail_count, status`
+     RETURNING attempts, fail_count, status, invert`
   ).bind(id, Date.now()).first();
 
   if (!row) {
     return fail(404, "No such scenario", "It may have expired. Create another at POST /v1/scenario.");
   }
 
+  const left = remaining(row);
   const headers = {
     "x-scenario-attempt": String(row.attempts),
-    "x-scenario-remaining-failures": String(Math.max(0, row.fail_count - row.attempts)),
+    ...(row.invert
+      ? { "x-scenario-remaining-successes": String(left.successes) }
+      : { "x-scenario-remaining-failures": String(left.failures) }),
   };
 
-  if (row.attempts <= row.fail_count) {
+  if (failsOn(row.attempts, row.fail_count, row.invert)) {
     const response = fail(
       row.status,
       "Scenario failure",
-      `Attempt ${row.attempts} of ${row.fail_count} scheduled failures. Attempt ${row.fail_count + 1} will succeed.`
+      row.invert
+        ? `Attempt ${row.attempts}. The first ${row.fail_count} succeeded; this scenario fails from here on.`
+        : `Attempt ${row.attempts} of ${row.fail_count} scheduled failures. Attempt ${row.fail_count + 1} will succeed.`
     );
     const merged = new Headers(response.headers);
     for (const [k, v] of Object.entries(headers)) merged.set(k, v);
@@ -145,7 +202,7 @@ export async function applyScenario(ctx) {
     return new Response(response.body, { status: response.status, headers: merged });
   }
 
-  // Past the failures: let the real handler run, but say which attempt this was.
+  // Not failing yet: let the real handler run, but say which attempt this was.
   ctx.scenarioHeaders = headers;
   return null;
 }

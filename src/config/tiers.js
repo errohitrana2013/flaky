@@ -46,4 +46,4 @@ export const CUSTOM_PER_IP_PER_DAY = 10;
 // A scenario is a counter, so it needs a life and a ceiling like everything
 // else. 50 failures is far more than any retry policy or breaker threshold.
 export const SCENARIO_TTL_MS = 24 * 60 * 60 * 1000;
-export const MAX_SCENARIO_FAILURES = 50;
+export const MAX_SCENARIO_THRESHOLD = 50;

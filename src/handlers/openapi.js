@@ -36,7 +36,7 @@ const CHAOS_PARAMS = [
   },
   {
     name: "_scenario",
-    description: "A scenario id from POST /v1/scenario. Fails a fixed number of times, then recovers — the deterministic sequence retry and circuit-breaker tests need.",
+    description: "A scenario id from POST /v1/scenario. Runs a deterministic sequence: fail N times then recover (retries, circuit breakers), or succeed N times then fail (rate limits, quotas, expiring tokens).",
     schema: { type: "string", pattern: "^[0-9a-f]{16}$" },
   },
   {
@@ -186,17 +186,23 @@ export function getOpenApi(ctx) {
 
   paths["/scenario"] = {
     post: {
-      summary: "Create a failure sequence: fail N times, then recover",
+      summary: "Create a failure sequence, in either direction",
       description:
-        "_fail_rate is random and cannot be asserted on; _status never recovers. A scenario is a counter, " +
+        "_fail_rate is random and cannot be asserted on; _status never changes. A scenario is a counter, " +
         "which is what retry logic and circuit breakers actually need — fail twice and succeed on the third " +
         "so a test can prove the backoff worked, or fail N consecutive times to force a breaker open and " +
-        "then let it close. Responses carry x-scenario-attempt.",
+        "then let it close. Send `succeed` instead of `fail` to run it the other way round: work N times, " +
+        "then fail from there on, which is how a rate limit, a quota, a free trial and an expiring token " +
+        "all behave. Send one or the other, never both. Responses carry x-scenario-attempt.",
       tags: ["scenario"],
       requestBody: {
         content: { "application/json": { schema: { type: "object", properties: {
-          fail: { type: "integer", minimum: 0, maximum: 50, default: 2 },
-          status: { type: "integer", minimum: 400, maximum: 599, default: 503 },
+          fail: { type: "integer", minimum: 0, maximum: 50, default: 2,
+            description: "Fail this many attempts, then succeed for good." },
+          succeed: { type: "integer", minimum: 0, maximum: 50,
+            description: "Succeed this many attempts, then fail for good. Mutually exclusive with fail." },
+          status: { type: "integer", minimum: 400, maximum: 599,
+            description: "The failure status. Defaults to 503 with fail, 429 with succeed." },
         } } } },
       },
       responses: { 201: { description: "The id, and how to use and reset it." }, 400: errorResponse("Bad policy.") },

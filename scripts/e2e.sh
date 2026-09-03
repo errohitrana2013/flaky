@@ -109,6 +109,20 @@ fi
 is "rejects an unknown scenario" "$(code "$U/v1/posts?_scenario=ffffffffffffffff")" "404"
 is "rejects a malformed id"      "$(code "$U/v1/posts?_scenario=nope")" "400"
 is "rejects a bad policy"        "$(code -X POST "$U/v1/scenario" -H 'content-type: application/json' -d '{"fail":999}')" "400"
+is "rejects both directions"     "$(code -X POST "$U/v1/scenario" -H 'content-type: application/json' -d '{"fail":2,"succeed":3}')" "400"
+
+# The other direction: succeed N, then fail for good — a rate limit, a quota, an
+# expiring token. Nothing else here can produce a failure that does not recover.
+IID=$(curl -s --max-time 25 -X POST "$U/v1/scenario" -H 'content-type: application/json' \
+  -d '{"succeed":2}' | sed -n 's/.*"id":"\([^"]*\)".*/\1/p')
+[ -n "$IID" ] && ok "created an inverted scenario" || bad "create inverted" "no id returned"
+if [ -n "$IID" ]; then
+  is "attempt 1 succeeds"   "$(code "$U/v1/posts?_scenario=$IID")" "200"
+  is "attempt 2 succeeds"   "$(code "$U/v1/posts?_scenario=$IID")" "200"
+  is "attempt 3 starts failing" "$(code "$U/v1/posts?_scenario=$IID")" "429"
+  is "and never recovers"   "$(code "$U/v1/posts?_scenario=$IID")" "429"
+  has "counts down successes" "$(curl -sD - -o /dev/null --max-time 25 "$U/v1/posts?_scenario=$IID" | tr 'A-Z' 'a-z')" "x-scenario-remaining-successes"
+fi
 
 echo; echo "CUSTOM APIs"
 CID=$(curl -s --max-time 25 -X POST "$U/v1/custom" -H 'content-type: application/json' \

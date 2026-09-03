@@ -18,17 +18,17 @@ function makeEnv({ keys = [], sandboxes = [], records = [], customs = [], scenar
     if (s.startsWith("SELECT id, expires_at FROM sandboxes")) return sandboxes.find((b) => b.id === args[0]) || null;
     if (s.startsWith("SELECT body FROM sandbox_records")) return records.find((r) => r.record_id === String(args[2])) || null;
     if (s.startsWith("SELECT body, expires_at FROM custom_apis")) return customs.find((c) => c.id === args[0]) || null;
-    if (s.startsWith("SELECT fail_count, status, attempts, expires_at FROM scenarios")) return scenario;
+    if (s.startsWith("SELECT fail_count, status, invert, attempts, expires_at FROM scenarios")) return scenario;
     // The counter advances in the same statement that reads it.
     if (s.startsWith("UPDATE scenarios SET attempts = attempts + 1")) {
       if (!scenario || scenario.expires_at < Date.now()) return null;
       scenario.attempts += 1;
-      return { attempts: scenario.attempts, fail_count: scenario.fail_count, status: scenario.status };
+      return { attempts: scenario.attempts, fail_count: scenario.fail_count, status: scenario.status, invert: scenario.invert ?? 0 };
     }
     if (s.startsWith("UPDATE scenarios SET attempts = 0")) {
       if (!scenario) return null;
       scenario.attempts = 0;
-      return { fail_count: scenario.fail_count, status: scenario.status };
+      return { fail_count: scenario.fail_count, status: scenario.status, invert: scenario.invert ?? 0 };
     }
     return null;
   };
@@ -777,12 +777,68 @@ test("rejects a scenario id it never issued", async () => {
   assert.equal(gone.status, 404);
 });
 
+test("an inverted scenario succeeds a fixed number of times, then fails for good", async () => {
+  // The other direction, and the one a rate limit actually has: fine, fine,
+  // fine, then 429 — and it never recovers, because a quota that ran out does
+  // not un-run-out halfway through your test.
+  const env = makeEnv({ scenario: { fail_count: 2, status: 429, invert: 1, attempts: 0, expires_at: Date.now() + 60000 } });
+  const url = "/v1/posts?_limit=1&_scenario=a1b2c3d4e5f60718";
+
+  const first = await call(url, {}, env);
+  assert.equal(first.status, 200);
+  assert.equal(first.headers.get("x-scenario-attempt"), "1");
+  assert.equal(first.headers.get("x-scenario-remaining-successes"), "1");
+
+  assert.equal((await call(url, {}, env)).status, 200);
+
+  const third = await call(url, {}, env);
+  assert.equal(third.status, 429, "starts failing once the allowance is spent");
+  assert.equal(third.headers.get("retry-after"), "1", "a 429 says when to come back");
+  assert.equal((await call(url, {}, env)).status, 429, "and stays failed — a quota does not refill");
+});
+
+test("an inverted scenario reports its direction without advancing the counter", async () => {
+  const scenario = { fail_count: 1, status: 429, invert: 1, attempts: 0, expires_at: Date.now() + 60000 };
+  const env = makeEnv({ scenario });
+
+  const before = await body(await call("/v1/scenario/a1b2c3d4e5f60718", {}, env));
+  assert.deepEqual(before.policy, { succeed: 1, thenFailsWith: 429 });
+  assert.equal(before.remainingSuccesses, 1);
+  assert.equal(before.nextWillFail, false);
+  assert.equal(scenario.attempts, 0, "reading it must not spend an attempt");
+
+  await call("/v1/posts?_scenario=a1b2c3d4e5f60718", {}, env);
+
+  const after = await body(await call("/v1/scenario/a1b2c3d4e5f60718", {}, env));
+  assert.equal(after.remainingSuccesses, 0);
+  assert.equal(after.nextWillFail, true, "nextWillFail means the same thing in both directions");
+});
+
+test("succeed: 0 fails from the very first request", async () => {
+  const env = makeEnv({ scenario: { fail_count: 0, status: 429, invert: 1, attempts: 0, expires_at: Date.now() + 60000 } });
+  assert.equal((await call("/v1/posts?_scenario=a1b2c3d4e5f60718", {}, env)).status, 429);
+});
+
 test("validates the scenario policy on creation", async () => {
   for (const b of [{ fail: -1 }, { fail: 999 }, { fail: "lots" }, { status: 200 }, { status: 700 }]) {
     const res = await call("/v1/scenario", { method: "POST", body: JSON.stringify(b) });
     assert.equal(res.status, 400, `${JSON.stringify(b)} should be a 400`);
   }
   assert.equal((await call("/v1/scenario", { method: "POST", body: JSON.stringify({ fail: 3, status: 429 }) })).status, 201);
+});
+
+test("a scenario cannot run in both directions at once", async () => {
+  // Silently picking one would give a passing test that proves the opposite of
+  // what it claims, so this is a 400 rather than a precedence rule.
+  const res = await call("/v1/scenario", { method: "POST", body: JSON.stringify({ fail: 2, succeed: 3 }) });
+  assert.equal(res.status, 400);
+  assert.match((await body(res)).error.hint, /not both/);
+
+  for (const b of [{ succeed: -1 }, { succeed: 999 }, { succeed: "many" }]) {
+    assert.equal((await call("/v1/scenario", { method: "POST", body: JSON.stringify(b) })).status, 400,
+      `${JSON.stringify(b)} should be a 400`);
+  }
+  assert.equal((await call("/v1/scenario", { method: "POST", body: JSON.stringify({ succeed: 3 }) })).status, 201);
 });
 
 test("answers preflight requests", async () => {

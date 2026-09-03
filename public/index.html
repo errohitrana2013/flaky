@@ -120,9 +120,29 @@ GET /v1/posts?_scenario=66b6…   <span class="tok-com"># 200 — your backoff w
 
 <span class="tok-com"># rewind between tests, without spending an attempt</span>
 POST /v1/scenario/66b6…/reset</pre>
+    <h3>Or the other way round: it works, then it stops</h3>
+    <p>
+      A rate limit does not fail first and recover — it is fine, fine, fine, then
+      <code>429</code>, and it stays that way. So does a quota, a free trial, and an
+      access token that expires mid-run. Send <code>succeed</code> instead of
+      <code>fail</code> and the sequence inverts.
+    </p>
+    <pre>curl -X POST <span class="host">https://flakyapi.dev</span>/v1/scenario -d '{"succeed":3}'
+<span class="tok-com"># → {"id":"9f2a…"}   status defaults to 429 here</span>
+
+GET /v1/posts?_scenario=9f2a…   <span class="tok-com"># 200 · x-scenario-remaining-successes: 2</span>
+GET /v1/posts?_scenario=9f2a…   <span class="tok-com"># 200</span>
+GET /v1/posts?_scenario=9f2a…   <span class="tok-com"># 200 — allowance spent</span>
+GET /v1/posts?_scenario=9f2a…   <span class="tok-com"># 429 · Retry-After: 1 — and stays 429</span></pre>
     <p class="mt-16">
-      This is what people currently write a throwaway fake server for, and it is the
-      one control no other mock API has at all.
+      This is the one you cannot get from a real provider without burning real quota
+      or waiting out a real window. It never recovers, because a quota that ran out
+      does not refill halfway through your test.
+    </p>
+
+    <p class="mt-16">
+      Both directions are what people currently write a throwaway fake server for, and
+      together they are the one control no other mock API has at all.
     </p>
 
     <h3>Three more, for failures nothing else reproduces</h3>
