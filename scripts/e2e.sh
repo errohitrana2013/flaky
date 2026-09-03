@@ -17,6 +17,11 @@ for p in / /custom /dashboard /app.css /app.js /custom.css /custom.js /dashboard
   is "GET $p" "$(code "$U$p")" "200"
 done
 is "unknown page 404s" "$(code "$U/no-such-page")" "404"
+# A bare 404 with no body makes the browser show its own blank error page, which
+# is what every typo and stale link looked like before there was a fallback.
+is "and serves a real page"     "$(curl -sI --max-time 25 "$U/no-such-page" | grep -ci 'content-type: text/html')" "1"
+is "nested path 404s properly"  "$(curl -sI --max-time 25 "$U/a/b/c" | grep -ci 'content-type: text/html')" "1"
+is "the 404 page has content"   "$(curl -s --max-time 25 "$U/no-such-page" | grep -ci 'Ready-made API')" "1"
 
 echo; echo "SECURITY HEADERS (page)"
 H=$(curl -sD - -o /dev/null --max-time 25 "$U/")

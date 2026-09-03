@@ -29,6 +29,10 @@ routes = [
 [assets]
 directory = "public"
 binding = "ASSETS"
+# Without this, an unmatched path returns a bare 404 with no body and no
+# content-type, so the browser renders its own blank error page. Every typo, every
+# stale link, every scanner probe looked like the site was broken.
+not_found_handling = "404-page"
 
 [[d1_databases]]
 binding = "DB"

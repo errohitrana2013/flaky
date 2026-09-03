@@ -1,0 +1,106 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>Not found | flaky</title>
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<link rel="alternate icon" href="/favicon.ico" sizes="32x32">
+<link rel="stylesheet" href="/app.css">
+<link rel="stylesheet" href="/custom.css">
+<style>
+  /* The mark's dropped bar is the whole joke of this page, so it gets to be
+     larger here than anywhere else on the site. */
+  .four { display: flex; align-items: center; gap: 22px; margin: 8px 0 24px; }
+  .four .mark { width: 64px; height: 64px; }
+  .four .code { font-size: 62px; font-weight: 700; letter-spacing: -.04em; line-height: 1; }
+  .four .code span { color: var(--accent); }
+  .routes { display: grid; gap: 12px; margin-top: 8px; }
+  .route {
+    display: flex; align-items: baseline; gap: 14px; flex-wrap: wrap;
+    padding: 14px 16px; background: var(--panel);
+    border: 1px solid var(--line); border-radius: 10px;
+  }
+  .route a { font-weight: 600; text-decoration: none; }
+  .route a:hover { text-decoration: underline; }
+  .route span { color: var(--muted); font-size: 14.5px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header class="doc-head">
+    <a class="brand" href="/" aria-label="flaky — home">
+      <svg class="mark" viewBox="0 0 32 32" aria-hidden="true">
+        <rect class="bar"   x="3"    y="18"  width="5"   height="9"  rx="2.5"/>
+        <rect class="bar"   x="10"   y="12"  width="5"   height="15" rx="2.5"/>
+        <rect class="ghost" x="17.6" y="8.6" width="4.8" height="11" rx="2.4"/>
+        <rect class="flake" x="17"   y="22"  width="5"   height="5"  rx="2.5"/>
+        <rect class="bar"   x="24"   y="4"   width="5"   height="23" rx="2.5"/>
+      </svg>
+      <span class="wordmark">flaky<span class="dot">.</span></span>
+    </a>
+
+    <div class="four">
+      <div class="code">4<span>0</span>4</div>
+    </div>
+
+    <h1>This one broke by accident.</h1>
+    <p class="lede">
+      Which is the wrong kind. If you wanted a 404 on purpose, that is
+      <code>?_status=404</code> on any endpoint, and it comes back with a JSON body
+      explaining itself.
+    </p>
+  </header>
+
+  <section>
+    <h2>Where you probably meant to go</h2>
+    <div class="routes">
+      <div class="route">
+        <a href="/">Ready-made API</a>
+        <span>Posts, users, todos and more — with failures you can ask for</span>
+      </div>
+      <div class="route">
+        <a href="/custom">Your own JSON</a>
+        <span>Paste any JSON, get an API for it, download it as a server</span>
+      </div>
+      <div class="route">
+        <a href="/docs/jsonplaceholder">Moving from JSONPlaceholder</a>
+        <span>Same fields, same routes, one string to change</span>
+      </div>
+      <div class="route">
+        <a href="/v1/openapi.json">OpenAPI spec</a>
+        <span>Import the whole thing into Postman or Insomnia</span>
+      </div>
+      <div class="route">
+        <a href="/v1/meta">/v1/meta</a>
+        <span>Every resource and limit, machine-readable</span>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <h2>If you were calling the API</h2>
+    <p>
+      Anything under <code>/v1/</code> answers with JSON rather than this page, and
+      says what went wrong — an unknown resource lists the real ones, and a wrong
+      method returns <code>405</code> with an <code>Allow</code> header rather than
+      pretending the path does not exist.
+    </p>
+    <pre>curl https://flakyapi.dev/v1/nonsense
+<span class="tok-com"># {"error":{"status":404,"message":"Unknown resource 'nonsense'",</span>
+<span class="tok-com">#           "hint":"Available resources: users, posts, comments, …"}}</span></pre>
+  </section>
+
+  <footer>
+    <p class="m-0">
+      <a href="/">Home</a> ·
+      <a href="/privacy">Privacy &amp; contact</a> ·
+      <a href="https://github.com/errohitrana2013/flaky/issues">Report a broken link</a>
+    </p>
+  </footer>
+
+</div>
+</body>
+</html>
