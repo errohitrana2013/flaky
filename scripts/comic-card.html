@@ -1,0 +1,136 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><style>
+  /* 1200x1200 four-panel strip for the LinkedIn feed. Same palette and mark as
+     og-card.html and linkedin-card.html — three cards that looked like three
+     products would be worse than one card.
+
+     The cricket is the setup, not the target. Both scoreboards are stated
+     straight, because the joke is about mock APIs having no bad days, and it
+     only works if the real record is allowed to speak for itself. Numbers are
+     public record and were checked; nothing here editorialises about either man.
+
+     Reading order is the comic: two eras side by side, then the mock that never
+     varies, then the fix. */
+  * { margin: 0; box-sizing: border-box; }
+  body {
+    width: 1200px; height: 1200px; overflow: hidden;
+    background: #100f0e; color: #ece9e1;
+    font-family: ui-sans-serif, -apple-system, "Helvetica Neue", Arial, sans-serif;
+    display: flex; flex-direction: column; gap: 20px;
+    padding: 52px 56px; position: relative;
+  }
+
+  .head { display: flex; align-items: center; gap: 16px; }
+  .mark { width: 46px; height: 46px; }
+  .word { font-size: 34px; font-weight: 700; letter-spacing: -.035em; }
+  .word .dot { color: #fb923c; }
+  .kicker { margin-left: auto; font-size: 21px; color: #928f85; letter-spacing: -.01em; }
+
+  .row { display: flex; gap: 20px; }
+  .panel {
+    background: #1a1917; border: 1px solid #2f2e2a; border-radius: 20px;
+    padding: 30px 34px; flex: 1; display: flex; flex-direction: column;
+    justify-content: space-between; position: relative;
+  }
+  .label {
+    font-size: 19px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase;
+    color: #7d7a71;
+  }
+  .label span { color: #5f5d56; font-weight: 600; letter-spacing: .04em; }
+  .meta { font-size: 20px; color: #6b6961; margin-top: 9px; letter-spacing: -.005em; }
+
+  /* The scoreboard. Tabular figures so the two panels line up down the page. */
+  .score { display: flex; gap: 30px; font-variant-numeric: tabular-nums; margin: 20px 0 4px; }
+  .score div { display: flex; flex-direction: column; }
+  .score .n { font-size: 62px; font-weight: 700; letter-spacing: -.04em; line-height: 1; }
+  .score .k { font-size: 18px; color: #7d7a71; margin-top: 8px; letter-spacing: .06em; }
+  .score .lost .n { color: #fb923c; }
+
+  .beat { font-size: 27px; color: #cfccc2; letter-spacing: -.015em; line-height: 1.3; }
+
+  /* Panel three: the mock that has never had a bad day. */
+  .oks { display: flex; flex-wrap: wrap; gap: 12px; margin: 20px 0 18px; }
+  .tight { justify-content: flex-start; }
+  .ok {
+    font-family: ui-mono, ui-monospace, "SF Mono", Menlo, monospace;
+    font-size: 25px; color: #8fbf8a; border: 1px solid #26372a; background: #16201a;
+    border-radius: 9px; padding: 9px 16px; letter-spacing: -.01em;
+  }
+  .ok.same { color: #6f8f6c; }
+
+  /* Panel four: the fix. */
+  .fix { border-color: #46331f; background: #1d1712; }
+  .fix .beat { color: #ece9e1; font-size: 31px; font-weight: 600; }
+  .code {
+    font-family: ui-mono, ui-monospace, "SF Mono", Menlo, monospace;
+    font-size: 27px; letter-spacing: -.015em; color: #cfccc2;
+    background: #16130f; border: 1px solid #3a2d1e; border-radius: 12px;
+    padding: 20px 24px; margin-top: 18px;
+  }
+  .code b { color: #fb923c; font-weight: 600; }
+  .foot { display: flex; align-items: baseline; gap: 16px; margin-top: 18px; }
+  .url { font-size: 30px; font-weight: 700; letter-spacing: -.025em; }
+  .foot .sub { font-size: 21px; color: #928f85; }
+</style></head><body>
+
+  <div class="head">
+    <svg class="mark" viewBox="0 0 32 32" aria-hidden="true">
+      <rect x="3" y="18" width="5" height="9" rx="2.5" fill="#ece9e1"/>
+      <rect x="10" y="12" width="5" height="15" rx="2.5" fill="#ece9e1"/>
+      <rect x="17.6" y="8.6" width="4.8" height="11" rx="2.4" fill="none" stroke="#ece9e1" stroke-width="1.25" stroke-dasharray="2.5 2.5" opacity=".32"/>
+      <rect x="17" y="22" width="5" height="5" rx="2.5" fill="#fb923c"/>
+      <rect x="24" y="4" width="5" height="23" rx="2.5" fill="#ece9e1"/>
+    </svg>
+    <span class="word">flaky<span class="dot">.</span></span>
+    <span class="kicker">A short story about failure</span>
+  </div>
+
+  <div class="row" style="flex: 1.05">
+    <div class="panel">
+      <div class="label">Kohli as captain</div>
+      <div class="meta">68 Tests · 2014–2022</div>
+      <div class="score">
+        <div><span class="n">40</span><span class="k">WON</span></div>
+        <div class="lost"><span class="n">17</span><span class="k">LOST</span></div>
+        <div><span class="n">11</span><span class="k">DREW</span></div>
+      </div>
+      <div class="beat">Some seasons you win.</div>
+    </div>
+
+    <div class="panel">
+      <div class="label">Gambhir as head coach</div>
+      <div class="meta">21 Tests · since July 2024</div>
+      <div class="score">
+        <div><span class="n">8</span><span class="k">WON</span></div>
+        <div class="lost"><span class="n">10</span><span class="k">LOST</span></div>
+        <div><span class="n">3</span><span class="k">DREW</span></div>
+      </div>
+      <div class="beat">Some seasons you don't.</div>
+    </div>
+  </div>
+
+  <div class="panel tight" style="flex: .58">
+    <div class="label">My mock API</div>
+    <div class="meta">Every single day since I wrote it</div>
+    <div class="oks">
+      <span class="ok">200 OK</span>
+      <span class="ok">200 OK</span>
+      <span class="ok same">200 OK</span>
+      <span class="ok same">200 OK</span>
+      <span class="ok same">200 OK</span>
+      <span class="ok same">200 OK</span>
+    </div>
+    <div class="beat">Never had a bad day in its life — so my error screen has never once been seen.</div>
+  </div>
+
+  <div class="panel fix" style="flex: 1">
+    <div class="label">The fix</div>
+    <div class="beat">So I built a mock API that has bad days on purpose.</div>
+    <div class="code">curl 'https://flakyapi.dev/v1/posts?<b>_status=503</b>'</div>
+    <div class="foot">
+      <span class="url">flakyapi.dev</span>
+      <span class="sub">Free · no account · MIT</span>
+    </div>
+  </div>
+
+</body></html>
