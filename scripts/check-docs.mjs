@@ -32,6 +32,24 @@ for (const [file, label] of targets) {
   }
 }
 
+// The /custom example exists twice — once in public/custom.js for the button,
+// once in src/config/example.js so the server can recognise its own sample
+// coming back in as a paste. A static asset cannot import from src/, so the
+// copies are checked instead of shared. If they drift, every example paste
+// starts showing up in the admin table as if it were someone's real data.
+{
+  const inPage = readFileSync("public/custom.js", "utf8").match(/const SAMPLE = `([\s\S]*?)`;/)?.[1];
+  const inConfig = readFileSync("src/config/example.js", "utf8").match(/CUSTOM_EXAMPLE = `([\s\S]*?)`;/)?.[1];
+
+  if (!inPage || !inConfig) {
+    failed++;
+    console.error("✗ could not find the /custom example in both places");
+  } else if (inPage !== inConfig) {
+    failed++;
+    console.error("✗ the /custom example differs between public/custom.js and src/config/example.js");
+  }
+}
+
 const controls = [...RESERVED_PARAMS].filter((p) => !INTERNAL.has(p)).length;
 console.log(`${controls} controls documented in ${targets.length - failed}/${targets.length} places`);
 if (failed) process.exit(1);

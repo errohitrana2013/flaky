@@ -86,6 +86,35 @@
       <tbody id="keys"></tbody>
     </table>
     <div class="tabletotal" id="keys-total"></div>
+
+    <h2>Custom APIs live now</h2>
+    <p class="hint">
+      Someone's own JSON, created at <a href="/custom">/custom</a> and still inside
+      its 24 hours. Pastes that are the built-in example unchanged are left out —
+      clicking the button says nothing about what anyone wanted to mock — and
+      counted underneath instead. Country and region only, the same coarseness as
+      everywhere else. These are other people's documents: they are here to show
+      what the feature is used for, and they disappear on their own.
+    </p>
+    <div class="scroller">
+      <table>
+        <thead><tr>
+          <th>Created</th><th>Expires in</th><th>Where</th>
+          <th>Resources</th><th class="num">Size</th><th>JSON</th>
+        </tr></thead>
+        <tbody id="customs"></tbody>
+      </table>
+    </div>
+    <div class="tabletotal" id="customs-total"></div>
+
+    <div id="json-panel" class="jsonpanel" hidden>
+      <div class="jsonpanel-top">
+        <span id="json-title"></span>
+        <!-- Not .csv: that class is wired to the export downloader by selector. -->
+        <button id="json-close" class="smallbtn" type="button">Close</button>
+      </div>
+      <pre id="json-body"></pre>
+    </div>
   </div>
 </div>
 

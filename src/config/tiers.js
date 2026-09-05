@@ -41,7 +41,10 @@ export const MAX_SANDBOX_RECORDS = 500;
 // filling D1's 5 GB free tier would take 20,000 deliberate uploads.
 export const MAX_CUSTOM_BYTES = 256 * 1024;
 export const CUSTOM_TTL_MS = 24 * 60 * 60 * 1000;
-export const CUSTOM_PER_IP_PER_DAY = 10;
+// 20 a day per address. A day of real use is a handful of pastes; the cap only
+// has to bound a script, and each create is a single D1 write, so the ceiling
+// that matters (100k writes/day) is nowhere near this.
+export const CUSTOM_PER_IP_PER_DAY = 20;
 
 // A scenario is a counter, so it needs a life and a ceiling like everything
 // else. 50 failures is far more than any retry policy or breaker threshold.

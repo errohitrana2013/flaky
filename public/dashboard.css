@@ -71,12 +71,12 @@
   /* CSV links sit in the section headings, so the download is next to the
      table it came from rather than in a menu somewhere. */
   h2 { display: flex; align-items: center; gap: 10px; }
-  .csv {
+  .csv, .smallbtn {
     margin-left: auto; font-size: 11px; letter-spacing: .04em; font-weight: 600;
     color: var(--muted); background: none; border: 1px solid var(--line);
     padding: 4px 9px; border-radius: 6px; cursor: pointer; text-transform: uppercase;
   }
-  .csv:hover { color: var(--accent); border-color: var(--accent); }
+  .csv:hover, .smallbtn:hover { color: var(--accent); border-color: var(--accent); }
   .csv:disabled { opacity: .5; cursor: wait; }
 
 /* See app.css — inline style attributes are blocked by the CSP, so the bar
@@ -144,3 +144,30 @@ tr.real td { background: var(--accent-soft, transparent); }
 }
 .tabletotal b { color: var(--ink); font-weight: 600; }
 .tabletotal .warn { color: var(--accent); }
+
+/* Custom APIs: a "view" that reads as a link but is a button, because it
+   fetches with the admin header rather than navigating — a plain <a> would open
+   a tab with no token and a 401. */
+.linkbtn {
+  background: none; border: 0; padding: 0; cursor: pointer;
+  color: var(--accent); font: inherit; text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.linkbtn:hover { text-decoration-thickness: 2px; }
+
+/* Someone else's document, shown in full. Bounded height so a 256 KB paste
+   cannot push the rest of the dashboard off the screen. */
+.jsonpanel {
+  margin-top: 16px; background: var(--panel);
+  border: 1px solid var(--line); border-radius: 10px; overflow: hidden;
+}
+.jsonpanel-top {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  padding: 10px 14px; border-bottom: 1px solid var(--line);
+  font-size: 12.5px; color: var(--muted);
+}
+.jsonpanel pre {
+  margin: 0; padding: 14px; max-height: 60vh; overflow: auto;
+  font-size: 12.5px; line-height: 1.55; white-space: pre; tab-size: 2;
+}
+.hint { color: var(--muted); font-size: 13px; margin: -4px 0 12px; max-width: 68ch; }

@@ -312,6 +312,100 @@ export async function getInsights(ctx) {
   });
 }
 
+// --- Custom APIs -----------------------------------------------------------
+//
+// The live contents of /custom: who created what, and the JSON itself.
+//
+// Only the ones still inside their 24 hours, because that is the whole life of
+// the row — the nightly purge deletes the rest, and listing a body that is
+// about to disappear invites acting on it. This reads `custom_apis` directly
+// rather than a rollup: there are at most a few dozen live at a time, and a
+// summary of them would answer none of the questions worth asking.
+
+// GET /v1/admin/custom
+export async function listCustom(ctx) {
+  if (!authorised(ctx.request, ctx.env)) {
+    return fail(401, "Admin token required", "Send Authorization: Bearer <ADMIN_TOKEN>.");
+  }
+
+  // Never the body. A listing that carries every stored document is megabytes
+  // of payload for a table that shows none of it.
+  //
+  // is_sample = 0 drops the pastes that are the built-in example unchanged.
+  // Clicking "Use an example" and then Create is the most common thing that
+  // happens on that page and tells us nothing, so it would crowd out the rows
+  // that do. They are counted below rather than disappearing — a filtered table
+  // that does not admit to filtering is how you end up trusting a wrong number.
+  const [{ results = [] }, counts] = await Promise.all([
+    ctx.env.DB.prepare(
+      `SELECT id, bytes, created_at, expires_at, country, region, resources
+       FROM custom_apis WHERE expires_at > ? AND is_sample = 0
+       ORDER BY created_at DESC LIMIT 200`
+    ).bind(Date.now()).all(),
+
+    ctx.env.DB.prepare(
+      `SELECT COUNT(*) AS live, SUM(is_sample) AS samples
+       FROM custom_apis WHERE expires_at > ?`
+    ).bind(Date.now()).first(),
+  ]);
+
+  return json({
+    live: results.length,
+    // Everything alive right now, and how much of it was the example.
+    liveIncludingSamples: counts?.live || 0,
+    samplesHidden: counts?.samples || 0,
+    apis: results.map((row) => ({
+      id: row.id,
+      bytes: row.bytes,
+      createdAt: new Date(row.created_at).toISOString(),
+      expiresAt: new Date(row.expires_at).toISOString(),
+      country: row.country || "XX",
+      countryName: countryName(row.country),
+      region: row.region || "",
+      // "todos:3,users:2" as it was stored. Rows created before the column
+      // existed have nothing to report rather than a wrong answer.
+      resources: row.resources
+        ? row.resources.split(",").map((part) => {
+            const at = part.lastIndexOf(":");
+            return { name: part.slice(0, at), count: Number(part.slice(at + 1)) || 0 };
+          })
+        : [],
+    })),
+  });
+}
+
+// GET /v1/admin/custom/:id
+export async function readCustomBody(ctx) {
+  if (!authorised(ctx.request, ctx.env)) {
+    return fail(401, "Admin token required", "Send Authorization: Bearer <ADMIN_TOKEN>.");
+  }
+
+  const { id } = ctx.params;
+  if (!/^[0-9a-f]{16}$/.test(id || "")) {
+    return fail(400, "Not an API id", "Ids are 16 hex characters.");
+  }
+
+  const row = await ctx.env.DB.prepare(
+    "SELECT body, bytes, created_at, expires_at, country, region FROM custom_apis WHERE id = ?"
+  ).bind(id).first();
+
+  if (!row) return fail(404, "No such API", "It may have expired and been purged.");
+
+  // The stored document verbatim, not re-serialised — what the caller pasted is
+  // the thing worth looking at, down to the key order.
+  return json({
+    id,
+    bytes: row.bytes,
+    createdAt: new Date(row.created_at).toISOString(),
+    expiresAt: new Date(row.expires_at).toISOString(),
+    expired: row.expires_at <= Date.now(),
+    country: row.country || "XX",
+    countryName: countryName(row.country),
+    region: row.region || "",
+    body: JSON.parse(row.body),
+  });
+}
+
 // --- CSV export ------------------------------------------------------------
 //
 // One dataset per file rather than one endpoint returning everything, because

@@ -237,6 +237,11 @@ async function attempt(token) {
     render(await load(token));
     authToken = token;
     saveToken(token);
+    // Separately, and after: this table is a curiosity and the dashboard is
+    // not. A failure here must not blank the page behind it.
+    loadCustoms().catch(() => {
+      $("customs").innerHTML = '<tr><td colspan="6" class="muted">Could not load custom APIs.</td></tr>';
+    });
   } catch (err) {
     authToken = null;
     clearToken();
@@ -244,6 +249,98 @@ async function attempt(token) {
     $("error").hidden = false;
   }
 }
+
+// --- Custom APIs -------------------------------------------------------------
+//
+// What people are actually pasting into /custom, while it is still there. The
+// bodies are other people's documents, so nothing here goes through innerHTML:
+// resource names come from their JSON, and the JSON itself is written with
+// textContent into a <pre>.
+
+// Strips rather than escapes, the same way the errors table treats paths. These
+// strings arrive from a stranger's JSON keys and are never trusted as markup.
+const plain = (s) => String(s ?? "").replace(/[<>&"]/g, "").slice(0, 60);
+
+function untilLabel(iso) {
+  const ms = Date.parse(iso) - Date.now();
+  if (!(ms > 0)) return "expired";
+  const h = Math.floor(ms / 3600000);
+  const m = Math.floor((ms % 3600000) / 60000);
+  return h ? `${h}h ${m}m` : `${m}m`;
+}
+
+const shortTime = (iso) =>
+  new Date(iso).toLocaleString(undefined, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
+
+async function loadCustoms() {
+  const res = await fetch("/v1/admin/custom", { headers: { authorization: "Bearer " + authToken } });
+  if (!res.ok) throw new Error("Request failed: " + res.status);
+  renderCustoms(await res.json());
+}
+
+function renderCustoms(data) {
+  const apis = data.apis || [];
+  summary("customs-total", [
+    part("someone's own JSON", apis.length),
+    part("records", apis.reduce((n, a) => n + a.resources.reduce((r, x) => r + x.count, 0), 0)),
+    part("stored", (apis.reduce((n, a) => n + a.bytes, 0) / 1024).toFixed(1) + " KB"),
+    // Said out loud. A table that quietly drops rows is worse than one that
+    // shows noise, because the count stops meaning what it appears to mean.
+    data.samplesHidden ? part("example pastes hidden", data.samplesHidden) : "",
+  ]);
+
+  if (!apis.length) {
+    const nothing = data.samplesHidden
+      ? `Nothing but the example — ${num(data.samplesHidden)} of those, hidden.`
+      : "Nothing live. They last 24 hours.";
+    $("customs").innerHTML = `<tr><td colspan="6" class="muted">${nothing}</td></tr>`;
+    return;
+  }
+
+  $("customs").innerHTML = apis
+    .map((a) => {
+      const where = a.region ? `${plain(a.region)}, ${plain(a.countryName)}` : plain(a.countryName);
+      const shapes = a.resources.length
+        ? a.resources.map((r) => `${plain(r.name)} <b>${num(r.count)}</b>`).join(" · ")
+        : '<span class="muted">not recorded</span>';
+      return `<tr>
+        <td>${shortTime(a.createdAt)}</td>
+        <td>${untilLabel(a.expiresAt)}</td>
+        <td>${flag(a.country)} ${where}</td>
+        <td class="mono">${shapes}</td>
+        <td class="num">${(a.bytes / 1024).toFixed(1)} KB</td>
+        <td><button class="linkbtn" type="button" data-json="${plain(a.id)}">view</button></td>
+      </tr>`;
+    })
+    .join("");
+}
+
+// One listener on the table body rather than one per row, so it survives every
+// re-render without being rewired.
+$("customs").addEventListener("click", async (event) => {
+  const id = event.target?.dataset?.json;
+  if (!id) return;
+
+  $("json-title").textContent = `Loading ${id}…`;
+  $("json-body").textContent = "";
+  $("json-panel").hidden = false;
+
+  try {
+    const res = await fetch(`/v1/admin/custom/${id}`, { headers: { authorization: "Bearer " + authToken } });
+    if (!res.ok) throw new Error("Request failed: " + res.status);
+    const data = await res.json();
+    const where = data.region ? `${data.region}, ${data.countryName}` : data.countryName;
+    $("json-title").textContent = `${id} · ${where} · ${(data.bytes / 1024).toFixed(1)} KB · expires ${shortTime(data.expiresAt)}`;
+    // textContent, never innerHTML. This is a stranger's document.
+    $("json-body").textContent = JSON.stringify(data.body, null, 2);
+  } catch (err) {
+    $("json-title").textContent = "Could not load it";
+    $("json-body").textContent = err.message;
+  }
+  $("json-panel").scrollIntoView({ behavior: "smooth", block: "nearest" });
+});
+
+$("json-close").addEventListener("click", () => { $("json-panel").hidden = true; });
 
 // The export window is deliberately wider than the dashboard's 14 days —
 // someone downloading a spreadsheet is looking for a trend, not today.

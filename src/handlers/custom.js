@@ -2,6 +2,7 @@ import { json, fail, echo } from "../lib/response.js";
 import { queryCollection, pageHeaders } from "../lib/query.js";
 import { today } from "../lib/hash.js";
 import { TIERS, MAX_CUSTOM_BYTES, CUSTOM_TTL_MS, CUSTOM_PER_IP_PER_DAY } from "../config/tiers.js";
+import { CUSTOM_EXAMPLE } from "../config/example.js";
 import { nodeRunner, pythonRunner } from "./runner.js";
 
 // Paste JSON, get a REST API for it, for 24 hours.
@@ -25,6 +26,12 @@ function collections(parsed) {
   const found = Object.entries(parsed).filter(([, v]) => Array.isArray(v));
   return found.length ? Object.fromEntries(found) : null;
 }
+
+// The example as it would be stored. Comparing the stored form rather than the
+// pasted text means indentation, spacing and trailing newlines do not matter —
+// every whitespace variant of the example serialises to this one string, and
+// changing a single value makes it stop matching.
+const EXAMPLE_BODY = JSON.stringify(collections(JSON.parse(CUSTOM_EXAMPLE)));
 
 // POST /v1/custom
 export async function createCustom(ctx) {
@@ -79,9 +86,24 @@ export async function createCustom(ctx) {
   const expiresAt = Date.now() + CUSTOM_TTL_MS;
   const body = JSON.stringify(data);
 
+  // Country and region only, matching daily_visitors. A summary of the shapes
+  // rather than a second copy of them, so the admin list never has to read a
+  // quarter-megabyte body to say what an API holds.
+  const summary = Object.entries(data)
+    .map(([name, rows]) => `${name}:${rows.length}`)
+    .join(",")
+    .slice(0, 500);
+
   await ctx.env.DB.prepare(
-    "INSERT INTO custom_apis (id, body, bytes, created_at, expires_at) VALUES (?, ?, ?, ?, ?)"
-  ).bind(id, body, body.length, Date.now(), expiresAt).run();
+    `INSERT INTO custom_apis (id, body, bytes, created_at, expires_at, country, region, resources, is_sample)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
+  ).bind(
+    id, body, body.length, Date.now(), expiresAt,
+    ctx.request.cf?.country || "XX", ctx.request.cf?.region || "", summary,
+    // Recorded, not rejected: the example still has to work like anything else.
+    // The flag only decides whether it is worth an operator's attention later.
+    body === EXAMPLE_BODY ? 1 : 0
+  ).run();
 
   const base = `/v1/custom/${id}`;
   return json(

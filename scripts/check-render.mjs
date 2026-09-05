@@ -58,7 +58,7 @@ function makeDom() {
   };
 }
 
-async function check(page, script, endpoint, assertions) {
+async function check(page, script, endpoint, assertions, entry = "render") {
   const res = await fetch(`${BASE}${endpoint}`, { headers: { authorization: `Bearer ${TOKEN}` } });
   if (!res.ok) throw new Error(`${endpoint} returned ${res.status}`);
   const data = await res.json();
@@ -87,7 +87,7 @@ async function check(page, script, endpoint, assertions) {
     // token.js first — the page loads it before its own script.
     vm.runInContext(readFileSync("public/token.js", "utf8"), sandbox);
     vm.runInContext(readFileSync(script, "utf8"), sandbox);
-    vm.runInContext("render(__DATA__)", Object.assign(sandbox, { __DATA__: data }));
+    vm.runInContext(`${entry}(__DATA__)`, Object.assign(sandbox, { __DATA__: data }));
   } catch (err) {
     errors.push(`${page}: threw while rendering — ${err.message}`);
   }
@@ -105,6 +105,11 @@ const problems = [
   ...(await check("dashboard", "public/dashboard.js", "/v1/admin/stats?days=30", {
     "t-req": /\d/, "geo": /<tr/, "geo-total": /countries/, "errors-total": /distinct/, "daily-total": /days/,
   })),
+  // The custom-API table renders from its own endpoint, so it needs its own
+  // pass — render() never touches it and would report everything fine.
+  ...(await check("dashboard customs", "public/dashboard.js", "/v1/admin/custom", {
+    "customs": /<tr/, "customs-total": /own JSON/,
+  }, "renderCustoms")),
   ...(await check("insights", "public/insights.js", "/v1/admin/insights?days=30", {
     "chaos-share": /%/, "paths": /<tr/, "paths-total": /endpoints/, "frequency-total": /people/,
     "slowest-total": /worst/, "dwell-total": /pages/,

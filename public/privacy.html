@@ -105,6 +105,20 @@ address = SHA-256(secret + your IP)                              <span class="to
       Records written to <code>/v1/sandbox/…</code> are stored as given and
       deleted 24 hours later. It is a mock API: do not put anything real in it.
     </p>
+
+    <h3>Whatever you paste into /custom</h3>
+    <p>
+      The JSON you paste is stored as given so it can be served back as
+      endpoints, and deleted 24 hours later. The country and region it was
+      created from are stored on the same row — no city, no address, the same
+      coarseness as everything else here. The operator can read both while they
+      exist, in order to see what the feature is being used for.
+    </p>
+    <p>
+      So: it is a mock API for mock data. Do not paste anything real, and if you
+      want a copy that nobody else can see, use the export — those files run on
+      your own machine and are never uploaded.
+    </p>
   </section>
 
   <section>
@@ -149,6 +163,7 @@ address = SHA-256(secret + your IP)                              <span class="to
         <thead><tr><th>What</th><th class="num">Kept for</th><th>Then</th></tr></thead>
         <tbody>
           <tr><td>Sandbox records</td><td class="num">24 hours</td><td>deleted by a nightly job</td></tr>
+          <tr><td>JSON pasted into /custom</td><td class="num">24 hours</td><td>deleted by a nightly job</td></tr>
           <tr><td>Visitor and address hashes</td><td class="num">90 days</td><td>deleted</td></tr>
           <tr><td>Per-request log</td><td class="num">90 days</td><td>expires automatically</td></tr>
           <tr><td>Daily totals (no identity)</td><td class="num">400 days</td><td>deleted</td></tr>

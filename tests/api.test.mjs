@@ -4,6 +4,7 @@
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import worker from "../src/index.js";
 
 function makeEnv({ keys = [], sandboxes = [], records = [], customs = [], scenario = null } = {}) {
@@ -18,6 +19,13 @@ function makeEnv({ keys = [], sandboxes = [], records = [], customs = [], scenar
     if (s.startsWith("SELECT id, expires_at FROM sandboxes")) return sandboxes.find((b) => b.id === args[0]) || null;
     if (s.startsWith("SELECT body FROM sandbox_records")) return records.find((r) => r.record_id === String(args[2])) || null;
     if (s.startsWith("SELECT body, expires_at FROM custom_apis")) return customs.find((c) => c.id === args[0]) || null;
+    if (s.startsWith("SELECT body, bytes, created_at, expires_at, country, region FROM custom_apis")) {
+      return customs.find((c) => c.id === args[0]) || null;
+    }
+    if (s.startsWith("SELECT COUNT(*) AS live, SUM(is_sample) AS samples FROM custom_apis")) {
+      const live = customs.filter((c) => c.expires_at > Date.now());
+      return { live: live.length, samples: live.filter((c) => c.is_sample).length };
+    }
     if (s.startsWith("SELECT fail_count, status, invert, attempts, expires_at FROM scenarios")) return scenario;
     // The counter advances in the same statement that reads it.
     if (s.startsWith("UPDATE scenarios SET attempts = attempts + 1")) {
@@ -52,8 +60,20 @@ function makeEnv({ keys = [], sandboxes = [], records = [], customs = [], scenar
           _sql: sql.replace(/\s+/g, " ").trim(),
           _args: args,
           first: async () => query(sql, args),
-          run: async () => ({ success: true }),
-          all: async () => ({ results: sql.includes("sandbox_records") ? records : [] }),
+          // Statements run on their own, not in a batch — the custom-API insert
+          // is the one that matters here.
+          run: async function () { writes.push(this); return { success: true }; },
+          all: async () => {
+            if (sql.includes("sandbox_records")) return { results: records };
+            // The admin listing asks for the live ones only; the stub applies
+            // the same cutoff so an expired fixture cannot pass by accident.
+            if (sql.includes("FROM custom_apis")) {
+              const live = customs.filter((c) => c.expires_at > Date.now());
+              // The listing asks for is_sample = 0; the counting query does not.
+              return { results: sql.includes("is_sample = 0") ? live.filter((c) => !c.is_sample) : live };
+            }
+            return { results: [] };
+          },
         }),
       }),
       batch: async (statements) => {
@@ -741,6 +761,89 @@ test("an expired custom API is gone, not empty", async () => {
   const res = await call(`/v1/custom/${CUSTOM.id}/employees`, {}, env);
   assert.equal(res.status, 410);
   assert.match((await body(res)).error.hint, /24 hours/);
+});
+
+// The admin view of /custom. Two guards matter more than the shape: the token,
+// and the 24-hour window — a listing that outlived the row would show documents
+// the person who pasted them believes are gone.
+const ADMIN = { headers: { authorization: "Bearer admin-token" } };
+
+test("lists the custom APIs that are still live, without their bodies", async () => {
+  const env = makeEnv({
+    customs: [
+      { ...CUSTOM, bytes: 2048, created_at: Date.now(), country: "IN", region: "Karnataka", resources: "employees:2" },
+      { ...CUSTOM, id: "ffffffffffffffff", expires_at: Date.now() - 1000, resources: "old:1" },
+    ],
+  });
+
+  const res = await call("/v1/admin/custom", ADMIN, env);
+  assert.equal(res.status, 200);
+  const data = await body(res);
+
+  assert.equal(data.live, 1, "the expired one is not listed");
+  assert.equal(data.apis[0].id, CUSTOM.id);
+  assert.equal(data.apis[0].countryName, "India");
+  assert.equal(data.apis[0].region, "Karnataka");
+  assert.deepEqual(data.apis[0].resources, [{ name: "employees", count: 2 }]);
+  assert.ok(!JSON.stringify(data).includes("Asha"), "the listing never carries a stored body");
+});
+
+test("leaves out pastes that are just the example, and says how many", async () => {
+  const env = makeEnv({
+    customs: [
+      { ...CUSTOM, created_at: Date.now(), resources: "employees:2" },
+      { ...CUSTOM, id: "1111111111111111", created_at: Date.now(), is_sample: 1 },
+      { ...CUSTOM, id: "2222222222222222", created_at: Date.now(), is_sample: 1 },
+    ],
+  });
+
+  const data = await body(await call("/v1/admin/custom", ADMIN, env));
+  assert.equal(data.live, 1, "only somebody's own JSON is listed");
+  assert.equal(data.apis[0].id, CUSTOM.id);
+  assert.equal(data.samplesHidden, 2, "and the hidden ones are still counted");
+  assert.equal(data.liveIncludingSamples, 3);
+});
+
+test("the example is recognised however it was pasted", async () => {
+  // What matters is the document, not the formatting: the button's exact text,
+  // the same thing minified, and the same thing with a value changed.
+  const example = readFileSync("src/config/example.js", "utf8").match(/CUSTOM_EXAMPLE = `([\s\S]*?)`;/)[1];
+  const flagOf = async (payload) => {
+    const env = makeEnv();
+    await call("/v1/custom", { method: "POST", body: payload }, env);
+    const insert = env._writes.find((w) => w._sql.startsWith("INSERT INTO custom_apis"));
+    return insert._args.at(-1);
+  };
+
+  assert.equal(await flagOf(example), 1, "the example as the button supplies it");
+  assert.equal(await flagOf(JSON.stringify(JSON.parse(example))), 1, "and minified");
+  assert.equal(await flagOf(example.replace("Asha Menon", "Someone Else")), 0, "one changed value is somebody's own data");
+  assert.equal(await flagOf('{"todos":[{"id":1}]}'), 0);
+});
+
+test("shows one stored document in full", async () => {
+  const env = makeEnv({ customs: [{ ...CUSTOM, bytes: 99, created_at: Date.now(), country: "IN", region: "Karnataka" }] });
+  const res = await call(`/v1/admin/custom/${CUSTOM.id}`, ADMIN, env);
+  assert.equal(res.status, 200);
+
+  const data = await body(res);
+  assert.equal(data.body.employees[0].name, "Asha");
+  assert.equal(data.countryName, "India");
+});
+
+test("the custom admin views need the token", async () => {
+  const env = makeEnv({ customs: [CUSTOM] });
+  assert.equal((await call("/v1/admin/custom", {}, env)).status, 401);
+  assert.equal((await call(`/v1/admin/custom/${CUSTOM.id}`, {}, env)).status, 401);
+  assert.equal((await call("/v1/admin/custom", { headers: { authorization: "Bearer wrong" } }, env)).status, 401);
+});
+
+test("rejects an id that is not one", async () => {
+  const env = makeEnv({ customs: [CUSTOM] });
+  // Shape first, so nothing that is not 16 hex characters ever reaches a query.
+  assert.equal((await call("/v1/admin/custom/zzzz", ADMIN, env)).status, 400);
+  assert.equal((await call("/v1/admin/custom/%2e%2e%2fkeys", ADMIN, env)).status, 400);
+  assert.equal((await call("/v1/admin/custom/0000000000000000", ADMIN, env)).status, 404);
 });
 
 test("a scenario fails a fixed number of times, then recovers", async () => {
