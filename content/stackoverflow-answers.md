@@ -25,8 +25,12 @@ good answer that happens to contain one lasts a decade.
 
 Answering needs no reputation, so a new account works. But know the limits:
 
-- **Commenting needs 50 rep**, so you cannot ask a clarifying question first.
-  Answer only questions you already understand completely.
+- **Commenting now needs 1 rep**, not the 50 it used to — the privileges API
+  reports the lowered threshold. So you *can* ask a clarifying question first.
+  Do that rather than guessing at what a vague question means.
+- **A comment is never the place for the link.** Promotion in comments is spam
+  regardless of rep, and comments are deleted without much thought. If the tool
+  is worth mentioning, it is worth an answer that stands on its own.
 - **A new account posting links gets scrutinised.** One link, disclosed, in an
   answer that would stand without it.
 - Fill in the profile. An empty profile posting a link reads as a throwaway.
@@ -194,6 +198,151 @@ get moderated hard.
 Listing the competitors first is not politeness — an answer that names only your
 own thing reads as an advert and gets flagged. One that names three is a useful
 answer that happens to include yours.
+
+---
+
+## Draft 4 — ASP.NET Core, "simulate a 404/500 from a dependent Web API"
+
+Target: https://stackoverflow.com/questions/76618175 — open, no accepted answer,
+one answer at score 0, 388 views since July 2023.
+
+**This C# has not been compiled.** There is no .NET SDK on this machine, so
+every snippet below is written from the API surface, not from a passing build.
+This repo's own rule is that generated code gets verified by running it — do
+that here too. Stand up the two projects, make the `HttpRequestException` test
+go red and the 404/500 tests go green, and only then post. Shipping code that
+does not compile to a question tagged `.net-core` earns downvotes faster than
+anything else in this file.
+
+**Read this before writing.** flaky is a *footnote* here, and a weak one. The
+asker wants an **integration test**, and an automated test must not depend on
+somebody else's server being reachable — that is a flaky test in the bad sense.
+The correct answer is almost entirely about dependency injection and a stub
+`HttpMessageHandler`. If the link does not fit naturally when you write it in
+your own words, **post the answer without it.** A good .NET answer under this
+account is worth more than a link in a bad one.
+
+### The actual blocker, first paragraph
+
+Nothing can be simulated until two things change, and both are in the asker's
+code rather than in any mocking tool:
+
+- `new HttpClient()` is constructed inside the action, so there is no seam to
+  intercept. (It also leaks sockets under load — the existing answer's link to
+  the HttpClient guidelines is right about that.)
+- `SENSOR_URL` is a hardcoded `const` pointing at `localhost:7272`, so the test
+  cannot redirect it either.
+
+Fix both by making it a typed client:
+
+```csharp
+public class TrafficSensorClient
+{
+    private readonly HttpClient _http;
+    public TrafficSensorClient(HttpClient http) => _http = http;
+
+    public Task<HttpResponseMessage> GetAsync() => _http.GetAsync("/TrafficSensor");
+}
+```
+
+```csharp
+// Program.cs
+builder.Services.AddHttpClient<TrafficSensorClient>(c =>
+    c.BaseAddress = new Uri(builder.Configuration["SensorUrl"]!));
+```
+
+The controller then takes `TrafficSensorClient` in its constructor.
+
+### The test
+
+Stub the handler, not the client:
+
+```csharp
+sealed class StubHandler : HttpMessageHandler
+{
+    private readonly HttpStatusCode _status;
+    public StubHandler(HttpStatusCode status) => _status = status;
+
+    protected override Task<HttpResponseMessage> SendAsync(
+        HttpRequestMessage request, CancellationToken cancellationToken)
+        => Task.FromResult(new HttpResponseMessage(_status)
+        {
+            Content = new StringContent(string.Empty)
+        });
+}
+```
+
+```csharp
+[Theory]
+[InlineData(HttpStatusCode.NotFound)]
+[InlineData(HttpStatusCode.InternalServerError)]
+public async Task Reports_error_when_sensor_fails(HttpStatusCode status)
+{
+    await using var factory = new WebApplicationFactory<Program>()
+        .WithWebHostBuilder(b => b.ConfigureTestServices(services =>
+            services.AddHttpClient<TrafficSensorClient>()
+                    .ConfigurePrimaryHttpMessageHandler(() => new StubHandler(status))));
+
+    var client = factory.CreateClient();
+
+    Assert.Equal("ERROR!", await client.GetStringAsync("/TrafficReport"));
+}
+```
+
+Two details that cost people an afternoon and are worth stating:
+
+- Re-calling `AddHttpClient<TrafficSensorClient>()` in `ConfigureTestServices`
+  does not create a second client. It resolves to the same named registration,
+  so `ConfigurePrimaryHttpMessageHandler` replaces the real handler while the
+  `BaseAddress` set in `Program.cs` still applies. The stub ignores the URL.
+- With minimal hosting, `WebApplicationFactory<Program>` will not compile until
+  `Program` is visible. Add `public partial class Program { }` at the bottom of
+  `Program.cs`, and reference `Microsoft.AspNetCore.Mvc.Testing`.
+
+### The point worth making that nobody else has
+
+The asker said "simulate an unavailable sensor API" and then asked for 404/500.
+Those are different failures, and the code only survives one of them.
+
+A 404 or a 500 is a *response*, so `IsSuccessStatusCode` is false and the
+`"ERROR!"` branch runs as intended. But an API that is genuinely unavailable —
+process down, connection refused, DNS gone, or just slow enough to hit the
+default 100-second `HttpClient` timeout — does not return a status at all. It
+throws `HttpRequestException` (or `TaskCanceledException` on timeout), the
+action has no `try`/`catch`, and the Report API returns a 500 to *its own*
+caller instead of the error string it was written to return.
+
+So the test suite needs a third case, which the same stub gives for free:
+
+```csharp
+protected override Task<HttpResponseMessage> SendAsync(
+    HttpRequestMessage request, CancellationToken cancellationToken)
+    => throw new HttpRequestException("Connection refused");
+```
+
+That test fails against the code as posted, which is the useful outcome.
+
+### Only then, if it fits — and it may not
+
+> For the automated test above, keep it in-process; a test that reaches the
+> internet is a test that fails when the wifi does.
+>
+> Where an external endpoint does earn its place is the manual pass *before*
+> you write the test — pointing `SensorUrl` at something that returns the status
+> you ask for, so you can watch the real `HttpClient`, the real socket and the
+> real timeout behave, which a stub handler deliberately does not exercise:
+>
+> ```
+> "SensorUrl": "https://flakyapi.dev/v1/posts/1?_status=500"
+> "SensorUrl": "https://flakyapi.dev/v1/posts/1?_delay=30000"   // for the timeout path
+> ```
+>
+> Disclosure: I built that.
+
+The `_delay` half is the honest part of this. A stub handler that throws
+`TaskCanceledException` asserts the catch block, but it never proves the client
+actually times out where you think it does — the timeout is real only over a
+real socket.
 
 ---
 
