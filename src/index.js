@@ -58,11 +58,16 @@ async function handle(request, env, ctx, url, state) {
   const paging = validatePaging(url.searchParams, TIERS[auth.tier].maxLimit);
   if (paging) return withHeaders(paging, headers);
 
-  const injected = await applyChaos(url.searchParams);
+  // `state` goes in so the failure can mark itself as deliberate. Inferring it
+  // afterwards from the query string is what broke: it recognised _status and
+  // _fail_rate and knew nothing about _scenario, so the strongest control on the
+  // site reported every one of its failures as flaky being down.
+  const injected = await applyChaos(url.searchParams, state);
   if (injected) return withHeaders(injected, headers);
 
   // After chaos, so a scenario can be combined with _delay to test a retry that
   // is both slow and failing — which is the case people actually hit.
+  context.state = state;
   const scripted = await applyScenario(context);
   if (scripted) return withHeaders(scripted, headers);
 
@@ -116,20 +121,26 @@ function recordTelemetry(ctx, request, env, url, response, state) {
         // identify a person, which the visitor hashing exists to prevent.
         region: request.cf?.region || "",
         ipHash: await ipId(request, env.VISITOR_SALT || "change-me"),
-        // Which of the three controls this caller reached for. The whole
-        // product thesis is that people want these; nothing measured it.
+        // Which controls this caller reached for. The whole product thesis is
+        // that people want these; nothing measured it.
+        //
+        // All seven, not the first three. Leaving four out understated the one
+        // number that decides whether this product has a reason to exist, and
+        // hid the control that is hardest to get anywhere else.
         chaos: {
           delay: url.searchParams.has("_delay"),
           status: url.searchParams.has("_status"),
           failRate: url.searchParams.has("_fail_rate"),
+          scenario: url.searchParams.has("_scenario"),
+          malformed: url.searchParams.has("_malformed"),
+          retryAfter: url.searchParams.has("_retry_after"),
+          cors: url.searchParams.get("_cors") === "off",
         },
-        // A failure the caller requested is the product working, not a fault —
-        // but only when they actually got what they asked for. ?_status=999 is
-        // rejected with a 400, and that 400 is a validation error, not an
-        // injected one. Merely carrying the parameter is not enough.
-        injected:
-          (response.status === Number(url.searchParams.get("_status")) ||
-            (response.status === 500 && Number(url.searchParams.get("_fail_rate")) > 0)),
+        // A failure the caller requested is the product working, not a fault.
+        // Set by whichever control produced it, so nothing has to guess: a
+        // rejected ?_status=999 is a validation error and stays uncounted, and
+        // a scenario's 503 is counted no matter which status it was built with.
+        injected: state.injected === true,
         durationMs: state.durationMs,
         bytes: Number(response.headers.get("content-length")) || 0,
       };

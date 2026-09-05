@@ -23,7 +23,10 @@ function read(params, name) {
 const reject = (name, raw, expected) =>
   fail(400, `Invalid ${name}`, `${name}=${echo(raw)} is out of range. ${expected}`);
 
-export async function applyChaos(params) {
+// `state` is the request's telemetry scratchpad. A failure produced here marks
+// itself on the way out, so the dashboard can tell "the caller asked for a 503"
+// from "we returned a 503" without re-reading the query string and guessing.
+export async function applyChaos(params, state = {}) {
   const delay = read(params, "_delay");
   const rate = read(params, "_fail_rate");
   const status = read(params, "_status");
@@ -62,6 +65,7 @@ export async function applyChaos(params) {
   }
 
   if (rate && rate.value > 0 && Math.random() < rate.value) {
+    state.injected = true;
     return fail(
       500,
       "Injected failure",
@@ -71,6 +75,7 @@ export async function applyChaos(params) {
 
   // _status=200 is valid and means "behave normally", so it falls through.
   if (status && status.value !== 200) {
+    state.injected = true;
     const response = fail(
       status.value,
       "Injected status",

@@ -209,6 +209,8 @@ export async function getInsights(ctx) {
     ctx.env.DB.prepare(
       `SELECT SUM(requests) AS requests, SUM(with_delay) AS delay,
               SUM(with_status) AS status, SUM(with_fail_rate) AS fail_rate,
+              SUM(with_scenario) AS scenario, SUM(with_malformed) AS malformed,
+              SUM(with_any) AS any_chaos,
               SUM(onsite) AS onsite, SUM(onsite_chaos) AS onsite_chaos,
               SUM(bot_requests) AS bot_requests, SUM(bot_chaos) AS bot_chaos
        FROM path_bucket WHERE day >= ?`
@@ -279,7 +281,9 @@ export async function getInsights(ctx) {
     // The product question, as a number: what share of traffic reaches for the
     // thing that makes this different from every other mock API.
     chaos: (() => {
-      const used = (chaos?.delay || 0) + (chaos?.status || 0) + (chaos?.fail_rate || 0);
+      // One per request, not the sum of the per-control columns — a request
+      // asking for a slow failure carries two of them and is still one request.
+      const used = chaos?.any_chaos || 0;
       const onsite = chaos?.onsite || 0;
       const onsiteChaos = chaos?.onsite_chaos || 0;
       // The figure that matters is the one excluding our own try-it widget:
@@ -296,6 +300,8 @@ export async function getInsights(ctx) {
         delay: chaos?.delay || 0,
         status: chaos?.status || 0,
         failRate: chaos?.fail_rate || 0,
+        scenario: chaos?.scenario || 0,
+        malformed: chaos?.malformed || 0,
         anyShare: total ? Number((used / total).toFixed(4)) : 0,
         onsite,
         bots: botReq,
@@ -361,10 +367,13 @@ const DATASETS = {
   paths: {
     sql: `SELECT day, path, SUM(requests) AS requests, SUM(sum_ms)/SUM(requests) AS avg_ms,
                  MAX(max_ms) AS max_ms, SUM(with_delay) AS with_delay,
-                 SUM(with_status) AS with_status, SUM(with_fail_rate) AS with_fail_rate
+                 SUM(with_status) AS with_status, SUM(with_fail_rate) AS with_fail_rate,
+                 SUM(with_scenario) AS with_scenario, SUM(with_malformed) AS with_malformed,
+                 SUM(with_any) AS with_any
           FROM path_bucket WHERE day >= ? GROUP BY day, path ORDER BY day, requests DESC`,
     columns: [["day","day"],["path","path"],["requests","requests"],["avg_ms","avg_ms"],["max_ms","max_ms"],
-              ["with_delay","with_delay"],["with_status","with_status"],["with_fail_rate","with_fail_rate"]],
+              ["with_delay","with_delay"],["with_status","with_status"],["with_fail_rate","with_fail_rate"],
+              ["with_scenario","with_scenario"],["with_malformed","with_malformed"],["with_any","with_any"]],
   },
   referrers: {
     sql: `SELECT day, referrer, SUM(requests) AS requests

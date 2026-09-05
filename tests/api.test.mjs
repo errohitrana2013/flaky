@@ -33,8 +33,14 @@ function makeEnv({ keys = [], sandboxes = [], records = [], customs = [], scenar
     return null;
   };
 
+  // Every statement the rollup prepares, so a test can assert on what was
+  // written rather than only on what was returned. The dashboard is downstream
+  // of these rows and nothing else could see them.
+  const writes = [];
+
   return {
     _points: points,
+    _writes: writes,
     VISITOR_SALT: "test-salt",
     ADMIN_TOKEN: "admin-token",
     ASSETS: { fetch: async () => new Response("landing page") },
@@ -43,12 +49,17 @@ function makeEnv({ keys = [], sandboxes = [], records = [], customs = [], scenar
     DB: {
       prepare: (sql) => ({
         bind: (...args) => ({
+          _sql: sql.replace(/\s+/g, " ").trim(),
+          _args: args,
           first: async () => query(sql, args),
-          all: async () => ({ results: sql.includes("sandbox_records") ? records : [] }),
           run: async () => ({ success: true }),
+          all: async () => ({ results: sql.includes("sandbox_records") ? records : [] }),
         }),
       }),
-      batch: async () => [],
+      batch: async (statements) => {
+        writes.push(...statements);
+        return [];
+      },
     },
   };
 }
@@ -873,6 +884,60 @@ test("classifies bots so they can be excluded", async () => {
   await call("/v1/posts", { headers: { "user-agent": "curl/8.4.0" } }, env);
   await Promise.allSettled(waits);
   assert.equal(env._points.at(-1).blobs[4], "bot");
+});
+
+// The dashboard's own claims, asserted at the row level. Both of these were
+// wrong in production for as long as the features had existed: scenario
+// failures were filed as unrequested server faults, and four of the seven
+// controls did not count towards the adoption figure at all.
+const rollup = async (url, env, init = {}) => {
+  await call(url, init, env);
+  await Promise.allSettled(waits);
+  const find = (table) => env._writes.filter((w) => w._sql.startsWith(`INSERT INTO ${table}`)).at(-1);
+  return { error: find("error_bucket"), path: find("path_bucket") };
+};
+
+test("a scenario failure is recorded as requested, not as a server fault", async () => {
+  const env = makeEnv({ scenario: { fail_count: 1, status: 503, attempts: 0, expires_at: Date.now() + 60000 } });
+  const { error, path } = await rollup("/v1/posts?_scenario=a1b2c3d4e5f60718", env);
+
+  // error_bucket (day, status, path, injected, bot, count)
+  assert.equal(error._args[1], 503);
+  assert.equal(error._args[3], 1, "the caller scheduled this 503 — it is the product working");
+  assert.equal(path._args[7], 1, "with_scenario");
+  assert.equal(path._args[9], 1, "and it counts towards adoption");
+});
+
+test("a rejected control is a validation error, not an injected one", async () => {
+  const env = makeEnv();
+  const { error } = await rollup("/v1/posts?_status=999", env);
+  assert.equal(error._args[1], 400);
+  assert.equal(error._args[3], 0, "we returned this 400; nobody asked for it");
+});
+
+test("a genuine failure is still counted as ours", async () => {
+  const env = makeEnv();
+  const { error } = await rollup("/v1/nonsense", env);
+  assert.equal(error._args[1], 404);
+  assert.equal(error._args[3], 0);
+});
+
+test("every control counts towards adoption, and a request counts once", async () => {
+  // Columns after max_ms: delay, status, fail_rate, scenario, malformed, any.
+  const columns = (path) => path._args.slice(4, 10);
+
+  for (const control of ["_delay=1", "_status=503", "_fail_rate=1", "_malformed=1", "_retry_after=2", "_cors=off"]) {
+    const env = makeEnv();
+    const { path } = await rollup(`/v1/posts?${control}`, env);
+    assert.equal(columns(path).at(-1), 1, `${control} must count towards the share`);
+  }
+
+  // Two controls, one request. Summing the per-control columns reported this as
+  // two, which is how the adoption figure came to double-count.
+  const env = makeEnv();
+  const { path } = await rollup("/v1/posts?_delay=1&_status=503", env);
+  const [delay, status, , , , any] = columns(path);
+  assert.deepEqual([delay, status, any], [1, 1, 1]);
 });
 
 test("runs the nightly job without throwing", async () => {

@@ -189,6 +189,10 @@ export async function applyScenario(ctx) {
   };
 
   if (failsOn(row.attempts, row.fail_count, row.invert)) {
+    // The caller scheduled this failure, so it is the product working. Without
+    // the mark it lands in the dashboard as an unrequested 5xx — which is how
+    // a week of scenario tests came to look like thirty server faults.
+    if (ctx.state) ctx.state.injected = true;
     const response = fail(
       row.status,
       "Scenario failure",

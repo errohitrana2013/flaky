@@ -15,6 +15,7 @@
   color: var(--accent); font-variant-numeric: tabular-nums; line-height: 1;
 }
 .verdict-text p { margin: 0; font-size: 15px; }
+.hint { color: var(--muted); font-size: 13px; margin: -4px 0 12px; max-width: 68ch; }
 .verdict-text .hint { color: var(--muted); font-size: 13.5px; margin-top: 5px; max-width: 52ch; }
 
 .tiles-3 { grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); }

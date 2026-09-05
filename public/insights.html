@@ -52,7 +52,15 @@
       <div class="tile"><div class="k">_delay</div><div class="v" id="c-delay">—</div></div>
       <div class="tile"><div class="k">_status</div><div class="v" id="c-status">—</div></div>
       <div class="tile"><div class="k">_fail_rate</div><div class="v" id="c-fail">—</div></div>
+      <div class="tile"><div class="k">_scenario</div><div class="v" id="c-scenario">—</div></div>
+      <div class="tile"><div class="k">_malformed</div><div class="v" id="c-malformed">—</div></div>
     </div>
+    <p class="hint">
+      Per-control counts include this site's own widget and automated traffic, so
+      they are larger than the share above and add up to more than the requests
+      that used chaos — one request can ask for a slow failure. _retry_after and
+      _cors=off count towards the share but have no column of their own.
+    </p>
 
     <h2>Do people come back?</h2>
     <p class="lead">Days are UTC, so "today" rolls over at 05:30 IST rather than midnight. A visitor is the same salted hash as elsewhere. Someone whose address changes between visits looks like a new person, so this under-counts returns rather than over-counting them.</p>

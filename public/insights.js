@@ -24,6 +24,8 @@ function render(d) {
   $("c-delay").textContent = num(c.delay);
   $("c-status").textContent = num(c.status);
   $("c-fail").textContent = num(c.failRate);
+  $("c-scenario").textContent = num(c.scenario);
+  $("c-malformed").textContent = num(c.malformed);
 
   // The interpretation matters more than the number, and it changes meaning
   // entirely depending on whether anyone is here yet.

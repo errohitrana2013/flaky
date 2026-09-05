@@ -126,7 +126,10 @@ export async function rollUp(env, ctx, meta) {
   // show where people are arriving from.
   const host = referrerHost(meta.referrer);
   const onsite = host && meta.host && host === meta.host ? 1 : 0;
-  const usedChaos = meta.chaos?.delay || meta.chaos?.status || meta.chaos?.failRate ? 1 : 0;
+  // Any of the seven, counted once. Summing the per-control columns instead
+  // double-counted a request carrying two of them, and ignored the four that
+  // had no column at all.
+  const usedChaos = Object.values(meta.chaos || {}).some(Boolean) ? 1 : 0;
   const isBot = meta.client === "bot" ? 1 : 0;
 
   const referrerRow = host && !onsite
@@ -145,8 +148,8 @@ export async function rollUp(env, ctx, meta) {
     // Top endpoints, latency, and whether the chaos parameters are actually
     // being used — the last of which is the product's central question.
     env.DB.prepare(
-      `INSERT INTO path_bucket (day, path, requests, sum_ms, max_ms, with_delay, with_status, with_fail_rate, onsite, onsite_chaos, bot_requests, bot_chaos)
-       VALUES (?, ?, 1, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `INSERT INTO path_bucket (day, path, requests, sum_ms, max_ms, with_delay, with_status, with_fail_rate, with_scenario, with_malformed, with_any, onsite, onsite_chaos, bot_requests, bot_chaos)
+       VALUES (?, ?, 1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
        ON CONFLICT (day, path) DO UPDATE SET
          requests       = requests + 1,
          sum_ms         = sum_ms + excluded.sum_ms,
@@ -154,6 +157,9 @@ export async function rollUp(env, ctx, meta) {
          with_delay     = with_delay + excluded.with_delay,
          with_status    = with_status + excluded.with_status,
          with_fail_rate = with_fail_rate + excluded.with_fail_rate,
+         with_scenario  = with_scenario + excluded.with_scenario,
+         with_malformed = with_malformed + excluded.with_malformed,
+         with_any       = with_any + excluded.with_any,
          onsite         = onsite + excluded.onsite,
          onsite_chaos   = onsite_chaos + excluded.onsite_chaos,
          bot_requests   = bot_requests + excluded.bot_requests,
@@ -161,6 +167,7 @@ export async function rollUp(env, ctx, meta) {
     ).bind(
       meta.day, normalisePath(meta.path), meta.durationMs, meta.durationMs,
       meta.chaos?.delay ? 1 : 0, meta.chaos?.status ? 1 : 0, meta.chaos?.failRate ? 1 : 0,
+      meta.chaos?.scenario ? 1 : 0, meta.chaos?.malformed ? 1 : 0, usedChaos,
       onsite, onsite && usedChaos ? 1 : 0,
       isBot, isBot && usedChaos ? 1 : 0
     ),
