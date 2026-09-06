@@ -87,7 +87,10 @@ async function check(page, script, endpoint, assertions, entry = "render") {
     // token.js first — the page loads it before its own script.
     vm.runInContext(readFileSync("public/token.js", "utf8"), sandbox);
     vm.runInContext(readFileSync(script, "utf8"), sandbox);
-    vm.runInContext(`${entry}(__DATA__)`, Object.assign(sandbox, { __DATA__: data }));
+    // A bare name is called with the payload; anything containing a bracket is
+    // run as written, for a render function that needs more than the data.
+    const invocation = entry.includes("(") ? entry : `${entry}(__DATA__)`;
+    vm.runInContext(invocation, Object.assign(sandbox, { __DATA__: data }));
   } catch (err) {
     errors.push(`${page}: threw while rendering — ${err.message}`);
   }
@@ -110,6 +113,12 @@ const problems = [
   ...(await check("dashboard customs", "public/dashboard.js", "/v1/admin/custom", {
     "customs": /<tr/, "customs-total": /own JSON/,
   }, "renderCustoms")),
+  // The people modal renders from its own endpoint and is never reached by
+  // render(), so it needs its own pass — with a cohort, since the page picks one
+  // when a row is clicked.
+  ...(await check("insights people", "public/insights.js", "/v1/admin/returning?days=30&min=2", {
+    "people-title": /came back/i, "people-hint": /./, "people-body": /./,
+  }, "showPeople(__DATA__, 2)")),
   ...(await check("insights", "public/insights.js", "/v1/admin/insights?days=30", {
     "chaos-share": /%/, "paths": /<tr/, "paths-total": /endpoints/, "frequency-total": /people/,
     "slowest-total": /worst/, "dwell-total": /pages/,

@@ -73,6 +73,12 @@
       <thead><tr><th>Came back</th><th class="num">People</th><th class="num">Share</th><th class="chart"></th></tr></thead>
       <tbody id="frequency"></tbody>
     </table>
+    <p class="hint">
+      Click a count on any row below the first to see those people: where each
+      arrived from, and every path they touched. Only people who came back —
+      somebody who arrived once and left is most of the traffic and there is
+      nothing to read in listing them one by one.
+    </p>
     <div class="tabletotal" id="frequency-total"></div>
 
     <h2>Time on page</h2>
@@ -128,6 +134,21 @@ WHERE timestamp > now() - INTERVAL '7' DAY
 GROUP BY path ORDER BY hits DESC</code></pre>
       </div>
     </div>
+  </div>
+</div>
+
+<!-- Who came back, and what they did. Opened from the People column in the
+     frequency table; empty until a row is clicked. Outside .wrap so the
+     backdrop covers the page rather than a column of it. -->
+<div id="people-modal" class="modal" hidden>
+  <div class="modal-back" id="people-back"></div>
+  <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="people-title">
+    <div class="modal-top">
+      <h3 id="people-title">Who came back</h3>
+      <button id="people-close" class="smallbtn" type="button">Close</button>
+    </div>
+    <p class="hint" id="people-hint"></p>
+    <div class="modal-body" id="people-body"></div>
   </div>
 </div>
 

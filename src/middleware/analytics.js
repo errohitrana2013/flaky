@@ -79,9 +79,10 @@ export function logRequest(env, ctx, request, meta) {
   });
 }
 
-// Two writes per request, not four. Daily totals, the hour-of-day histogram
-// and the per-country breakdown are all GROUP BYs over the same row, so one
-// bucket serves all three. See migrations/0003 for why that ceiling matters.
+// Daily totals, the hour-of-day histogram and the per-country breakdown are all
+// GROUP BYs over the same row, so one bucket serves all three rather than three
+// buckets serving one each. See migrations/0003 for why that ceiling matters,
+// and 0020 for the third write that visitor_path adds on top of it.
 // /v1/posts/42 -> /v1/posts/:id, and sandbox ids likewise. Without this every
 // record id would be its own row and the breakdown would be unreadable as well
 // as unbounded.
@@ -108,6 +109,7 @@ export async function rollUp(env, ctx, meta) {
   if (!env.DB) return;
   const keyId = meta.keyId || "anon";
   const isError = meta.status >= 400 ? 1 : 0;
+  const path = normalisePath(meta.path);
 
   // Only written on failures, so a healthy service pays nothing for it.
   const errorDetail = isError
@@ -116,7 +118,7 @@ export async function rollUp(env, ctx, meta) {
           `INSERT INTO error_bucket (day, status, path, injected, bot, count)
            VALUES (?, ?, ?, ?, ?, 1)
            ON CONFLICT (day, status, path, injected, bot) DO UPDATE SET count = count + 1`
-        ).bind(meta.day, meta.status, normalisePath(meta.path),
+        ).bind(meta.day, meta.status, path,
                meta.injected ? 1 : 0, meta.client === "bot" ? 1 : 0),
       ]
     : [];
@@ -132,6 +134,28 @@ export async function rollUp(env, ctx, meta) {
   const usedChaos = Object.values(meta.chaos || {}).some(Boolean) ? 1 : 0;
   const isBot = meta.client === "bot" ? 1 : 0;
 
+  // One row per person per path per day: what a returning visitor actually did,
+  // which no other rollup can answer because none of them carry a visitor.
+  //
+  // Two exclusions, both deliberate. Bots never get a row — a credential sweep
+  // touches dozens of probe paths and would be most of the table while telling
+  // us nothing about anyone who chose to be here. And the beacon is this site's
+  // own instrumentation, not something a person did; counting it would put
+  // /v1/beacon at the top of every trail. The page it reports is recorded by the
+  // beacon handler under the page's own path instead.
+  const trail = isBot || path === "/v1/beacon"
+    ? []
+    : [
+        env.DB.prepare(
+          `INSERT INTO visitor_path (day, visitor, path, requests, chaos, errors)
+           VALUES (?, ?, ?, 1, ?, ?)
+           ON CONFLICT (day, visitor, path) DO UPDATE SET
+             requests = requests + 1,
+             chaos    = chaos + excluded.chaos,
+             errors   = errors + excluded.errors`
+        ).bind(meta.day, meta.visitor, path, usedChaos, isError),
+      ];
+
   const referrerRow = host && !onsite
     ? [
         env.DB.prepare(
@@ -144,6 +168,7 @@ export async function rollUp(env, ctx, meta) {
   await env.DB.batch([
     ...errorDetail,
     ...referrerRow,
+    ...trail,
 
     // Top endpoints, latency, and whether the chaos parameters are actually
     // being used — the last of which is the product's central question.
@@ -165,7 +190,7 @@ export async function rollUp(env, ctx, meta) {
          bot_requests   = bot_requests + excluded.bot_requests,
          bot_chaos      = bot_chaos + excluded.bot_chaos`
     ).bind(
-      meta.day, normalisePath(meta.path), meta.durationMs, meta.durationMs,
+      meta.day, path, meta.durationMs, meta.durationMs,
       meta.chaos?.delay ? 1 : 0, meta.chaos?.status ? 1 : 0, meta.chaos?.failRate ? 1 : 0,
       meta.chaos?.scenario ? 1 : 0, meta.chaos?.malformed ? 1 : 0, usedChaos,
       onsite, onsite && usedChaos ? 1 : 0,
@@ -230,6 +255,10 @@ export async function purgeExpired(env) {
 
     // Visitor hashes: the privacy clock, and the shortest of the three.
     env.DB.prepare("DELETE FROM daily_visitors WHERE day < ?").bind(visitorCutoff),
+    // The per-visitor trail hangs off that hash, so it lives and dies with it.
+    // Keeping it a day longer than the identity it belongs to would be keeping
+    // it for no one, and the privacy page promises the same 90 days for both.
+    env.DB.prepare("DELETE FROM visitor_path WHERE day < ?").bind(visitorCutoff),
 
     // Aggregates: no identity in them, so they keep a year for comparison.
     env.DB.prepare("DELETE FROM usage_bucket WHERE day < ?").bind(rollupCutoff),

@@ -87,10 +87,15 @@ echo; echo "ADMIN"
 is "no token 401" "$(code "$U/v1/admin/stats")" "401"
 is "wrong token 401" "$(code "$U/v1/admin/stats" -H 'authorization: Bearer wrong')" "401"
 is "export needs token" "$(code "$U/v1/admin/export?dataset=daily")" "401"
+is "returning needs token" "$(code "$U/v1/admin/returning")" "401"
 if [ -n "$ADMIN" ]; then
   is "stats with token" "$(code "$U/v1/admin/stats" -H "authorization: Bearer $ADMIN")" "200"
   is "csv with token" "$(code "$U/v1/admin/export?dataset=countries" -H "authorization: Bearer $ADMIN")" "200"
   is "bad dataset 400" "$(code "$U/v1/admin/export?dataset=nope" -H "authorization: Bearer $ADMIN")" "400"
+  is "returning with token" "$(code "$U/v1/admin/returning" -H "authorization: Bearer $ADMIN")" "200"
+  # The floor is the privacy promise, not a default: min=1 would list everybody.
+  is "returning floors min at 2" \
+    "$(curl -s --max-time 25 "$U/v1/admin/returning?min=1" -H "authorization: Bearer $ADMIN" | sed -n 's/.*"min":\([0-9]*\).*/\1/p')" "2"
 fi
 
 echo; echo "SCENARIOS"

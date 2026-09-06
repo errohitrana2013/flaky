@@ -126,19 +126,124 @@ function renderReturning(r) {
         const peak = Math.max(...rows.map((f) => f.people));
         return rows.map((f) => `<tr${f.days > 1 ? ' class="repeat"' : ""}>
             <td>${ordinal(f.days)}</td>
-            <td class="num">${num(f.people)}</td>
+            <td class="num">${
+              // Only the rows that came back. The once-only row is 90% of
+              // everyone and there is nothing behind it worth opening.
+              f.days > 1
+                ? `<button class="linkbtn" data-cohort="${f.days}">${num(f.people)}</button>`
+                : num(f.people)
+            }</td>
             <td class="num">${everyone ? ((f.people / everyone) * 100).toFixed(1) + "%" : "—"}</td>
             <td class="chart"><div class="track${f.days > 1 ? " sev" : ""}" data-w="${((f.people / peak) * 100).toFixed(1)}"></div></td>
           </tr>`).join("");
       })()
     : '<tr><td colspan="4" class="muted">Nobody recorded yet.</td></tr>';
   applySizes($("frequency"));
+  for (const b of $("frequency").querySelectorAll("[data-cohort]")) {
+    b.addEventListener("click", () => openPeople(Number(b.dataset.cohort), b));
+  }
   const came = rows.filter((f) => f.days > 1).reduce((n, f) => n + f.people, 0);
   summary("frequency-total", [
     part("people", everyone),
     part("came back at all", came),
     part("return rate", everyone ? ((came / everyone) * 100).toFixed(1) + "%" : "—"),
   ]);
+}
+
+// --- Who came back ---------------------------------------------------------
+//
+// The frequency table is a count of people; this is the people. One request
+// fetches everyone who returned at all, and each row filters it down to its own
+// cohort — twenty-odd rows is not worth a round trip per click, and the numbers
+// stay consistent with the table that was already drawn.
+
+let peopleCache = null;
+
+const ordinalTitle = (n) =>
+  n === 2 ? "Came back twice" : n === 3 ? "Came back three times" : `Came back ${n} times`;
+
+// "30 Aug" — the year is never in question over a 90-day window.
+const shortDay = (iso) =>
+  new Date(iso + "T00:00:00Z").toLocaleDateString(undefined, { day: "numeric", month: "short", timeZone: "UTC" });
+
+const atHour = (h) => (h < 0 ? "" : `first seen ${String(h).padStart(2, "0")}:00 UTC`);
+
+// A path under /v1 is something they called; anything else is a page they read,
+// reported by the beacon. Counting both as "requests" would read as if somebody
+// hammered the landing page.
+const isEndpoint = (path) => path.startsWith("/v1/");
+
+function personBlock(p) {
+  const where = [p.region, p.countryName].filter(Boolean).join(", ") || "Unknown";
+  const span = p.firstDay === p.lastDay
+    ? shortDay(p.firstDay)
+    : `${shortDay(p.firstDay)} → ${shortDay(p.lastDay)}`;
+
+  const trail = p.paths.length
+    ? p.paths.map((t) => `<li>
+        <span class="p">${clean(t.path)}</span>
+        <span class="n">${num(t.requests)} ${isEndpoint(t.path)
+          ? (t.requests === 1 ? "request" : "requests")
+          : (t.requests === 1 ? "read" : "reads")}</span>
+        <span class="c">${t.chaos ? num(t.chaos) + " chaos" : ""}</span>
+        <span class="n">${t.errors ? num(t.errors) + " err" : ""}</span>
+      </li>`).join("")
+    : '<li class="none">Nothing recorded for this person yet.</li>';
+
+  return `<div class="person">
+    <div class="person-top">
+      <span class="person-where">${clean(where)}</span>
+      <span class="meta">${p.days} days · ${span}${p.hour >= 0 ? " · " + atHour(p.hour) : ""}</span>
+      ${p.chaos ? '<span class="tag">used chaos</span>' : ""}
+    </div>
+    <ul class="trail">${trail}</ul>
+  </div>`;
+}
+
+// Takes the payload rather than reading the cache, so scripts/check-render.mjs
+// can drive it against live data the way it drives every other render function.
+function showPeople(data, cohort) {
+  const all = data?.people || [];
+  const mine = all.filter((p) => p.days === cohort);
+
+  $("people-title").textContent = `${ordinalTitle(cohort)} — ${mine.length} ${mine.length === 1 ? "person" : "people"}`;
+
+  // Trails only exist from the day the per-visitor table shipped, so for a
+  // while the window reaches back further than the data does. Saying so is the
+  // difference between "did nothing" and "not recorded", which look identical.
+  const from = data?.trailsFrom;
+  $("people-hint").textContent = from
+    ? `Where each person arrived from, and every path they touched. Paths recorded since ${shortDay(from)}; anything before that is not in the trail. Region only — never a city.`
+    : "No paths recorded yet. The per-visitor trail starts with the next request.";
+
+  $("people-body").innerHTML = mine.length
+    ? mine.map(personBlock).join("")
+    : '<p class="muted">Nobody in this group any more — the window may have moved since the table was drawn.</p>';
+
+  $("people-modal").hidden = false;
+}
+
+function closePeople() {
+  $("people-modal").hidden = true;
+}
+
+async function openPeople(cohort, button) {
+  if (peopleCache) return showPeople(peopleCache, cohort);
+
+  button.disabled = true;
+  try {
+    const res = await fetch("/v1/admin/returning?days=14&min=2", {
+      headers: { authorization: "Bearer " + authToken },
+    });
+    if (!res.ok) throw new Error("Could not load people: " + res.status);
+    peopleCache = await res.json();
+    showPeople(peopleCache, cohort);
+  } catch (err) {
+    $("error").textContent = err.message;
+    $("error").hidden = false;
+  } finally {
+    button.disabled = false;
+  }
 }
 
 function renderDwell(rows) {
@@ -172,6 +277,8 @@ async function attempt(token) {
     if (!res.ok) throw new Error(res.status === 401 ? "Token rejected." : "Request failed: " + res.status);
     render(await res.json());
     authToken = token;
+    // A new token means a new session; the cached people belong to the old one.
+    peopleCache = null;
     saveToken(token);
   } catch (err) {
     authToken = null;
@@ -201,6 +308,12 @@ async function downloadCsv(button) {
     button.disabled = false;
   }
 }
+
+$("people-close").addEventListener("click", closePeople);
+$("people-back").addEventListener("click", closePeople);
+// Escape closes it. A dialog that can only be dismissed by hitting a small
+// button is the kind of thing that gets left open.
+addEventListener("keydown", (e) => { if (e.key === "Escape") closePeople(); });
 
 $("go").addEventListener("click", () => attempt($("token").value.trim()));
 $("token").addEventListener("keydown", (e) => { if (e.key === "Enter") $("go").click(); });

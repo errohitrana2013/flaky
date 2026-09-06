@@ -406,6 +406,111 @@ export async function readCustomBody(ctx) {
   });
 }
 
+// --- Returning people ------------------------------------------------------
+//
+// The frequency table on /insights says how many people came back and nothing
+// else about them. This is the row behind the number: who each of them was,
+// coarsely, and what they actually did across the window.
+//
+// Only people who came back. Somebody who arrived once and left is the bulk of
+// every day's traffic and there is nothing to learn from listing them
+// individually — the interesting population is the handful who chose to return,
+// and it is small enough to show one row per person rather than a summary.
+
+// GET /v1/admin/returning?days=30&min=2
+export async function getReturning(ctx) {
+  if (!authorised(ctx.request, ctx.env)) {
+    return fail(401, "Admin token required", "Send Authorization: Bearer <ADMIN_TOKEN>.");
+  }
+
+  const days = Math.min(Math.max(Number(ctx.query.get("days")) || 30, 1), 90);
+  // Never below 2. This endpoint exists for people who came back, and dropping
+  // the floor to 1 would turn it into a list of every visitor with their
+  // browsing attached — a different thing entirely, and not one the privacy
+  // page describes.
+  const min = Math.min(Math.max(Number(ctx.query.get("min")) || 2, 2), 90);
+  const since = daysAgo(days);
+
+  // The cohort, defined once and used by both queries: non-bots seen on at
+  // least `min` separate days inside the window.
+  const cohort = `SELECT visitor, COUNT(DISTINCT day) AS days,
+                         MIN(day) AS first_day, MAX(day) AS last_day
+                  FROM daily_visitors
+                  WHERE day >= ? AND bot = 0
+                  GROUP BY visitor
+                  HAVING days >= ?`;
+
+  const [people, trails, trailStart] = await Promise.all([
+    // Joined back to the visitor's *first* day, so country, region and hour are
+    // where they arrived from rather than an arbitrary row — the same meaning
+    // those columns carry everywhere else.
+    ctx.env.DB.prepare(
+      `SELECT c.visitor, c.days, c.first_day, c.last_day, v.country, v.region, v.hour
+       FROM (${cohort}) c
+       JOIN daily_visitors v ON v.visitor = c.visitor AND v.day = c.first_day
+       ORDER BY c.days DESC, c.last_day DESC
+       LIMIT 200`
+    ).bind(since, min).all(),
+
+    // Their trails, in one round trip rather than one query per person.
+    ctx.env.DB.prepare(
+      `SELECT vp.visitor, vp.path,
+              SUM(vp.requests) AS requests, SUM(vp.chaos) AS chaos, SUM(vp.errors) AS errors
+       FROM visitor_path vp
+       JOIN (${cohort}) c ON c.visitor = vp.visitor
+       WHERE vp.day >= ?
+       GROUP BY vp.visitor, vp.path
+       ORDER BY requests DESC
+       LIMIT 2000`
+    ).bind(since, min, since).all(),
+
+    // The first day anything was recorded. Trails began when 0020 shipped, so
+    // for a while the window reaches back further than the data does — and a
+    // person with an empty trail has to read as "not recorded yet" rather than
+    // as "did nothing", which is what an empty list looks like.
+    ctx.env.DB.prepare("SELECT MIN(day) AS from_day FROM visitor_path").first(),
+  ]);
+
+  const byVisitor = new Map();
+  for (const row of trails.results || []) {
+    if (!byVisitor.has(row.visitor)) byVisitor.set(row.visitor, []);
+    byVisitor.get(row.visitor).push({
+      path: row.path,
+      requests: row.requests,
+      chaos: row.chaos,
+      errors: row.errors,
+    });
+  }
+
+  return json({
+    window: { from: since, to: today(), days },
+    min,
+    // null until the first request lands after 0020.
+    trailsFrom: trailStart?.from_day || null,
+    // The hash itself never leaves the server. It is a stable pseudonym and
+    // there is no reason for a browser to hold one; the index is enough to tell
+    // two rows apart, which is all the page does with it.
+    people: (people.results || []).map((row, i) => {
+      const paths = byVisitor.get(row.visitor) || [];
+      return {
+        n: i + 1,
+        days: row.days,
+        firstDay: row.first_day,
+        lastDay: row.last_day,
+        country: row.country || "XX",
+        countryName: countryName(row.country),
+        region: row.region || "",
+        // -1 means the row predates the hour column; the page shows a dash.
+        hour: row.hour,
+        requests: paths.reduce((n, p) => n + p.requests, 0),
+        chaos: paths.reduce((n, p) => n + p.chaos, 0),
+        errors: paths.reduce((n, p) => n + p.errors, 0),
+        paths,
+      };
+    }),
+  });
+}
+
 // --- CSV export ------------------------------------------------------------
 //
 // One dataset per file rather than one endpoint returning everything, because

@@ -1,6 +1,6 @@
 import { json, fail } from "../lib/response.js";
-import { today } from "../lib/hash.js";
-import { normalisePath } from "../middleware/analytics.js";
+import { today, visitorId } from "../lib/hash.js";
+import { normalisePath, classifyClient } from "../middleware/analytics.js";
 
 // POST /v1/beacon  { path, seconds }
 //
@@ -31,20 +31,41 @@ export async function recordBeacon(ctx) {
 
   const path = normalisePath(String(body.path).slice(0, 120));
 
+  // The pages themselves never reach this Worker — Cloudflare serves anything
+  // matching public/ before the Worker runs — so this beacon is the only place
+  // a page read can be attributed to the person who read it. Without it a
+  // visitor's trail would be API calls only, and most of what people do here is
+  // read the landing page and the migration guide.
+  //
+  // Same hash and the same bot exclusion as the request rollup, so the row joins
+  // the ones written there and a scanner that somehow sends a beacon is left out
+  // of both.
+  const trail = classifyClient(ctx.request, path) === "bot"
+    ? []
+    : [
+        ctx.env.DB.prepare(
+          `INSERT INTO visitor_path (day, visitor, path, requests, chaos, errors)
+           VALUES (?, ?, ?, 1, 0, 0)
+           ON CONFLICT (day, visitor, path) DO UPDATE SET requests = requests + 1`
+        ).bind(today(), await visitorId(ctx.request, ctx.env.VISITOR_SALT || "change-me"), path),
+      ];
+
   // Deferred, not awaited. A D1 write is a round trip, and it was making the
   // beacon the slowest endpoint on the site at 243ms average — for a request
   // whose entire point is that the browser has already navigated away and is not
   // waiting for the answer.
-  const write = ctx.env.DB.prepare(
-    `INSERT INTO page_time (day, path, visits, sum_seconds, max_seconds, bounced)
-     VALUES (?, ?, 1, ?, ?, ?)
-     ON CONFLICT (day, path) DO UPDATE SET
-       visits      = visits + 1,
-       sum_seconds = sum_seconds + excluded.sum_seconds,
-       max_seconds = MAX(max_seconds, excluded.max_seconds),
-       bounced     = bounced + excluded.bounced`
-  ).bind(today(), path, seconds, seconds, seconds < BOUNCE_UNDER ? 1 : 0).run()
-   .catch(() => {}); // a lost beacon is not worth an error anyone will see
+  const write = ctx.env.DB.batch([
+    ctx.env.DB.prepare(
+      `INSERT INTO page_time (day, path, visits, sum_seconds, max_seconds, bounced)
+       VALUES (?, ?, 1, ?, ?, ?)
+       ON CONFLICT (day, path) DO UPDATE SET
+         visits      = visits + 1,
+         sum_seconds = sum_seconds + excluded.sum_seconds,
+         max_seconds = MAX(max_seconds, excluded.max_seconds),
+         bounced     = bounced + excluded.bounced`
+    ).bind(today(), path, seconds, seconds, seconds < BOUNCE_UNDER ? 1 : 0),
+    ...trail,
+  ]).catch(() => {}); // a lost beacon is not worth an error anyone will see
 
   ctx.ctx?.waitUntil ? ctx.ctx.waitUntil(write) : await write;
 

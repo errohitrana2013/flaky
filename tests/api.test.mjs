@@ -7,7 +7,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import worker from "../src/index.js";
 
-function makeEnv({ keys = [], sandboxes = [], records = [], customs = [], scenario = null } = {}) {
+function makeEnv({ keys = [], sandboxes = [], records = [], customs = [], scenario = null, cohort = [], trails = [] } = {}) {
   const kv = new Map();
   const points = [];
 
@@ -26,6 +26,7 @@ function makeEnv({ keys = [], sandboxes = [], records = [], customs = [], scenar
       const live = customs.filter((c) => c.expires_at > Date.now());
       return { live: live.length, samples: live.filter((c) => c.is_sample).length };
     }
+    if (s.includes("MIN(day) AS from_day")) return { from_day: "2026-09-01" };
     if (s.startsWith("SELECT fail_count, status, invert, attempts, expires_at FROM scenarios")) return scenario;
     // The counter advances in the same statement that reads it.
     if (s.startsWith("UPDATE scenarios SET attempts = attempts + 1")) {
@@ -56,6 +57,9 @@ function makeEnv({ keys = [], sandboxes = [], records = [], customs = [], scenar
     RATE_LIMITS: { get: async (k) => kv.get(k) ?? null, put: async (k, v) => void kv.set(k, v) },
     DB: {
       prepare: (sql) => ({
+        // Real D1 lets a statement with no placeholders skip bind() entirely.
+        first: async () => query(sql, []),
+        all: async () => ({ results: [] }),
         bind: (...args) => ({
           _sql: sql.replace(/\s+/g, " ").trim(),
           _args: args,
@@ -67,6 +71,9 @@ function makeEnv({ keys = [], sandboxes = [], records = [], customs = [], scenar
             if (sql.includes("sandbox_records")) return { results: records };
             // The admin listing asks for the live ones only; the stub applies
             // the same cutoff so an expired fixture cannot pass by accident.
+            // The two halves of /v1/admin/returning: the people, then their paths.
+            if (sql.includes("JOIN daily_visitors v")) return { results: cohort };
+            if (sql.includes("FROM visitor_path vp")) return { results: trails };
             if (sql.includes("FROM custom_apis")) {
               const live = customs.filter((c) => c.expires_at > Date.now());
               // The listing asks for is_sample = 0; the counting query does not.
@@ -1041,6 +1048,130 @@ test("every control counts towards adoption, and a request counts once", async (
   const { path } = await rollup("/v1/posts?_delay=1&_status=503", env);
   const [delay, status, , , , any] = columns(path);
   assert.deepEqual([delay, status, any], [1, 1, 1]);
+});
+
+// The per-visitor trail. It is the only table that records behaviour against an
+// identity, so what it must NOT contain matters as much as what it does.
+test("records the path a person used, with the chaos and error on it", async () => {
+  const env = makeEnv();
+  await call("/v1/posts?_delay=1", {}, env);
+  await Promise.allSettled(waits);
+
+  const row = env._writes.find((w) => w._sql.startsWith("INSERT INTO visitor_path"));
+  assert.ok(row, "a visitor trail row is written");
+  // (day, visitor, path, chaos, errors)
+  assert.equal(row._args[2], "/v1/posts");
+  assert.equal(row._args[3], 1, "the request asked for chaos");
+  assert.equal(row._args[4], 0);
+});
+
+test("record ids are collapsed in the trail, as everywhere else", async () => {
+  const env = makeEnv();
+  await call("/v1/posts/42", {}, env);
+  await Promise.allSettled(waits);
+
+  const row = env._writes.find((w) => w._sql.startsWith("INSERT INTO visitor_path"));
+  // Without this the table would carry one row per record anyone ever read,
+  // which is unbounded and reads as noise.
+  assert.equal(row._args[2], "/v1/posts/:id");
+});
+
+test("bots leave no trail", async () => {
+  const env = makeEnv();
+  await call("/v1/posts", { headers: { "user-agent": "curl/8.4.0" } }, env);
+  await Promise.allSettled(waits);
+
+  assert.equal(
+    env._writes.filter((w) => w._sql.startsWith("INSERT INTO visitor_path")).length,
+    0,
+    "a scanner touching fifty probe paths must not become fifty rows"
+  );
+  // The aggregate rollups still count it — being scanned is real traffic.
+  assert.ok(env._writes.some((w) => w._sql.startsWith("INSERT INTO path_bucket")));
+});
+
+test("the beacon is not itself an activity, but the page it reports is", async () => {
+  const env = makeEnv();
+  await call("/v1/beacon", {
+    method: "POST",
+    headers: { "user-agent": "Mozilla/5.0", "content-type": "application/json" },
+    body: JSON.stringify({ path: "/docs/jsonplaceholder", seconds: 45 }),
+  }, env);
+  await Promise.allSettled(waits);
+
+  const trail = env._writes.filter((w) => w._sql.startsWith("INSERT INTO visitor_path"));
+  assert.equal(trail.length, 1, "one row, for the page — not one for /v1/beacon too");
+  assert.equal(trail[0]._args[2], "/docs/jsonplaceholder");
+});
+
+test("the trail is purged on the same clock as the hash it belongs to", async () => {
+  const env = makeEnv();
+  await worker.scheduled({}, env, ctx);
+  await Promise.allSettled(waits);
+
+  const purges = env._writes.filter((w) => w._sql.startsWith("DELETE FROM"));
+  const visitors = purges.find((w) => w._sql.includes("daily_visitors"));
+  const trail = purges.find((w) => w._sql.includes("visitor_path"));
+  assert.ok(trail, "the trail is purged at all");
+  // Keeping it past the hash would be keeping it for nobody.
+  assert.equal(trail._args[0], visitors._args[0]);
+});
+
+// GET /v1/admin/returning
+const COHORT = [
+  { visitor: "aaaa", days: 4, first_day: "2026-09-01", last_day: "2026-09-05", country: "IN", region: "Karnataka", hour: 2 },
+  { visitor: "bbbb", days: 2, first_day: "2026-09-02", last_day: "2026-09-03", country: "US", region: "Iowa", hour: -1 },
+];
+const TRAILS = [
+  { visitor: "aaaa", path: "/v1/posts", requests: 41, chaos: 8, errors: 1 },
+  { visitor: "aaaa", path: "/", requests: 3, chaos: 0, errors: 0 },
+];
+
+test("lists the people who came back, with what they did", async () => {
+  const env = makeEnv({ cohort: COHORT, trails: TRAILS });
+  const res = await call("/v1/admin/returning", ADMIN, env);
+  assert.equal(res.status, 200);
+
+  const data = await body(res);
+  assert.equal(data.people.length, 2);
+
+  const [first] = data.people;
+  assert.equal(first.countryName, "India");
+  assert.equal(first.region, "Karnataka");
+  assert.equal(first.days, 4);
+  assert.equal(first.requests, 44, "totals come from the trail, not a second query");
+  assert.equal(first.chaos, 8);
+  assert.deepEqual(first.paths.map((p) => p.path), ["/v1/posts", "/"]);
+
+  // Somebody with no rows yet is reported as having none rather than dropped —
+  // the trail only starts when it starts.
+  assert.deepEqual(data.people[1].paths, []);
+  assert.equal(data.trailsFrom, "2026-09-01");
+});
+
+test("the visitor hash never leaves the server", async () => {
+  const env = makeEnv({ cohort: COHORT, trails: TRAILS });
+  const raw = await (await call("/v1/admin/returning", ADMIN, env)).text();
+  // It is a stable pseudonym; a browser has no use for one, and shipping it
+  // would make every screenshot of this page a correlation key.
+  assert.ok(!raw.includes("aaaa"), "no visitor hash in the response");
+  assert.match(raw, /"n":1/);
+});
+
+test("never lists people who came only once", async () => {
+  const env = makeEnv({ cohort: COHORT, trails: TRAILS });
+  // min=1 would turn this into a list of every visitor with their browsing
+  // attached, which is not what the privacy page describes.
+  const data = await body(await call("/v1/admin/returning?min=1", ADMIN, env));
+  assert.equal(data.min, 2);
+  assert.equal((await body(await call("/v1/admin/returning?min=0", ADMIN, env))).min, 2);
+  assert.equal((await body(await call("/v1/admin/returning?min=3", ADMIN, env))).min, 3);
+});
+
+test("the returning view needs the token", async () => {
+  const env = makeEnv({ cohort: COHORT });
+  assert.equal((await call("/v1/admin/returning", {}, env)).status, 401);
+  assert.equal((await call("/v1/admin/returning", { headers: { authorization: "Bearer wrong" } }, env)).status, 401);
 });
 
 test("runs the nightly job without throwing", async () => {

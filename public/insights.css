@@ -37,3 +37,80 @@ td.ms.slow { color: var(--accent); font-weight: 600; }
 /* Everyone who came back at all. That is the row that matters — a first visit
    is traffic, a second is interest. */
 tr.repeat td:first-child { color: var(--accent); font-weight: 600; }
+
+/* --- Who came back --------------------------------------------------------
+
+   The People count is a button rather than a link: it fetches with the admin
+   header instead of navigating, and an <a> would open a tab with no token and
+   a 401. Only rows above one visit get one — the once-only row is most of the
+   traffic and there is nothing behind it worth opening. */
+.linkbtn {
+  background: none; border: 0; padding: 0; cursor: pointer;
+  color: var(--accent); font: inherit; font-variant-numeric: tabular-nums;
+  text-decoration: underline; text-underline-offset: 3px;
+}
+.linkbtn:hover { text-decoration-thickness: 2px; }
+.linkbtn:disabled { color: var(--muted); cursor: wait; text-decoration: none; }
+
+.smallbtn {
+  font-size: 11px; letter-spacing: .04em; font-weight: 600;
+  color: var(--muted); background: none; border: 1px solid var(--line);
+  padding: 4px 9px; border-radius: 6px; cursor: pointer; text-transform: uppercase;
+}
+.smallbtn:hover { color: var(--accent); border-color: var(--accent); }
+
+.modal { position: fixed; inset: 0; z-index: 50; display: flex; }
+/* A class selector beats the [hidden] rule in the UA stylesheet, so display:flex
+   would keep the dialog on screen permanently without this. */
+.modal[hidden] { display: none; }
+.modal-back { position: absolute; inset: 0; background: rgba(0,0,0,.45); }
+.modal-card {
+  position: relative; margin: auto; width: min(760px, calc(100vw - 32px));
+  max-height: calc(100vh - 48px); display: flex; flex-direction: column;
+  background: var(--panel); border: 1px solid var(--line);
+  border-radius: 12px; padding: 18px 20px 20px;
+  box-shadow: 0 20px 60px rgba(0,0,0,.3);
+}
+.modal-top { display: flex; align-items: center; gap: 12px; margin-bottom: 4px; }
+.modal-top h3 { margin: 0; font-size: 16px; }
+.modal-top .smallbtn { margin-left: auto; }
+.modal-body { overflow-y: auto; margin-top: 6px; }
+
+/* One block per person: the header line identifies them as far as this site
+   ever can, and the list under it is what they did. */
+.person {
+  border-top: 1px solid var(--line); padding: 12px 0;
+}
+.person:first-child { border-top: 0; }
+.person-top {
+  display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 10px;
+  font-size: 13.5px; margin-bottom: 8px;
+}
+.person-where { font-weight: 600; }
+.person-top .meta { color: var(--muted); font-size: 12.5px; }
+.person-top .tag {
+  color: var(--accent); border: 1px solid var(--accent); border-radius: 999px;
+  padding: 0 7px; font-size: 11px; font-weight: 600; letter-spacing: .03em;
+}
+.trail { margin: 0; padding: 0; list-style: none; display: grid; gap: 3px; }
+/* Fixed columns, not flex. With margin-left:auto the first right-hand value
+   floats to wherever the row runs out, so a line carrying both a chaos count
+   and an error count staggered while a line carrying one did not. Empty cells
+   are emitted for the counts a row does not have, which is what keeps the
+   numbers under each other down the list. */
+.trail li {
+  display: grid; grid-template-columns: minmax(0, 1fr) 88px 74px 52px;
+  gap: 10px; align-items: baseline; font-size: 12.5px;
+}
+.trail .p {
+  font-family: ui-monospace, monospace; color: var(--ink);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.trail .n, .trail .c {
+  text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap;
+}
+.trail .n { color: var(--muted); }
+.trail .c { color: var(--accent); }
+/* The empty state is a sentence, not a row of columns. */
+.trail li.none { display: block; }
+.trail .none { color: var(--muted); font-style: italic; }

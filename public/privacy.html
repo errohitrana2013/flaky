@@ -87,9 +87,27 @@ address = SHA-256(secret + your IP)                              <span class="to
     <h3>Time on the page</h3>
     <p>
       The landing page measures how long it was visible and sends the number of
-      seconds when you leave. It is added to a daily total per page. It is not
-      attached to you, and time spent with the tab in the background is not
-      counted.
+      seconds when you leave. The number of seconds is added to a daily total per
+      page and is not attached to you. Which page you read is recorded against
+      the visitor hash below, in the same list as the endpoints you called. Time
+      spent with the tab in the background is not counted.
+    </p>
+
+    <h3>Which paths you used, against the visitor hash</h3>
+    <p>
+      For each day you visit, the service keeps a list of the paths you touched
+      and how many times: the pages you read and the endpoints you called, with
+      record ids already replaced, plus whether the request asked for one of the
+      chaos parameters and whether it returned an error. It is stored against the
+      hash above, not against you, and it is deleted on the same 90-day clock as
+      the hash.
+    </p>
+    <p>
+      It exists to answer one question — what the handful of people who come back
+      more than once actually use — and it is only ever read for people who
+      returned on more than one day. It is a list of paths, not a session
+      recording: there is no ordering within a day, no timing between requests,
+      nothing you typed, and nothing from any other site.
     </p>
 
     <h3>Your email, only if you ask for a key</h3>
@@ -164,6 +182,7 @@ address = SHA-256(secret + your IP)                              <span class="to
         <tbody>
           <tr><td>Sandbox records</td><td class="num">24 hours</td><td>deleted by a nightly job</td></tr>
           <tr><td>JSON pasted into /custom</td><td class="num">24 hours</td><td>deleted by a nightly job</td></tr>
+          <tr><td>Paths used, per visitor hash</td><td class="num">90 days</td><td>deleted by a nightly job</td></tr>
           <tr><td>Visitor and address hashes</td><td class="num">90 days</td><td>deleted</td></tr>
           <tr><td>Per-request log</td><td class="num">90 days</td><td>expires automatically</td></tr>
           <tr><td>Daily totals (no identity)</td><td class="num">400 days</td><td>deleted</td></tr>
