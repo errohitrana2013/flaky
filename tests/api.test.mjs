@@ -6,6 +6,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import worker from "../src/index.js";
+import { isProbe } from "../src/middleware/analytics.js";
 
 function makeEnv({ keys = [], sandboxes = [], records = [], customs = [], scenario = null, cohort = [], trails = [] } = {}) {
   const kv = new Map();
@@ -1087,6 +1088,46 @@ test("bots leave no trail", async () => {
     "a scanner touching fifty probe paths must not become fifty rows"
   );
   // The aggregate rollups still count it — being scanned is real traffic.
+  assert.ok(env._writes.some((w) => w._sql.startsWith("INSERT INTO path_bucket")));
+});
+
+test("a probe is a probe at any depth", async () => {
+  // A sweep of 182 paths went through as a person because the dotfile patterns
+  // were anchored to the root and not one of them was at the root. The same
+  // mistake had already been found and fixed for wp-includes.
+  for (const path of ["/app/.env", "/var/www/html/.env", "/laravel/.env", "/config/app/.env", "/.env.local"]) {
+    assert.equal(isProbe(path), true, `${path} is a probe`);
+  }
+  // The other half of that sweep: cloud service-account keys.
+  for (const path of ["/key.json", "/sa.json", "/gcp-sa.json", "/service-account.json", "/firebase-adminsdk.json"]) {
+    assert.equal(isProbe(path), true, `${path} is a probe`);
+  }
+  // And the route this site actually serves, which ends in .json and must not
+  // file everyone who reads the spec as a scanner.
+  assert.equal(isProbe("/v1/openapi.json"), false);
+  assert.equal(isProbe("/docs/jsonplaceholder"), false);
+});
+
+test("a scanner asking for /app/.env leaves no trail and counts as a bot", async () => {
+  const env = makeEnv();
+  // A browser user-agent, which is what these sweeps send — the UA check alone
+  // filed them as people, which is why the path check exists.
+  await call("/app/.env", { headers: { "user-agent": "Mozilla/5.0" } }, env);
+  await Promise.allSettled(waits);
+
+  assert.equal(env._points.at(-1).blobs[4], "bot");
+  assert.equal(env._writes.filter((w) => w._sql.startsWith("INSERT INTO visitor_path")).length, 0);
+});
+
+test("reading the dashboard does not put you in the dashboard", async () => {
+  const env = makeEnv();
+  await call("/v1/admin/stats", ADMIN, env);
+  await Promise.allSettled(waits);
+
+  // Same reason the try-it widget is excluded from the chaos share: it is us,
+  // and it was sitting at the top of the list of people who came back.
+  assert.equal(env._writes.filter((w) => w._sql.startsWith("INSERT INTO visitor_path")).length, 0);
+  // Still counted as traffic, though — the request did happen.
   assert.ok(env._writes.some((w) => w._sql.startsWith("INSERT INTO path_bucket")));
 });
 

@@ -23,8 +23,18 @@ const BOT = /bot|crawl|spider|slurp|curl|wget|python-requests|httpie|postman|ins
 // flag is sticky for the day, so the rest of that visitor's traffic is
 // classified correctly too.
 const PROBE = new RegExp([
-  // Anchored: things only ever asked for at the root.
-  "^\\/(\\.env|\\.git|\\.aws|\\.ssh|\\.config|\\.vscode|\\.idea|\\.DS_Store|\\.npmrc|\\.bash_history)",
+  // Dotfiles, at any depth. This was anchored to the root, and a sweep of 182
+  // paths — /app/.env, /laravel/.env, /var/www/html/.env — went through as a
+  // person because not one of them was at the root. Exactly the mistake already
+  // recorded two lines down for wp-includes, made twice.
+  //
+  // The trailing class keeps it to whole segments: /.git/config and .env.local
+  // match, a path that merely starts with those letters does not.
+  "(^|\\/)(\\.env|\\.git|\\.aws|\\.ssh|\\.config|\\.vscode|\\.idea|\\.DS_Store|\\.npmrc|\\.bash_history)($|[\\/.?])",
+  // Cloud service-account keys, the other half of the same sweep. The stem has
+  // to be the whole filename or the tail of a hyphenated one, so
+  // /v1/openapi.json — a real route here — is not caught by it.
+  "(^|\\/)([a-z0-9_-]+[-_])?(service-account|serviceaccount|firebase-adminsdk|gcp-key|google-key|sa|key|keyfile|credentials|creds|secret|secrets)\\.json$",
   // Anywhere in the path. Scanners prepend directories — /blog/wp-includes/…,
   // /shop/wp-includes/… — and anchoring to the root missed every one of them
   // while catching the bare version, so the same sweep landed half in "human".
@@ -137,13 +147,18 @@ export async function rollUp(env, ctx, meta) {
   // One row per person per path per day: what a returning visitor actually did,
   // which no other rollup can answer because none of them carry a visitor.
   //
-  // Two exclusions, both deliberate. Bots never get a row — a credential sweep
+  // Three exclusions, all deliberate. Bots never get a row — a credential sweep
   // touches dozens of probe paths and would be most of the table while telling
   // us nothing about anyone who chose to be here. And the beacon is this site's
   // own instrumentation, not something a person did; counting it would put
   // /v1/beacon at the top of every trail. The page it reports is recorded by the
   // beacon handler under the page's own path instead.
-  const trail = isBot || path === "/v1/beacon"
+  //
+  // Admin requests are excluded for the same reason the try-it widget is left
+  // out of the chaos figure: it is us. Without this the operator reading the
+  // dashboard is the first entry in the dashboard's own list of people who came
+  // back, ahead of everybody it exists to show.
+  const trail = isBot || path === "/v1/beacon" || path.startsWith("/v1/admin")
     ? []
     : [
         env.DB.prepare(
