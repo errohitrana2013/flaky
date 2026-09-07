@@ -222,7 +222,7 @@ export function getOpenApi(ctx) {
 
   paths["/custom"] = {
     post: {
-      summary: "Turn your own JSON into a mock API",
+      summary: "Create a mock server from your own JSON",
       description:
         "Send an array, or an object whose values are arrays; each array becomes an endpoint. " +
         "No account needed. Lives 24 hours, then is deleted — export it to keep it. Every query " +
@@ -307,7 +307,7 @@ export function getOpenApi(ctx) {
       tags: [
         ...RESOURCES.map((name) => ({ name, description: `${COUNTS[name]} records` })),
         { name: "sandbox", description: "Writes that persist for 24 hours" },
-        { name: "custom", description: "Your own JSON, served as an API for 24 hours" },
+        { name: "custom", description: "Create a mock server from your own JSON, live for 24 hours" },
         { name: "scenario", description: "Failure sequences that recover, for retry and circuit-breaker tests" },
         { name: "account", description: "Keys and API description" },
       ],

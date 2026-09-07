@@ -15,7 +15,7 @@ export function getMeta(ctx) {
     tagline: "A mock REST API that fails on purpose.",
     version: "1",
     openapi: "/v1/openapi.json",
-    custom: { url: "/v1/custom", method: "POST", note: "Send your own JSON, get endpoints for it for 24 hours." },
+    custom: { url: "/v1/custom", method: "POST", note: "Send your own JSON, get a mock server for it for 24 hours." },
     resources: RESOURCES.map((name) => ({
       name,
       count: COUNTS[name],
