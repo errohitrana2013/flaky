@@ -762,6 +762,43 @@ test("exports something that runs locally and never expires", async () => {
   // as a string and parsed — interpolating it directly is a NameError waiting.
   assert.match(pySrc, /DB = json\.loads\("/, "data must be parsed, not inlined");
   assert.ok(!/=\s*\{[^}]*\btrue\b/.test(pySrc), "no raw JSON booleans in Python source");
+
+  const java = await call(`${base}/export?format=java`, {}, env);
+  assert.match(java.headers.get("content-disposition"), /MockServer\.java/);
+  assert.equal(java.headers.get("x-run-with"), "java MockServer.java");
+  const javaSrc = await java.text();
+  // A class file caps one constant at 64 KB and a paste may be 256 KB, so the
+  // data has to arrive in pieces. One literal would not compile.
+  assert.match(javaSrc, /static final String\[\] DATA = \{/, "data must be chunked");
+  assert.match(javaSrc, /_fail_rate/, "the chaos controls are the point of it");
+
+  const cs = await call(`${base}/export?format=csharp`, {}, env);
+  assert.match(cs.headers.get("content-disposition"), /MockServer\.cs/);
+  assert.equal(cs.headers.get("x-run-with"), "dotnet run MockServer.cs");
+  const csSrc = await cs.text();
+  assert.match(csSrc, /const string Data = "/, "data must be parsed, not inlined");
+  assert.match(csSrc, /_fail_rate/, "the chaos controls are the point of it");
+});
+
+// javac only defaults to UTF-8 from JDK 18. On anything older a source file is
+// read in the platform encoding, so a name with an accent in it comes back
+// corrupted — from a file that compiled and ran without complaint.
+test("the Java runner is pure ASCII, whatever was pasted", async () => {
+  const env = makeEnv({
+    customs: [{ ...CUSTOM, body: JSON.stringify({ staff: [{ id: 1, name: "José", city: "München", note: "✓ 🎲" }] }) }],
+  });
+
+  const res = await call(`/v1/custom/${CUSTOM.id}/export?format=java`, {}, env);
+  const src = await res.text();
+
+  const nonAscii = src.match(/[^\x00-\x7f]/g);
+  assert.equal(nonAscii, null, `Java source must be ASCII, found ${JSON.stringify(nonAscii?.slice(0, 5))}`);
+  assert.match(src, /\\u00e9/, "the accent survives as an escape");
+
+  // The other runners are read as UTF-8 by every runtime that runs them, so
+  // they keep the characters rather than paying for escapes.
+  const csSrc = await (await call(`/v1/custom/${CUSTOM.id}/export?format=csharp`, {}, env)).text();
+  assert.match(csSrc, /José/, "C# keeps the text as written");
 });
 
 test("an expired custom API is gone, not empty", async () => {

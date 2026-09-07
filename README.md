@@ -70,7 +70,7 @@ npm run deploy
 | `* /v1/sandbox/:id/:resource` | Full CRUD that persists |
 | `POST /v1/custom` | Turn your own JSON into a mock API for 24 hours |
 | `GET /v1/custom/:id/:resource` | Read it, with every query and chaos parameter |
-| `GET /v1/custom/:id/export?format=` | Download it as `json-server` or `msw` files |
+| `GET /v1/custom/:id/export?format=` | Download it as a runnable server, or `json-server` / `msw` files |
 | `GET /v1/meta` | Resource counts, tier limits, your tier |
 | `GET /v1/openapi.json` | OpenAPI 3.1 spec, generated from the same values as `/v1/meta` |
 | `GET /v1/admin/stats?days=14` | Traffic rollups (admin token required) |
@@ -225,26 +225,49 @@ curl -X POST https://flakyapi.dev/v1/custom \
   -d '{"todos":[{"id":1,"title":"try flaky","done":false}]}'
 ```
 
-The export matters more than the hosting, and there are four:
+The export matters more than the hosting, and there are six:
 
 | `?format=` | You get | Run it with |
 |---|---|---|
 | `node` | a complete server, data embedded | `node mock-server.mjs` |
 | `python` | the same, standard library only | `python3 mock_server.py` |
+| `java` | the same, no JDK dependency | `java MockServer.java` |
+| `csharp` | the same, no NuGet package | `dotnet run MockServer.cs` |
 | `json-server` | `db.json` | `npx json-server db.json` |
 | `msw` | request handlers | in your test suite |
 
-The two runners are the point. They have no dependencies, need no network, and
+The four runners are the point. They have no dependencies, need no network, and
 **carry the same chaos controls** — so `?_status=503` works against localhost
 exactly as it does here, which `json-server` cannot do at all. Being able to walk
 away with a working server is the strongest argument for trusting the hosted one.
 
+Java and C# are there because the developers most likely to be maintaining a
+hand-rolled fake are on Spring or ASP.NET, where neither `json-server` nor MSW is
+in the toolchain. A single file that runs on the JDK or the .NET SDK they already
+have is the only export those two audiences can actually use.
+
+All four answer **identically, byte for byte**, and `npm run check:runners` is
+what proves it: it starts every one of them and compares the status, headers and
+exact body of nineteen requests against the node runner. That matters more than
+it sounds — `_malformed` truncates at a fraction of the body length, so a runner
+that merely formats its JSON differently cuts in a different place. A runtime
+that is not installed is skipped and named, never silently passed.
+
 One detail worth keeping: data is embedded as a JSON *string* and parsed at
 startup, never as a literal. In Python that is required — JSON's `true`/`false`/
 `null` are not `True`/`False`/`None`, and interpolating them produces a file that
-raises `NameError` on the first boolean. The Python runner also compares values
-the way JSON spells them, because `str(True)` is `"True"` and `?done=true` would
+raises `NameError` on the first boolean. Every runner also compares values the
+way JSON spells them, because `str(True)` is `"True"` and `?done=true` would
 otherwise match nothing.
+
+Two more that only bite in the new languages. Java caps a single class-file
+constant at 64 KB against a 256 KB paste, so the data goes in as chunks joined
+before parsing, and the whole file is ASCII — `javac` only defaults to UTF-8 from
+JDK 18, and on anything older an accented name is read in the platform encoding
+and silently corrupted. C# needs its `HttpListener` prefix chosen per platform:
+a wildcard is the only one that binds on Linux and macOS, where `localhost` and
+`127.0.0.1` are the same socket, and the only one Windows refuses without an
+administrator, where `localhost` is granted to everyone.
 
 Stored as one row per document rather than per record: they are read in full,
 never queried across, and one read beats many. 256 KB a document, ten a day per

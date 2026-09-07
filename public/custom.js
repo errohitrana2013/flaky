@@ -203,6 +203,8 @@ async function download(format, filename) {
 
 $("dl-node").addEventListener("click", () => download("node", "mock-server.mjs"));
 $("dl-python").addEventListener("click", () => download("python", "mock_server.py"));
+$("dl-java").addEventListener("click", () => download("java", "MockServer.java"));
+$("dl-csharp").addEventListener("click", () => download("csharp", "MockServer.cs"));
 $("dl-json").addEventListener("click", () => download("json-server", "db.json"));
 $("dl-msw").addEventListener("click", () => download("msw", "handlers.js"));
 

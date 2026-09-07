@@ -3,7 +3,7 @@ import { queryCollection, pageHeaders } from "../lib/query.js";
 import { today } from "../lib/hash.js";
 import { TIERS, MAX_CUSTOM_BYTES, CUSTOM_TTL_MS, CUSTOM_PER_IP_PER_DAY } from "../config/tiers.js";
 import { CUSTOM_EXAMPLE } from "../config/example.js";
-import { nodeRunner, pythonRunner } from "./runner.js";
+import { nodeRunner, pythonRunner, javaRunner, csharpRunner } from "./runner.js";
 
 // Paste JSON, get a REST API for it, for 24 hours.
 //
@@ -120,6 +120,8 @@ export async function createCustom(ctx) {
       export: {
         server: `${base}/export?format=node`,
         python: `${base}/export?format=python`,
+        java: `${base}/export?format=java`,
+        csharp: `${base}/export?format=csharp`,
         jsonServer: `${base}/export?format=json-server`,
         msw: `${base}/export?format=msw`,
       },
@@ -215,6 +217,29 @@ function exportCustom(ctx, data, id) {
     });
   }
 
+  // Java and C# are here because the people most likely to be stuck with a
+  // hand-rolled fake are on Spring or ASP.NET, where json-server and MSW are not
+  // an answer — neither is in their toolchain and neither can fail on demand.
+  if (format === "java") {
+    return new Response(javaRunner(data), {
+      headers: {
+        "content-type": "text/x-java-source; charset=utf-8",
+        "content-disposition": 'attachment; filename="MockServer.java"',
+        "x-run-with": "java MockServer.java",
+      },
+    });
+  }
+
+  if (format === "csharp") {
+    return new Response(csharpRunner(data), {
+      headers: {
+        "content-type": "text/plain; charset=utf-8",
+        "content-disposition": 'attachment; filename="MockServer.cs"',
+        "x-run-with": "dotnet run MockServer.cs",
+      },
+    });
+  }
+
   if (format === "msw") {
     const handlers = Object.entries(data)
       .map(([name]) => `  http.get("*/${name}", () => HttpResponse.json(db.${name})),`)
@@ -236,5 +261,5 @@ ${handlers}
     });
   }
 
-  return fail(400, `Unknown format '${echo(format)}'`, "Available: node, python, json-server, msw.");
+  return fail(400, `Unknown format '${echo(format)}'`, "Available: node, python, java, csharp, json-server, msw.");
 }

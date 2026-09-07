@@ -15,6 +15,7 @@
     "check:public": "node scripts/check-public.mjs",
     "check:docs": "node scripts/check-docs.mjs",
     "check:render": "node scripts/check-render.mjs",
+    "check:runners": "node scripts/check-runners.mjs",
     "db:migrate": "wrangler d1 migrations apply flaky --remote",
     "db:migrate:local": "wrangler d1 migrations apply flaky --local",
     "tail": "wrangler tail",
