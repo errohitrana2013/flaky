@@ -143,7 +143,7 @@ flaky/
 │
 ├── public/                   static site, served for anything outside /v1
 │   ├── index.html            landing page with the live response inspector
-│   ├── custom.html           paste your own JSON, get an API for it
+│   ├── createMockServer.html paste your own JSON, get an API for it
 │   ├── dashboard.html        traffic dashboard (admin token required)
 │   └── docs/                 long-form docs go here
 │

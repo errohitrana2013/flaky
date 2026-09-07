@@ -1,4 +1,4 @@
-// The JSON behind "Use an example" on /custom.
+// The JSON behind "Use an example" on /createMockServer.
 //
 // It lives here as well as in public/custom.js because a static asset cannot
 // import from src/ — Cloudflare serves it directly, and there is no build step

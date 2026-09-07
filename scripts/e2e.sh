@@ -13,7 +13,7 @@ code() { curl -s -o /dev/null -w '%{http_code}' --max-time 25 "$@"; }
 echo "── target: $U"
 
 echo; echo "PAGES & ASSETS"
-for p in / /custom /dashboard /app.css /app.js /custom.css /custom.js /dashboard.css /dashboard.js /favicon.svg /logo.svg; do
+for p in / /createMockServer /dashboard /app.css /app.js /custom.css /custom.js /dashboard.css /dashboard.js /favicon.svg /logo.svg; do
   is "GET $p" "$(code "$U$p")" "200"
 done
 is "unknown page 404s" "$(code "$U/no-such-page")" "404"

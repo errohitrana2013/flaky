@@ -1,0 +1,11 @@
+# Cloudflare serves a matching static asset *before* the Worker runs, so a
+# redirect written in src/ for a path that used to be a page is never reached —
+# that has already been tried here once and silently did nothing. This file is
+# how the asset server itself is told, and it is evaluated before
+# not_found_handling serves the 404 page.
+
+# The paste-your-JSON page was /custom until it was renamed. Anything already
+# linking to the old address keeps working, and 301 tells search engines to move
+# whatever ranking it had rather than treating the new URL as a new page.
+/custom /createMockServer 301
+/custom.html /createMockServer 301
