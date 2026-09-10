@@ -171,10 +171,20 @@ GET /v1/posts?_cors=off</pre>
 
   <section>
     <h2>Resources</h2>
-    <div class="scroll-x">
+    <p class="m-0">
+      Every resource answers at the same kinds of URL, and the method decides what happens
+      there. Writes are echoed back, not stored, unless you use a sandbox.
+    </p>
+    <div class="scroll-x mt-16">
+      <table id="methods">
+        <thead><tr><th>URL</th><th>Method</th><th>What it does</th></tr></thead>
+        <tbody><tr><td colspan="3" class="muted">Loading…</td></tr></tbody>
+      </table>
+    </div>
+    <div class="scroll-x mt-20">
       <table id="resources">
-        <thead><tr><th>Resource</th><th>Rows</th><th>Methods</th><th>Nested</th></tr></thead>
-        <tbody><tr><td colspan="4" class="muted">Loading…</td></tr></tbody>
+        <thead><tr><th>Resource</th><th>Rows</th><th>Nested</th></tr></thead>
+        <tbody><tr><td colspan="3" class="muted">Loading…</td></tr></tbody>
       </table>
     </div>
     <div class="note mt-20">

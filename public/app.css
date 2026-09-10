@@ -105,7 +105,7 @@
   td.mono { font-size: 13px; }
   td.num { color: var(--muted); font-variant-numeric: tabular-nums; }
   .scroll-x { overflow-x: auto; }
-  .verbs { display: grid; grid-template-columns: auto auto; justify-content: start; gap: 5px 10px; align-items: center; }
+  #methods td[rowspan] { vertical-align: top; }
   .verb { font: 600 10.5px/1 ui-monospace, monospace; padding: 3px 5px; border-radius: 4px; background: var(--accent-soft); color: var(--accent); white-space: nowrap; }
 
   .note { background: var(--accent-soft); border-left: 3px solid var(--accent); padding: 14px 16px; border-radius: 0 8px 8px 0; font-size: 14.5px; color: var(--ink); }
