@@ -65,9 +65,14 @@
     <h2>Try it</h2>
     <div class="inspector">
       <div class="bar">
-        <span class="method">GET</span>
+        <select id="method" class="method" aria-label="Request method">
+          <option>GET</option><option>POST</option><option>PUT</option><option>PATCH</option><option>DELETE</option>
+        </select>
         <input id="path" value="/v1/posts?_limit=3" spellcheck="false" aria-label="Request path">
         <button id="send">Send</button>
+      </div>
+      <div class="req-body" id="req-body-wrap" hidden>
+        <textarea id="req-body" rows="5" spellcheck="false" aria-label="Request body, as JSON"></textarea>
       </div>
       <div class="controls">
         <label class="ctl">_delay <input id="delay" type="number" min="0" max="10000" step="100" placeholder="ms"></label>
@@ -85,6 +90,7 @@
         <span>time <b id="s-time">—</b></span>
         <span>tier <b id="s-tier">—</b></span>
         <span>remaining <b id="s-left">—</b></span>
+        <span id="s-write" hidden>write <b>echoed, not stored</b></span>
       </div>
       <pre id="out">Press Send.</pre>
     </div>
@@ -165,10 +171,12 @@ GET /v1/posts?_cors=off</pre>
 
   <section>
     <h2>Resources</h2>
-    <table id="resources">
-      <thead><tr><th>Resource</th><th>Rows</th><th>Nested</th></tr></thead>
-      <tbody><tr><td colspan="3" class="muted">Loading…</td></tr></tbody>
-    </table>
+    <div class="scroll-x">
+      <table id="resources">
+        <thead><tr><th>Resource</th><th>Rows</th><th>Methods</th><th>Nested</th></tr></thead>
+        <tbody><tr><td colspan="4" class="muted">Loading…</td></tr></tbody>
+      </table>
+    </div>
     <div class="note mt-20">
       Need your own shapes instead? <a href="/createMockServer">Paste any JSON and get a mock
       server for it</a> — same query parameters, same chaos controls, and you can export

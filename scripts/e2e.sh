@@ -48,6 +48,10 @@ is "page cap at tier max" "$(curl -s --max-time 25 "$U/v1/photos?_limit=9999" | 
 is "unknown resource" "$(code "$U/v1/nonsense")" "404"
 is "unknown nested" "$(code "$U/v1/posts/1/nonsense")" "404"
 is "missing id" "$(code "$U/v1/posts/99999")" "404"
+# A browser click on a link, not a fetch. Cloudflare answers these from the asset
+# server unless /v1 is routed to the Worker first, and every other check here
+# would still pass while the landing page's links opened the 404 page.
+is "a link click reaches the API" "$(code -H 'Sec-Fetch-Mode: navigate' "$U/v1/posts?_limit=1")" "200"
 
 echo; echo "CHAOS"
 is "_status=503" "$(code "$U/v1/posts?_status=503")" "503"
@@ -79,6 +83,12 @@ is "constructor[prototype] handled" "$(code --get --data-urlencode 'constructor[
 echo; echo "WRITES"
 W=$(curl -sD - --max-time 25 -X POST "$U/v1/posts" -H 'content-type: application/json' -d '{"title":"t"}')
 has "echoed write says not-persisted" "$(echo "$W" | tr 'A-Z' 'a-z')" "x-mock-write"
+is "PUT one record"        "$(code -X PUT "$U/v1/posts/1" -H 'content-type: application/json' -d '{"title":"t"}')" "200"
+is "PATCH one record"      "$(code -X PATCH "$U/v1/posts/1" -H 'content-type: application/json' -d '{"title":"t"}')" "200"
+is "DELETE one record"     "$(code -X DELETE "$U/v1/posts/1")" "200"
+is "PUT with no id is 405" "$(code -X PUT "$U/v1/posts" -H 'content-type: application/json' -d '{}')" "405"
+is "nested POST takes the parent from the path" "$(curl -s --max-time 25 -X POST "$U/v1/posts/1/comments" -H 'content-type: application/json' -d '{"body":"t","postId":9}' | python3 -c 'import sys,json;print(json.load(sys.stdin)["postId"])')" "1"
+is "nested DELETE is 405"  "$(code -X DELETE "$U/v1/posts/1/comments")" "405"
 is "sandbox without key is 403" "$(code -X POST "$U/v1/sandbox")" "403"
 is "bad key is 401" "$(code "$U/v1/posts" -H 'authorization: Bearer flk_nope')" "401"
 is "bad email is 400" "$(code -X POST "$U/v1/keys" -H 'content-type: application/json' -d '{"email":"nope"}')" "400"

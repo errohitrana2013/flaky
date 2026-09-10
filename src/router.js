@@ -32,11 +32,13 @@ const ROUTES = [
   { method: "GET",  path: "/v1/custom/:id/:resource/:recordId",       handler: readCustom },
   { method: "*",    path: "/v1/sandbox/:sandboxId/:resource",         handler: handleSandbox },
   { method: "*",    path: "/v1/sandbox/:sandboxId/:resource/:id",     handler: handleSandbox },
+  { method: "*",    path: "/v1/sandbox/:sandboxId/:resource/:id/:child", handler: handleSandbox },
   { method: "GET",  path: "/v1/:resource",                            handler: readResource },
   { method: "GET",  path: "/v1/:resource/:id",                        handler: readResource },
   { method: "GET",  path: "/v1/:resource/:id/:child",                 handler: readResource },
   { method: "*",    path: "/v1/:resource",                            handler: echoWrite },
   { method: "*",    path: "/v1/:resource/:id",                        handler: echoWrite },
+  { method: "*",    path: "/v1/:resource/:id/:child",                 handler: echoWrite },
 ];
 
 function matchPath(pattern, segments) {

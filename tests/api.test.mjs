@@ -208,6 +208,84 @@ test("echoes writes without persisting them", async () => {
   assert.equal((await body(res)).title, "hello");
 });
 
+test("echoes PUT, PATCH and DELETE on one record", async () => {
+  const original = await body(await call("/v1/posts/1"));
+
+  const put = await call("/v1/posts/1", { method: "PUT", body: JSON.stringify({ title: "replaced" }) });
+  assert.equal(put.status, 200);
+  assert.equal(put.headers.get("x-mock-write"), "not-persisted; use /v1/sandbox for real writes");
+  // PUT replaces the whole record, so the fields it did not send are gone...
+  assert.deepEqual(await body(put), { id: 1, title: "replaced" });
+
+  // ...and PATCH merges, so they stay.
+  const patched = await body(await call("/v1/posts/1", { method: "PATCH", body: JSON.stringify({ title: "patched" }) }));
+  assert.equal(patched.title, "patched");
+  assert.equal(patched.userId, original.userId);
+
+  const del = await call("/v1/posts/1", { method: "DELETE" });
+  assert.equal(del.status, 200);
+  assert.deepEqual(await body(del), { deleted: true, id: 1 });
+});
+
+test("creates a record under its parent, taking the parent from the path", async () => {
+  // The body claims post 99; the path says post 1, and the path wins.
+  const res = await call("/v1/posts/1/comments", { method: "POST", body: JSON.stringify({ body: "hi", postId: 99 }) });
+  assert.equal(res.status, 201);
+  assert.equal(res.headers.get("x-mock-write"), "not-persisted; use /v1/sandbox for real writes");
+  const comment = await body(res);
+  assert.equal(comment.postId, 1);
+  assert.equal(comment.body, "hi");
+  assert.equal(comment.id, 501);
+
+  assert.equal((await call("/v1/posts/99999/comments", { method: "POST", body: "{}" })).status, 404);
+  assert.equal((await call("/v1/posts/1/nonsense", { method: "POST", body: "{}" })).status, 404);
+});
+
+test("a write aimed at the wrong kind of path is a 405 that names the right one", async () => {
+  // PUT on a collection used to be a 404 "No posts with id (empty)", and DELETE
+  // on one answered 200 having deleted nothing.
+  const put = await call("/v1/posts", { method: "PUT", body: "{}" });
+  assert.equal(put.status, 405);
+  assert.equal(put.headers.get("allow"), "GET, POST");
+  assert.match((await body(put)).error.hint, /PUT \/v1\/posts\/1\./);
+
+  assert.equal((await call("/v1/posts", { method: "DELETE" })).status, 405);
+
+  const post = await call("/v1/posts/1", { method: "POST", body: "{}" });
+  assert.equal(post.status, 405);
+  assert.equal(post.headers.get("allow"), "GET, PUT, PATCH, DELETE");
+  assert.match((await body(post)).error.hint, /POST \/v1\/posts\./);
+
+  const nested = await call("/v1/posts/1/comments", { method: "DELETE" });
+  assert.equal(nested.status, 405);
+  assert.equal(nested.headers.get("allow"), "GET, POST");
+  assert.match((await body(nested)).error.hint, /DELETE \/v1\/comments\/1\./);
+});
+
+test("a sandbox takes nested writes and lists them under their parent", async () => {
+  const sandboxes = [{ id: "live", key_id: "k1", expires_at: Date.now() + 60000 }];
+
+  const created = await call(
+    "/v1/sandbox/live/users/1/todos",
+    { method: "POST", body: JSON.stringify({ title: "mine", userId: 7 }) },
+    makeEnv({ sandboxes })
+  );
+  assert.equal(created.status, 201);
+  assert.equal(created.headers.get("x-mock-write"), null, "a sandbox write is stored, so it must not say otherwise");
+  const todo = await body(created);
+  assert.equal(todo.userId, 1);
+
+  // Read back through the same nested route, alongside the shared todos.
+  const records = [{ record_id: String(todo.id), body: JSON.stringify(todo), deleted: 0 }];
+  const listed = await body(await call("/v1/sandbox/live/users/1/todos?_limit=100", {}, makeEnv({ sandboxes, records })));
+  assert.ok(listed.some((t) => t.id === todo.id && t.title === "mine"));
+  assert.ok(listed.every((t) => t.userId === 1));
+
+  const wrong = await call("/v1/sandbox/live/posts", { method: "PUT", body: "{}" }, makeEnv({ sandboxes }));
+  assert.equal(wrong.status, 405);
+  assert.match((await body(wrong)).error.hint, /PUT \/v1\/sandbox\/live\/posts\/1\./);
+});
+
 test("reports the caller's tier on every response", async () => {
   const res = await call("/v1/posts");
   assert.equal(res.headers.get("x-tier"), "anonymous");
@@ -552,6 +630,13 @@ test("serves an OpenAPI spec generated from the same source as /v1/meta", async 
     assert.ok(names.includes(p), `${p} not documented`);
   }
 
+  // Every method /v1/meta says a path accepts is described on that path, and no
+  // other — the landing page's table and the spec cannot disagree.
+  const ops = (path) => Object.keys(spec.paths[path]).map((m) => m.toUpperCase()).sort();
+  assert.deepEqual(ops("/posts"), [...meta.methods.collection].sort());
+  assert.deepEqual(ops("/posts/{id}"), [...meta.methods.record].sort());
+  assert.deepEqual(ops("/posts/{id}/comments"), [...meta.methods.nested].sort());
+
   assert.equal(meta.openapi, "/v1/openapi.json", "/v1/meta should point at the spec");
 });
 
@@ -568,7 +653,7 @@ test("a known path with the wrong method is a 405, not a 404", async () => {
 
   // A path that genuinely does not exist is still a 404.
   assert.equal((await call("/v1/no-such-thing/deep/path")).status, 404);
-  // And resources accept any method, so they never 405.
+  // And a collection takes POST, so creating a record does not 405.
   assert.equal((await call("/v1/posts", { method: "POST", body: "{}" })).status, 201);
 });
 

@@ -1,6 +1,7 @@
 import { COUNTS, RESOURCES } from "../data/index.js";
 import { RELATIONS } from "../data/relations.js";
 import { TIERS } from "../config/tiers.js";
+import { METHODS } from "../config/methods.js";
 import { json } from "../lib/response.js";
 
 // A machine-readable description of the whole API. Anything a client would
@@ -16,6 +17,9 @@ export function getMeta(ctx) {
     version: "1",
     openapi: "/v1/openapi.json",
     custom: { url: "/v1/custom", method: "POST", note: "Send your own JSON, get a mock server for it for 24 hours." },
+    // What /v1/posts, /v1/posts/1 and /v1/posts/1/comments each accept. Writes
+    // are echoed, not stored, except inside a sandbox.
+    methods: METHODS,
     resources: RESOURCES.map((name) => ({
       name,
       count: COUNTS[name],

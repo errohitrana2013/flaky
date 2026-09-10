@@ -72,6 +72,10 @@ const errorResponse = (description) => ({
   },
 });
 
+// Every write outside a sandbox is echoed, and says so the same way.
+const ECHOED = "Echoed, not stored: the response carries x-mock-write to say so. Use a sandbox for writes that stick.";
+const WRITE_BODY = { content: { "application/json": { schema: { type: "object", additionalProperties: true } } } };
+
 function pathsFor(resource) {
   const collection = { type: "array", items: { type: "object", additionalProperties: true } };
   const listParams = [...QUERY_PARAMS, ...CHAOS_PARAMS].map(param);
@@ -98,8 +102,8 @@ function pathsFor(resource) {
           "Returns the record with an id, exactly as JSONPlaceholder does, and does not persist it. " +
           "The response carries x-mock-write to say so. Use a sandbox for writes that stick.",
         tags: [resource],
-        requestBody: { content: { "application/json": { schema: { type: "object", additionalProperties: true } } } },
-        responses: { 201: { description: "The echoed record." } },
+        requestBody: WRITE_BODY,
+        responses: { 201: { description: "The echoed record." }, 405: errorResponse("PUT, PATCH and DELETE need a record id.") },
       },
     },
     [`/${resource}/{id}`]: {
@@ -115,6 +119,29 @@ function pathsFor(resource) {
           404: errorResponse("No record with that id."),
         },
       },
+      put: {
+        summary: `Replace a ${resource} record (echoed, not stored)`,
+        description: `Returns your body as the whole record, keeping the id. ${ECHOED}`,
+        tags: [resource],
+        parameters: [{ name: "id", in: "path", required: true, schema: { type: "integer", minimum: 1 } }],
+        requestBody: WRITE_BODY,
+        responses: { 200: { description: "The echoed record." }, 404: errorResponse("No record with that id.") },
+      },
+      patch: {
+        summary: `Change fields on a ${resource} record (echoed, not stored)`,
+        description: `Returns the record with your fields merged in. ${ECHOED}`,
+        tags: [resource],
+        parameters: [{ name: "id", in: "path", required: true, schema: { type: "integer", minimum: 1 } }],
+        requestBody: WRITE_BODY,
+        responses: { 200: { description: "The echoed record." }, 404: errorResponse("No record with that id.") },
+      },
+      delete: {
+        summary: `Delete a ${resource} record (echoed, not stored)`,
+        description: ECHOED,
+        tags: [resource],
+        parameters: [{ name: "id", in: "path", required: true, schema: { type: "integer", minimum: 1 } }],
+        responses: { 200: { description: "{ deleted: true, id }" } },
+      },
     },
   };
 
@@ -129,6 +156,14 @@ function pathsFor(resource) {
           ...listParams,
         ],
         responses: { 200: { description: `Matching ${child}.` } },
+      },
+      post: {
+        summary: `Create one of a ${resource}'s ${child} (echoed, not stored)`,
+        description: `${child}.${foreignKey} is taken from the path, whatever the body says. ${ECHOED}`,
+        tags: [resource],
+        parameters: [{ name: "id", in: "path", required: true, schema: { type: "integer", minimum: 1 } }],
+        requestBody: WRITE_BODY,
+        responses: { 201: { description: "The echoed record." }, 404: errorResponse(`No ${resource} with that id.`) },
       },
     };
   }

@@ -64,10 +64,14 @@ npm run deploy
 | `GET /v1/:resource` | List, with filtering, `_q` search, `_sort`, `_page`/`_start`, `_limit`, `_select` |
 | `GET /v1/:resource/:id` | Single record |
 | `GET /v1/:parent/:id/:child` | Nested, e.g. `/v1/posts/1/comments` |
-| `POST/PUT/PATCH/DELETE /v1/:resource` | Echoed, **not stored** (`x-mock-write` header says so) |
+| `POST /v1/:resource` | Create. Echoed, **not stored** (`x-mock-write` header says so) |
+| `PUT/PATCH/DELETE /v1/:resource/:id` | Replace, merge, remove. Echoed, not stored |
+| `POST /v1/:parent/:id/:child` | Create under a parent; the foreign key comes from the path. Echoed, not stored |
 | `POST /v1/keys` | Issue a free API key |
 | `POST /v1/sandbox` | Create a 24h sandbox (needs a key) |
-| `* /v1/sandbox/:id/:resource` | Full CRUD that persists |
+| `* /v1/sandbox/:id/:resource` | The same routes, nested included, and the writes persist |
+
+Any other method on a resource path is a 405 with an `Allow` header and the URL that would have worked, e.g. `PUT /v1/posts` points at `PUT /v1/posts/1`.
 | `POST /v1/custom` | Turn your own JSON into a mock API for 24 hours |
 | `GET /v1/custom/:id/:resource` | Read it, with every query and chaos parameter |
 | `GET /v1/custom/:id/export?format=` | Download it as a runnable server, or `json-server` / `msw` files |
@@ -116,6 +120,7 @@ flaky/
 │   │
 │   ├── config/               things you will want to change without reading code
 │   │   ├── tiers.js          limits and prices per tier
+│   │   ├── methods.js        which methods a collection, a record and a nested route accept
 │   │   └── constants.js      CORS headers, reserved query params, defaults
 │   │
 │   ├── middleware/           runs on the way in, on every request
@@ -133,6 +138,7 @@ flaky/
 │   │
 │   ├── lib/                  pure helpers, no knowledge of routes or env
 │   │   ├── response.js       json() / fail() / withHeaders()
+│   │   ├── allow.js          the 405 for a method a path does not take, naming the one that works
 │   │   ├── query.js          filter, search, sort, paginate
 │   │   └── hash.js           salted visitor hashing, date helpers
 │   │

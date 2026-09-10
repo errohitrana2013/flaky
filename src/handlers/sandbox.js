@@ -1,6 +1,8 @@
 import { DATA, RESOURCES } from "../data/index.js";
+import { RELATIONS, childrenOf } from "../data/relations.js";
 import { json, fail, echo } from "../lib/response.js";
 import { queryCollection, pageHeaders } from "../lib/query.js";
+import { wrongMethod } from "../lib/allow.js";
 import { TIERS, SANDBOX_TTL_MS, MAX_SANDBOX_RECORD_BYTES, MAX_SANDBOX_RECORDS } from "../config/tiers.js";
 
 // A sandbox is an overlay, not a copy. The base dataset stays shared and
@@ -80,9 +82,14 @@ const upsert = (env, sandboxId, resource, recordId, record, deleted = 0) =>
     "INSERT OR REPLACE INTO sandbox_records (sandbox_id, resource, record_id, body, deleted) VALUES (?, ?, ?, ?, ?)"
   ).bind(sandboxId, resource, String(recordId), JSON.stringify(record), deleted).run();
 
-// * /v1/sandbox/:sandboxId/:resource/:id?
+// * /v1/sandbox/:sandboxId/:resource
+// * /v1/sandbox/:sandboxId/:resource/:id
+// * /v1/sandbox/:sandboxId/:resource/:id/:child
+//
+// The same routes and methods as outside a sandbox, so moving a test from
+// echoed writes to stored ones is a URL change and nothing else.
 export async function handleSandbox(ctx) {
-  const { sandboxId, resource, id } = ctx.params;
+  const { sandboxId, resource, id, child } = ctx.params;
   const { error } = await loadSandbox(ctx.env, sandboxId);
   if (error) return error;
 
@@ -90,11 +97,27 @@ export async function handleSandbox(ctx) {
     return fail(404, `Unknown resource '${echo(resource)}'`, `Available: ${RESOURCES.join(", ")}`);
   }
 
+  const foreignKey = child ? RELATIONS[resource]?.[child] : null;
+  if (child && !foreignKey) {
+    return fail(
+      404,
+      `'${echo(resource)}' has no nested '${echo(child)}'`,
+      `Nested routes for ${echo(resource)}: ${childrenOf(resource).join(", ") || "none"}.`
+    );
+  }
+
   const method = ctx.request.method;
+  const refused = wrongMethod(method, { at: `/v1/sandbox/${echo(sandboxId)}`, resource, id, child });
+  if (refused) return refused;
 
   if (method === "GET") {
-    const rows = await materialise(ctx.env, sandboxId, resource);
-    if (id) {
+    // Children come out of the sandbox too, so a comment written here is listed
+    // under its post alongside the shared ones.
+    const rows = child
+      ? (await materialise(ctx.env, sandboxId, child)).filter((row) => String(row[foreignKey]) === id)
+      : await materialise(ctx.env, sandboxId, resource);
+
+    if (id && !child) {
       const found = rows.find((row) => String(row.id) === id);
       return found ? json(found) : fail(404, `No ${echo(resource)} with id ${echo(id)}`);
     }
@@ -135,13 +158,20 @@ export async function handleSandbox(ctx) {
       );
     }
 
+    if (child) {
+      // The parent may be one created in this sandbox, so a new post can take
+      // comments. The path decides which parent, whatever the body says.
+      const parent = (await materialise(ctx.env, sandboxId, resource)).find((row) => String(row.id) === id);
+      if (!parent) return fail(404, `No ${echo(resource)} with id ${echo(id)}`);
+
+      const record = { id: Date.now(), ...body, [foreignKey]: parent.id };
+      await upsert(ctx.env, sandboxId, child, record.id, record);
+      return json(record, { status: 201 });
+    }
+
     const record = { id: Date.now(), ...body };
     await upsert(ctx.env, sandboxId, resource, record.id, record);
     return json(record, { status: 201 });
-  }
-
-  if (!id) {
-    return fail(405, `${method} needs a record id`, `Try ${method} /v1/sandbox/${echo(sandboxId)}/${echo(resource)}/1`);
   }
 
   if (method === "DELETE") {
@@ -149,19 +179,16 @@ export async function handleSandbox(ctx) {
     return json({ deleted: true, id: Number(id) });
   }
 
-  if (method === "PUT" || method === "PATCH") {
-    const stored = await ctx.env.DB.prepare(
-      "SELECT body FROM sandbox_records WHERE sandbox_id = ? AND resource = ? AND record_id = ?"
-    ).bind(sandboxId, resource, String(id)).first();
+  // PUT or PATCH — wrongMethod has already turned everything else away.
+  const stored = await ctx.env.DB.prepare(
+    "SELECT body FROM sandbox_records WHERE sandbox_id = ? AND resource = ? AND record_id = ?"
+  ).bind(sandboxId, resource, String(id)).first();
 
-    const base = stored ? JSON.parse(stored.body) : DATA[resource].find((row) => String(row.id) === id);
-    if (!base) return fail(404, `No ${echo(resource)} with id ${echo(id)}`);
+  const base = stored ? JSON.parse(stored.body) : DATA[resource].find((row) => String(row.id) === id);
+  if (!base) return fail(404, `No ${echo(resource)} with id ${echo(id)}`);
 
-    // PUT replaces, PATCH merges.
-    const record = method === "PUT" ? { id: base.id, ...body } : { ...base, ...body };
-    await upsert(ctx.env, sandboxId, resource, id, record);
-    return json(record);
-  }
-
-  return fail(405, `${echo(method)} is not supported here`);
+  // PUT replaces, PATCH merges.
+  const record = method === "PUT" ? { id: base.id, ...body } : { ...base, ...body };
+  await upsert(ctx.env, sandboxId, resource, id, record);
+  return json(record);
 }
