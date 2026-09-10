@@ -33,6 +33,13 @@ binding = "ASSETS"
 # content-type, so the browser renders its own blank error page. Every typo, every
 # stale link, every scanner probe looked like the site was broken.
 not_found_handling = "404-page"
+# A browser *navigation* (Sec-Fetch-Mode: navigate — clicking a link, typing a
+# URL) to a path with no asset is answered by not_found_handling above, and the
+# Worker never runs. fetch() and curl are not navigations, so every test passed
+# while every /v1 link on the landing page opened the 404 page. /v1 has no
+# assets, so sending it to the Worker first costs nothing the API was not
+# already paying; pages stay asset-first.
+run_worker_first = ["/v1/*"]
 
 [[d1_databases]]
 binding = "DB"
