@@ -397,6 +397,29 @@ test("guards the admin endpoint", async () => {
   assert.equal((await call("/v1/admin/stats", { headers: { authorization: "Bearer admin-token" } })).status, 200);
 });
 
+test("error totals cover every error, not just the 40 rows listed", async () => {
+  // The list puts requested failures last and stops at 40, so with enough
+  // scanner noise not one of them is in it. Summing the list is what reported
+  // "requested 0" beside 182 requested failures.
+  const listed = Array.from({ length: 40 }, (_, i) => ({ status: 404, path: `/probe-${i}`, injected: 0, bot: 1, count: 50 - i }));
+  const everything = { kinds: 46, total: 2542, requested: 182, server: 30, client: 2330, bots: 2260 };
+
+  const env = makeEnv();
+  const prepare = env.DB.prepare;
+  env.DB.prepare = (sql) => {
+    if (sql.includes("AS kinds")) return { bind: () => ({ first: async () => everything }) };
+    if (sql.includes("FROM error_bucket") && sql.includes("LIMIT 40")) return { bind: () => ({ all: async () => ({ results: listed }) }) };
+    return prepare(sql);
+  };
+
+  const stats = await body(await call("/v1/admin/stats", { headers: { authorization: "Bearer admin-token" } }, env));
+  assert.equal(stats.errors.length, 40);
+  assert.equal(stats.errors.some((e) => e.injected), false, "the fixture reproduces the bug: nothing requested is listed");
+  assert.deepEqual(stats.errorTotals, everything);
+  assert.equal(stats.totals.serverErrors, 30);
+  assert.equal(stats.totals.clientErrors, 2330);
+});
+
 test("exports CSV with a filename and the right content type", async () => {
   const res = await call("/v1/admin/export?dataset=daily", { headers: { authorization: "Bearer admin-token" } });
   assert.equal(res.status, 200);

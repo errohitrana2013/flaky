@@ -44,7 +44,7 @@ export async function getStats(ctx) {
   const days = Math.min(Math.max(Number(ctx.query.get("days")) || 14, 1), 90);
   const since = daysAgo(days);
 
-  const [daily, visitors, keys, topKeys, hourly, geoRequests, geoVisitors, errors_, regions, addresses, arrivals] = await Promise.all([
+  const [daily, visitors, keys, topKeys, hourly, geoRequests, geoVisitors, errors_, errorSums, regions, addresses, arrivals] = await Promise.all([
     ctx.env.DB.prepare(
       `SELECT day, SUM(requests) AS requests, SUM(errors) AS errors
        FROM usage_bucket WHERE day >= ? GROUP BY day ORDER BY day`
@@ -89,6 +89,20 @@ export async function getStats(ctx) {
        FROM error_bucket WHERE day >= ?
        GROUP BY status, path, injected, bot ORDER BY injected ASC, count DESC LIMIT 40`
     ).bind(since).all(),
+
+    // Totals over every error, not a sum of the 40 rows above. The list sorts
+    // requested failures last, so once scanners filled it none of them were
+    // listed, and summing it reported "requested 0" beside 182 of them — and a
+    // server-error figure that could only ever undercount.
+    ctx.env.DB.prepare(
+      `SELECT COUNT(*) AS kinds, SUM(count) AS total,
+              SUM(CASE WHEN injected = 1 THEN count ELSE 0 END) AS requested,
+              SUM(CASE WHEN injected = 0 AND status >= 500 THEN count ELSE 0 END) AS server,
+              SUM(CASE WHEN injected = 0 AND status < 500 THEN count ELSE 0 END) AS client,
+              SUM(CASE WHEN bot = 1 THEN count ELSE 0 END) AS bots
+       FROM (SELECT status, injected, bot, SUM(count) AS count
+             FROM error_bucket WHERE day >= ? GROUP BY status, path, injected, bot)`
+    ).bind(since).first(),
 
     // Region lives on daily_visitors rather than the hot rollup, so this counts
     // people and addresses per region, not requests.
@@ -152,12 +166,8 @@ export async function getStats(ctx) {
       // Only unrequested 5xx. A 404 for a mistyped path is the API answering
       // correctly, and counting it here would bury the one number that means
       // something is actually broken.
-      serverErrors: (errors_.results || [])
-        .filter((e) => !e.injected && e.status >= 500)
-        .reduce((n, e) => n + e.count, 0),
-      clientErrors: (errors_.results || [])
-        .filter((e) => !e.injected && e.status < 500)
-        .reduce((n, e) => n + e.count, 0),
+      serverErrors: errorSums?.server || 0,
+      clientErrors: errorSums?.client || 0,
       keysIssued: keys?.count || 0,
       countries: countries.length,
       // The gap between visitors and addresses answers "ten people, or one
@@ -176,8 +186,17 @@ export async function getStats(ctx) {
       return Array.from({ length: 24 }, (_, hour) => ({ hour, visitors: byHour[hour] || 0 }));
     })(),
     countries,
-    // What the error rate is actually made of.
+    // What the error rate is actually made of: the 40 biggest kinds, then totals
+    // over all of them, which the list alone cannot give.
     errors: errors_.results || [],
+    errorTotals: {
+      kinds: errorSums?.kinds || 0,
+      total: errorSums?.total || 0,
+      requested: errorSums?.requested || 0,
+      server: errorSums?.server || 0,
+      client: errorSums?.client || 0,
+      bots: errorSums?.bots || 0,
+    },
     regions: regions.results || [],
   });
 }

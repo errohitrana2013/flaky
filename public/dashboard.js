@@ -61,7 +61,7 @@ function render(data) {
   ]);
   LATEST = data;
   renderHours(data.hourly, data.hourlyVisitors, MODE);
-  renderErrors(data.errors || []);
+  renderErrors(data.errors || [], data.errorTotals || {});
   renderGeo(data.countries);
   renderRegions(data.regions || []);
 
@@ -149,7 +149,7 @@ function cause(e) {
   return e.status >= 500 ? "server" : "client";
 }
 
-function renderErrors(errors) {
+function renderErrors(errors, totals) {
   if (!errors.length) {
     $("errors").innerHTML = '<tr><td colspan="6" class="muted">No errors recorded.</td></tr>';
     return;
@@ -167,15 +167,18 @@ function renderErrors(errors) {
     .join("");
   applySizes($("errors"));
 
+  // The totals come from the server, over every error. Summed from these rows
+  // they were wrong: the list stops at 40 and puts requested failures last, so it
+  // showed "requested 0" beside 182 of them.
+  //
   // Server errors are called out separately because they are the only kind that
   // means something is broken; the rest is scanners and correct rejections.
-  const server = errors.filter((e) => cause(e) === "server").reduce((n, e) => n + e.count, 0);
   summary("errors-total", [
-    part("distinct", errors.length),
-    part("total", errors.reduce((n, e) => n + e.count, 0)),
-    part("requested", errors.filter((e) => e.injected).reduce((n, e) => n + e.count, 0)),
-    part("from bots", errors.filter((e) => e.bot).reduce((n, e) => n + e.count, 0)),
-    part("server", server, server ? "warn" : ""),
+    part("kinds", totals.kinds > errors.length ? `${num(errors.length)} of ${num(totals.kinds)}` : num(errors.length)),
+    part("total", num(totals.total)),
+    part("requested", num(totals.requested)),
+    part("from bots", num(totals.bots)),
+    part("server", num(totals.server), totals.server ? "warn" : ""),
   ]);
 }
 
