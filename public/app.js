@@ -1,5 +1,14 @@
 const $ = (id) => document.getElementById(id);
 
+// Set by the admin pages on the owner's own browser, and sent so the API counts
+// these requests as traffic rather than as a visitor. A plain flag, never the
+// token. A function declaration, not a const, because custom.js declares the
+// same one and both can load on one page.
+function ownerHeaders(headers = {}) {
+  try { if (localStorage.getItem("flaky_owner") === "1") return { ...headers, "x-flaky-owner": "1" }; } catch { /* storage blocked */ }
+  return headers;
+}
+
 // Copy-pasteable examples have to point at wherever this page is actually
 // served from — localhost while developing, workers.dev today, a custom domain
 // later. Hardcoding one of those means the other two are quietly wrong.
@@ -69,6 +78,8 @@ async function send() {
     init.body = $("req-body").value;
     init.headers = { "content-type": "application/json" };
   }
+
+  init.headers = ownerHeaders(init.headers);
 
   const button = $("send");
   button.disabled = true;
@@ -145,7 +156,7 @@ function renderResources(meta) {
 
 // Both tables are rendered from /v1/meta so they can never drift from the
 // actual dataset, or from the methods the API really accepts.
-fetch("/v1/meta")
+fetch("/v1/meta", { headers: ownerHeaders() })
   .then((r) => r.json())
   .then((meta) => { renderMethods(meta); renderResources(meta); })
   .catch(() => {

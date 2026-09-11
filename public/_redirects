@@ -9,3 +9,9 @@
 # whatever ranking it had rather than treating the new URL as a new page.
 /custom /createMockServer 301
 /custom.html /createMockServer 301
+
+# AI agents and API tools look for a spec at the root before anywhere else — a
+# crawler tried /openapi.json and /swagger.json here and got the 404 page. The
+# spec lives under /v1 with the rest of what the Worker serves.
+/openapi.json /v1/openapi.json 301
+/swagger.json /v1/openapi.json 301

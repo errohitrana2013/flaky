@@ -25,6 +25,16 @@ export async function recordBeacon(ctx) {
     return fail(400, "Expected a path and seconds", 'Send {"path":"/","seconds":42} as JSON.');
   }
 
+  // The owner reading their own site is not a reader. Their browser marks it once
+  // they have signed in to the dashboard; the flag rides in the body because
+  // sendBeacon cannot send headers, and goes on through state so this request's
+  // own telemetry leaves them out of the visitor counts too. Anyone can send it —
+  // doing so only removes themselves from the numbers.
+  if (body.owner === true) {
+    if (ctx.state) ctx.state.owner = true;
+    return json({ recorded: false });
+  }
+
   const seconds = Math.min(Math.max(Math.round(Number(body.seconds) || 0), 0), MAX_SECONDS);
   // A beacon that reports nothing is not worth a write.
   if (seconds <= 0) return json({ recorded: false });

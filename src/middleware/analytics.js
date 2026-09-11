@@ -38,7 +38,13 @@ const PROBE = new RegExp([
   // Anywhere in the path. Scanners prepend directories — /blog/wp-includes/…,
   // /shop/wp-includes/… — and anchoring to the root missed every one of them
   // while catching the bare version, so the same sweep landed half in "human".
-  "(wp-includes|wp-admin|wp-login|wp-content|phpmyadmin|phpinfo|\\/vendor\\/|\\/storage\\/)",
+  // wp-json joined late: the sweep POSTing to /blog/wp-json/batch/v1 had no
+  // .php and none of the others in it, so it landed in the dashboard as a caller.
+  "(wp-includes|wp-admin|wp-login|wp-content|wp-json|phpmyadmin|phpinfo|\\/vendor\\/|\\/storage\\/)",
+  // A bare WordPress directory, which the same sweep asks for before anything
+  // inside it — so /wordpress/index.php was a bot and /wordpress/ a person. Only
+  // at the root: deeper, it could be a resource someone named in their own JSON.
+  "^\\/(wordpress|wp)(\\/|$)",
   // We are a Worker. Any .php request is somebody looking for a different site.
   "\\.php($|\\?)",
   // Credential and backup file shapes, wherever they appear.
@@ -61,6 +67,17 @@ export function isProbe(path) {
 export function classifyClient(request, path = "") {
   // Checked first: a browser user-agent asking for /.env is not a browser.
   if (path && isProbe(path)) return "bot";
+
+  // A page only ever takes GET. Following a link never sends anything else, so a
+  // POST to /blog/ is an exploit attempt whatever its user-agent says — these
+  // showed up as 405s from "callers". /v1 is left out: a write there is the API
+  // being used, the try-it box included.
+  //
+  // Judged on the URL the request was sent to, not `path`: the beacon passes the
+  // page it is reporting, and it arrives as a POST to /v1/beacon, so testing
+  // `path` would have filed every page view it records as a bot.
+  const sentTo = new URL(request.url).pathname;
+  if (!sentTo.startsWith("/v1") && !["GET", "HEAD"].includes(request.method)) return "bot";
 
   const agent = request.headers.get("user-agent") || "";
   if (!agent) return "unknown";
@@ -158,7 +175,14 @@ export async function rollUp(env, ctx, meta) {
   // out of the chaos figure: it is us. Without this the operator reading the
   // dashboard is the first entry in the dashboard's own list of people who came
   // back, ahead of everybody it exists to show.
-  const trail = isBot || path === "/v1/beacon" || path.startsWith("/v1/admin")
+  // Two more, for the same reason. The site's owner, flagged by their own
+  // browser once signed in to the dashboard: three of the 25 people listed as
+  // having come back twice were them. And the /v1/meta fetch the landing page
+  // makes by itself on every load — the person loaded a page, they did not call
+  // an endpoint, and it was the top line of every trail. Clicking the /v1/meta
+  // link is a navigation, so that still counts.
+  const pageLoad = path === "/v1/meta" && onsite && meta.fetchMode !== "navigate";
+  const trail = isBot || meta.owner || pageLoad || path === "/v1/beacon" || path.startsWith("/v1/admin")
     ? []
     : [
         env.DB.prepare(
@@ -226,7 +250,9 @@ export async function rollUp(env, ctx, meta) {
     // its blanks forever, because IGNORE never revisits an existing row. The
     // guarded DO UPDATE backfills such a row once and then no-ops, so a repeat
     // visitor still costs nothing on the steady path.
-    env.DB.prepare(
+    //
+    // None at all for the owner: every figure about people reads this table.
+    ...(meta.owner ? [] : [env.DB.prepare(
       `INSERT INTO daily_visitors (day, visitor, country, region, ip_hash, bot, hour)
        VALUES (?, ?, ?, ?, ?, ?, ?)
        ON CONFLICT (day, visitor) DO UPDATE SET
@@ -243,7 +269,7 @@ export async function rollUp(env, ctx, meta) {
           OR daily_visitors.hour < 0
           OR daily_visitors.region = ''
           OR daily_visitors.bot < excluded.bot`
-    ).bind(meta.day, meta.visitor, meta.country, meta.region || "", meta.ipHash || "", meta.client === "bot" ? 1 : 0, meta.hour),
+    ).bind(meta.day, meta.visitor, meta.country, meta.region || "", meta.ipHash || "", meta.client === "bot" ? 1 : 0, meta.hour)]),
   ]);
 }
 

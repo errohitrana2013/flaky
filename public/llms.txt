@@ -1,0 +1,32 @@
+# flaky
+
+> A free mock REST API that fails on purpose. Same resources and field names as JSONPlaceholder, plus query parameters that make any request slow, failing, intermittently failing, rate-limited, truncated or CORS-blocked — for testing how a client copes with a bad backend. No signup, and no key needed to read.
+
+Base URL: https://flakyapi.dev/v1
+
+## Docs
+
+- [OpenAPI 3.1 spec](https://flakyapi.dev/v1/openapi.json): every route, parameter and response, generated from the same source as the running API
+- [API description](https://flakyapi.dev/v1/meta): resources, row counts, accepted methods and tier limits, as JSON
+- [Landing page](https://flakyapi.dev/): worked examples of every failure control
+- [Moving from JSONPlaceholder](https://flakyapi.dev/docs/jsonplaceholder): the migration is one base URL
+
+## Resources
+
+users, posts, comments, albums, photos, todos and products, each at /v1/<resource> and /v1/<resource>/<id>. Nested routes such as /v1/posts/1/comments and /v1/users/1/todos. GET lists and reads with filtering by any field, _q search, _sort and _order, _page or _start with _limit, and _select. POST, PUT, PATCH and DELETE are echoed, not stored; a sandbox (POST /v1/sandbox, needs a free key from POST /v1/keys) keeps writes for 24 hours.
+
+## Failure controls
+
+Query parameters that work on every endpoint:
+
+- _delay=<ms>: wait before responding, up to 10000
+- _status=<code>: respond with this HTTP status
+- _fail_rate=<0..1>: probability the request returns 500
+- _retry_after=<seconds>: Retry-After header on a 429 or 503
+- _malformed=1: cut the JSON body off mid-record
+- _cors=off: omit CORS headers, so a browser refuses the response
+- _scenario=<id>: a fixed sequence from POST /v1/scenario, e.g. {"fail":2} fails twice then succeeds
+
+## Optional
+
+- [Create a mock server from your own JSON](https://flakyapi.dev/createMockServer): POST /v1/custom returns endpoints for 24 hours, with the same controls, exportable to run locally

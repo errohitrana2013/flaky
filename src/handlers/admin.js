@@ -201,6 +201,18 @@ export async function getStats(ctx) {
   });
 }
 
+// Visitors who are not people, judged by what they did rather than what their
+// user-agent claimed. Either every request they made failed — a crawler walking
+// a list of paths that do not exist here, which nobody who found the site does —
+// or they used the admin pages, which is the owner, from before 7 Sept when
+// admin requests still reached the trail. Five and two of the 39 who came back.
+//
+// Only a visitor with a trail can be judged. Anyone seen before trails began is
+// kept, because nothing says they were not a person.
+const NOT_PEOPLE = `SELECT visitor FROM visitor_path WHERE day >= ?
+                    GROUP BY visitor
+                    HAVING SUM(errors) >= SUM(requests) OR SUM(path LIKE '/v1/admin%') > 0`;
+
 // GET /v1/admin/insights?days=14
 //
 // Separate from /stats on purpose: stats answers "how is it going", insights
@@ -252,18 +264,20 @@ export async function getInsights(ctx) {
          -- Not aliased "returning": that is a reserved word in SQLite (the
          -- RETURNING clause) and breaks the parse.
          SUM(CASE WHEN prior.visitor IS NOT NULL THEN 1 ELSE 0 END) AS came_back
-       FROM (SELECT DISTINCT visitor FROM daily_visitors WHERE day = ? AND bot = 0) t
+       FROM (SELECT DISTINCT visitor FROM daily_visitors
+             WHERE day = ? AND bot = 0 AND visitor NOT IN (${NOT_PEOPLE})) t
        LEFT JOIN (SELECT DISTINCT visitor FROM daily_visitors WHERE day < ? AND bot = 0) prior
          ON prior.visitor = t.visitor`
-    ).bind(today(), today()).first(),
+    ).bind(today(), since, today()).first(),
 
     // How many separate days each person showed up across the window.
     ctx.env.DB.prepare(
       `SELECT days, COUNT(*) AS people FROM (
          SELECT visitor, COUNT(DISTINCT day) AS days
-         FROM daily_visitors WHERE day >= ? AND bot = 0 GROUP BY visitor
+         FROM daily_visitors WHERE day >= ? AND bot = 0 AND visitor NOT IN (${NOT_PEOPLE})
+         GROUP BY visitor
        ) GROUP BY days ORDER BY days`
-    ).bind(since).all(),
+    ).bind(since, since).all(),
 
     ctx.env.DB.prepare(
       `SELECT path, SUM(visits) AS visits, SUM(sum_seconds) AS sum_seconds,
@@ -455,7 +469,7 @@ export async function getReturning(ctx) {
   const cohort = `SELECT visitor, COUNT(DISTINCT day) AS days,
                          MIN(day) AS first_day, MAX(day) AS last_day
                   FROM daily_visitors
-                  WHERE day >= ? AND bot = 0
+                  WHERE day >= ? AND bot = 0 AND visitor NOT IN (${NOT_PEOPLE})
                   GROUP BY visitor
                   HAVING days >= ?`;
 
@@ -469,7 +483,7 @@ export async function getReturning(ctx) {
        JOIN daily_visitors v ON v.visitor = c.visitor AND v.day = c.first_day
        ORDER BY c.days DESC, c.last_day DESC
        LIMIT 200`
-    ).bind(since, min).all(),
+    ).bind(since, since, min).all(),
 
     // Their trails, in one round trip rather than one query per person.
     ctx.env.DB.prepare(
@@ -481,7 +495,7 @@ export async function getReturning(ctx) {
        GROUP BY vp.visitor, vp.path
        ORDER BY requests DESC
        LIMIT 2000`
-    ).bind(since, min, since).all(),
+    ).bind(since, since, min, since).all(),
 
     // The first day anything was recorded. Trails began when 0020 shipped, so
     // for a while the window reaches back further than the data does — and a

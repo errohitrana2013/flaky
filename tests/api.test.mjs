@@ -774,6 +774,36 @@ test("classifies a scanner sweep however it prefixes the path", async () => {
   }
 });
 
+test("counts a WordPress sweep as a bot even where no .php gives it away", async () => {
+  const { classifyClient } = await import("../src/middleware/analytics.js");
+  const chrome = { "user-agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 Chrome/140.0 Safari/537.36" };
+  const as = (method, sentTo, path = sentTo) =>
+    classifyClient(new Request("https://flaky.test" + sentTo, { method, headers: chrome }), path);
+
+  // One sweep, split in two on the dashboard: /wordpress/index.php was a bot
+  // because of the .php, and these were callers.
+  for (const p of ["/wordpress/", "/wp/", "/blog/wp-json/batch/v1", "/wordpress/wp-json/batch/v1"]) {
+    assert.equal(as("GET", p), "bot", `${p} should read as a bot`);
+  }
+
+  // A page only takes GET, so a POST to one is never someone following a link.
+  assert.equal(as("POST", "/blog/"), "bot");
+  assert.equal(as("PUT", "/"), "bot");
+
+  // What people actually do stays people.
+  assert.equal(as("GET", "/blog/"), "browser", "a person could type /blog");
+  assert.equal(as("GET", "/"), "browser");
+  assert.equal(as("GET", "/docs/jsonplaceholder"), "browser");
+  assert.equal(as("POST", "/v1/posts"), "browser", "a write to the API is the API being used");
+  assert.equal(as("DELETE", "/v1/posts/1"), "browser");
+  // A resource someone named in their own JSON is not a WordPress directory.
+  assert.equal(as("GET", "/v1/custom/0123456789abcdef/wp"), "browser");
+
+  // The beacon reports a page but is itself a POST to /v1/beacon. Judging the
+  // method against the page path would file every page view it records as a bot.
+  assert.equal(as("POST", "/v1/beacon", "/"), "browser");
+});
+
 const CUSTOM = {
   id: "a1b2c3d4e5f60718",
   body: JSON.stringify({ employees: [{ id: 1, name: "Asha", dept: "Platform" }, { id: 2, name: "Wei", dept: "Product" }] }),
@@ -1288,6 +1318,49 @@ test("the beacon is not itself an activity, but the page it reports is", async (
   const trail = env._writes.filter((w) => w._sql.startsWith("INSERT INTO visitor_path"));
   assert.equal(trail.length, 1, "one row, for the page — not one for /v1/beacon too");
   assert.equal(trail[0]._args[2], "/docs/jsonplaceholder");
+});
+
+test("the owner's own visits are traffic, never a person", async () => {
+  const env = makeEnv();
+  await call("/v1/posts", { headers: { "user-agent": "Mozilla/5.0", "x-flaky-owner": "1" } }, env);
+  await Promise.allSettled(waits);
+
+  // Three of the 25 people listed as having come back twice were the owner.
+  const people = env._writes.filter((w) => /^INSERT INTO (visitor_path|daily_visitors)/.test(w._sql));
+  assert.equal(people.length, 0, "no visitor row and no trail");
+  assert.ok(env._writes.some((w) => w._sql.startsWith("INSERT INTO path_bucket")), "the request still happened");
+});
+
+test("the owner's beacon records no reading time and no visitor", async () => {
+  const env = makeEnv();
+  const res = await call("/v1/beacon", {
+    method: "POST",
+    headers: { "user-agent": "Mozilla/5.0", "content-type": "application/json" },
+    body: JSON.stringify({ path: "/", seconds: 300, owner: true }),
+  }, env);
+  await Promise.allSettled(waits);
+
+  assert.deepEqual(await body(res), { recorded: false });
+  // sendBeacon cannot send the header, so the flag comes in the body — and has to
+  // reach this request's own telemetry, not just the handler's writes.
+  assert.equal(env._writes.filter((w) => /^INSERT INTO (page_time|visitor_path|daily_visitors)/.test(w._sql)).length, 0);
+});
+
+test("the landing page's own /v1/meta fetch is not something the person did", async () => {
+  const onsite = { "user-agent": "Mozilla/5.0", referer: "https://flaky.test/" };
+  const trailFor = async (headers, path = "/v1/meta") => {
+    const env = makeEnv();
+    await call(path, { headers }, env);
+    await Promise.allSettled(waits);
+    return env._writes.filter((w) => w._sql.startsWith("INSERT INTO visitor_path")).length;
+  };
+
+  // Every load of / fetches it, so it topped every trail at one "request" a page view.
+  assert.equal(await trailFor({ ...onsite, "sec-fetch-mode": "cors" }), 0);
+  // Clicking the /v1/meta link is a navigation, and a choice.
+  assert.equal(await trailFor({ ...onsite, "sec-fetch-mode": "navigate" }), 1);
+  // And the try-it box — same page, same referrer, also a fetch — is still the person.
+  assert.equal(await trailFor({ ...onsite, "sec-fetch-mode": "cors" }, "/v1/posts"), 1);
 });
 
 test("the trail is purged on the same clock as the hash it belongs to", async () => {

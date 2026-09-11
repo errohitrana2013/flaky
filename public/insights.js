@@ -173,6 +173,16 @@ const atHour = (h) => (h < 0 ? "" : `first seen ${String(h).padStart(2, "0")}:00
 // hammered the landing page.
 const isEndpoint = (path) => path.startsWith("/v1/");
 
+// A page that failed was not read. Pages that exist are served before the Worker
+// sees them, so the only page requests it records itself are for pages that do
+// not exist — which showed as "1 read · 1 err" for a crawler's 404. Reads are the
+// beacon's, and a failure shows as the error alone.
+function countLabel(t) {
+  if (isEndpoint(t.path)) return `${num(t.requests)} ${t.requests === 1 ? "request" : "requests"}`;
+  const reads = t.requests - (t.errors || 0);
+  return reads > 0 ? `${num(reads)} ${reads === 1 ? "read" : "reads"}` : "";
+}
+
 function personBlock(p) {
   const where = [p.region, p.countryName].filter(Boolean).join(", ") || "Unknown";
   const span = p.firstDay === p.lastDay
@@ -182,9 +192,7 @@ function personBlock(p) {
   const trail = p.paths.length
     ? p.paths.map((t) => `<li>
         <span class="p">${clean(t.path)}</span>
-        <span class="n">${num(t.requests)} ${isEndpoint(t.path)
-          ? (t.requests === 1 ? "request" : "requests")
-          : (t.requests === 1 ? "read" : "reads")}</span>
+        <span class="n">${countLabel(t)}</span>
         <span class="c">${t.chaos ? num(t.chaos) + " chaos" : ""}</span>
         <span class="n">${t.errors ? num(t.errors) + " err" : ""}</span>
       </li>`).join("")
@@ -216,8 +224,16 @@ function showPeople(data, cohort) {
     ? `Where each person arrived from, and every path they touched. Paths recorded since ${shortDay(from)}; anything before that is not in the trail. Region only — never a city.`
     : "No paths recorded yet. The per-visitor trail starts with the next request.";
 
+  // Someone with an empty trail has nothing to show, and eleven identical
+  // "nothing recorded" blocks buried the handful that did. One line says it.
+  const tracked = mine.filter((p) => p.paths.length);
+  const untracked = mine.length - tracked.length;
+  const rest = untracked
+    ? `<p class="muted">${untracked} more with nothing in their trail — most came back before trails began${from ? ` on ${shortDay(from)}` : ""}.</p>`
+    : "";
+
   $("people-body").innerHTML = mine.length
-    ? mine.map(personBlock).join("")
+    ? tracked.map(personBlock).join("") + rest
     : '<p class="muted">Nobody in this group any more — the window may have moved since the table was drawn.</p>';
 
   $("people-modal").hidden = false;

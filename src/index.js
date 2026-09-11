@@ -114,6 +114,14 @@ function recordTelemetry(ctx, request, env, url, response, state) {
         // Compared against the referrer to spot the site's own try-it widget.
         // Taken from the request so it holds on workers.dev and localhost too.
         host: url.hostname.toLowerCase(),
+        // The site's owner, marked by their own browser once they have signed in
+        // to the dashboard. The beacon cannot send a header, so it says so in its
+        // body and the handler passes that on through state. Counted as traffic,
+        // never as a person.
+        owner: request.headers.get("x-flaky-owner") === "1" || state.owner === true,
+        // "navigate" when someone followed a link; a fetch a page made by itself
+        // says "cors" or "same-origin".
+        fetchMode: request.headers.get("sec-fetch-mode") || "",
         // 'XX' rather than empty, so an unknown region is a visible row in the
         // dashboard instead of a blank one that looks like a bug.
         country: request.cf?.country || "XX",

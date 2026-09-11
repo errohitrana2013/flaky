@@ -11,10 +11,22 @@
 const KEY = "flaky_admin";
 const TTL_MS = 24 * 60 * 60 * 1000;
 
+// Separate from the token, and with no expiry: it marks this browser as the
+// owner's, so the public pages leave these visits out of the visitor counts —
+// including on days the dashboard is never opened. A plain flag, never the
+// token: the public pages send it with their requests, and anyone who sets it by
+// hand only removes themselves from the numbers.
+const OWNER_KEY = "flaky_owner";
+
+function markOwner() {
+  try { localStorage.setItem(OWNER_KEY, "1"); } catch { /* nothing to do */ }
+}
+
 function saveToken(token) {
   try {
     localStorage.setItem(KEY, JSON.stringify({ token, expires: Date.now() + TTL_MS }));
   } catch { /* private windows throw; the page still works, just without memory */ }
+  markOwner();
 }
 
 function loadToken() {
@@ -23,6 +35,9 @@ function loadToken() {
     if (!raw) return null;
     const { token, expires } = JSON.parse(raw);
     if (!token || !expires || Date.now() > expires) { clearToken(); return null; }
+    // Also here, so a browser already signed in before the flag existed gets it
+    // on its next dashboard visit without typing the token again.
+    markOwner();
     return token;
   } catch { return null; }
 }
@@ -49,5 +64,10 @@ function wireSessionControls(onForget) {
   if (!text) return;
   label.textContent = "· " + text;
   button.hidden = false;
-  button.addEventListener("click", () => { clearToken(); onForget(); });
+  // Forget is for a shared machine, so it takes the owner flag with it.
+  button.addEventListener("click", () => {
+    clearToken();
+    try { localStorage.removeItem(OWNER_KEY); } catch { /* nothing to do */ }
+    onForget();
+  });
 }

@@ -29,10 +29,14 @@
     const seconds = Math.round(accumulated / 1000);
     if (seconds <= 0) return;
     sent = true;
+    // The owner flag set by the admin pages. sendBeacon cannot send a header, so
+    // it goes in the body; the beacon then records nothing for this visit.
+    let owner = false;
+    try { owner = localStorage.getItem("flaky_owner") === "1"; } catch { /* storage blocked */ }
     try {
       navigator.sendBeacon(
         "/v1/beacon",
-        new Blob([JSON.stringify({ path: location.pathname, seconds })], { type: "application/json" })
+        new Blob([JSON.stringify(owner ? { path: location.pathname, seconds, owner } : { path: location.pathname, seconds })], { type: "application/json" })
       );
     } catch { /* a failed beacon is not worth breaking a page over */ }
   }

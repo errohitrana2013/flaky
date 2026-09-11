@@ -60,7 +60,7 @@ $("create").addEventListener("click", async () => {
   try {
     const res = await fetch("/v1/custom", {
       method: "POST",
-      headers: { "content-type": "application/json" },
+      headers: ownerHeaders({ "content-type": "application/json" }),
       body: raw,
     });
     const data = await res.json();
@@ -169,9 +169,18 @@ function restore() {
 // The server is the authority on whether it still exists. A local copy can
 // outlive the row — the nightly purge, or a database that was reset — and
 // showing endpoints that 404 is worse than showing nothing.
+// Set by the admin pages on the owner's own browser, and sent so the API counts
+// these requests as traffic rather than as a visitor. A plain flag, never the
+// token. A hoisted function rather than a const: verify() can run while this
+// file is still loading, and app.js declares the same one on the landing page.
+function ownerHeaders(headers = {}) {
+  try { if (localStorage.getItem("flaky_owner") === "1") return { ...headers, "x-flaky-owner": "1" }; } catch { /* storage blocked */ }
+  return headers;
+}
+
 async function verify(data) {
   try {
-    const res = await fetch(data.baseUrl, { headers: { accept: "application/json" } });
+    const res = await fetch(data.baseUrl, { headers: ownerHeaders({ accept: "application/json" }) });
     if (res.status === 404 || res.status === 410) {
       forget();
       fail("That API has expired", "Paste your JSON again to create a new one — they last 24 hours.");
@@ -188,7 +197,7 @@ setInterval(() => {
 async function download(format, filename) {
   if (!current) return;
   try {
-    const res = await fetch(`${current.baseUrl}/export?format=${format}`);
+    const res = await fetch(`${current.baseUrl}/export?format=${format}`, { headers: ownerHeaders() });
     if (!res.ok) throw new Error(`Export failed (${res.status})`);
     const url = URL.createObjectURL(await res.blob());
     const link = Object.assign(document.createElement("a"), { href: url, download: filename });

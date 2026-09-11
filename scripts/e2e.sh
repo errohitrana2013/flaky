@@ -13,10 +13,13 @@ code() { curl -s -o /dev/null -w '%{http_code}' --max-time 25 "$@"; }
 echo "── target: $U"
 
 echo; echo "PAGES & ASSETS"
-for p in / /createMockServer /dashboard /app.css /app.js /custom.css /custom.js /dashboard.css /dashboard.js /favicon.svg /logo.svg; do
+for p in / /createMockServer /dashboard /app.css /app.js /custom.css /custom.js /dashboard.css /dashboard.js /favicon.svg /logo.svg /llms.txt; do
   is "GET $p" "$(code "$U$p")" "200"
 done
 is "unknown page 404s" "$(code "$U/no-such-page")" "404"
+# AI agents and API tools look for a spec at the root before anywhere else.
+is "/openapi.json points at the spec" "$(code "$U/openapi.json")" "301"
+is "/swagger.json too"                "$(code "$U/swagger.json")" "301"
 # A bare 404 with no body makes the browser show its own blank error page, which
 # is what every typo and stale link looked like before there was a fallback.
 is "and serves a real page"     "$(curl -sI --max-time 25 "$U/no-such-page" | grep -ci 'content-type: text/html')" "1"
