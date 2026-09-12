@@ -44,7 +44,7 @@ export async function getStats(ctx) {
   const days = Math.min(Math.max(Number(ctx.query.get("days")) || 14, 1), 90);
   const since = daysAgo(days);
 
-  const [daily, visitors, keys, topKeys, hourly, geoRequests, geoVisitors, errors_, errorSums, regions, addresses, arrivals] = await Promise.all([
+  const [daily, visitors, keys, topKeys, hourly, geoRequests, geoVisitors, errors_, errorSums, regions, addresses, arrivals, peaks] = await Promise.all([
     ctx.env.DB.prepare(
       `SELECT day, SUM(requests) AS requests, SUM(errors) AS errors
        FROM usage_bucket WHERE day >= ? GROUP BY day ORDER BY day`
@@ -130,9 +130,27 @@ export async function getStats(ctx) {
        FROM daily_visitors WHERE day >= ? AND bot = 0 AND hour >= 0
        GROUP BY hour ORDER BY hour`
     ).bind(since).all(),
+
+    // The busiest hour of each day, which the window-wide histogram cannot
+    // answer: ROW_NUMBER over the per-hour sums returns exactly one row per day.
+    // A tie goes to the earlier hour, so the answer is stable between loads.
+    ctx.env.DB.prepare(
+      `SELECT day, hour, requests FROM (
+         SELECT day, hour, SUM(requests) AS requests,
+                ROW_NUMBER() OVER (PARTITION BY day ORDER BY SUM(requests) DESC, hour) AS rn
+         FROM usage_bucket WHERE day >= ? GROUP BY day, hour
+       ) WHERE rn = 1`
+    ).bind(since).all(),
   ]);
 
-  const rows = daily.results || [];
+  // Hour stays UTC here, as everywhere else in this payload; the dashboard
+  // converts it to whatever zone the reader is in.
+  const peakByDay = Object.fromEntries((peaks.results || []).map((r) => [r.day, r]));
+  const rows = (daily.results || []).map((row) => ({
+    ...row,
+    peakHour: peakByDay[row.day]?.hour ?? null,
+    peakRequests: peakByDay[row.day]?.requests ?? 0,
+  }));
   const requests = rows.reduce((sum, row) => sum + (row.requests || 0), 0);
   const errors = rows.reduce((sum, row) => sum + (row.errors || 0), 0);
 
@@ -565,9 +583,14 @@ const countryName = (code) => {
 
 const DATASETS = {
   daily: {
-    sql: `SELECT day, SUM(requests) AS requests, SUM(errors) AS errors
-          FROM usage_bucket WHERE day >= ? GROUP BY day ORDER BY day`,
-    columns: [["day", "day"], ["requests", "requests"], ["errors", "errors"]],
+    // Carries the peak hour too, so the export and the table on screen cannot
+    // disagree. Correlated subquery rather than a window function: at most 365
+    // rows, and it keeps the shape of the outer query obvious.
+    sql: `SELECT u.day AS day, SUM(u.requests) AS requests, SUM(u.errors) AS errors,
+                 (SELECT h.hour FROM usage_bucket h WHERE h.day = u.day
+                  GROUP BY h.hour ORDER BY SUM(h.requests) DESC, h.hour LIMIT 1) AS peak_hour_utc
+          FROM usage_bucket u WHERE u.day >= ? GROUP BY u.day ORDER BY u.day`,
+    columns: [["day", "day"], ["requests", "requests"], ["errors", "errors"], ["peak_hour_utc", "peak_hour_utc"]],
   },
   hourly: {
     sql: `SELECT hour, SUM(requests) AS requests, SUM(errors) AS errors

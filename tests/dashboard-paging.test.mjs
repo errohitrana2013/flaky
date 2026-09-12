@@ -84,6 +84,9 @@ const payload = (dayCount) => {
     day: new Date(Date.UTC(2026, 5, 1) + i * 86400000).toISOString().slice(0, 10),
     requests: 100 + i,
     errors: i,
+    // UTC, as the API sends it; the page converts to the reader's zone.
+    peakHour: (i * 3) % 24,
+    peakRequests: 10 + i,
   }));
   return {
     window: { from: daily[0].day, to: daily.at(-1).day, days: dayCount },
@@ -120,6 +123,14 @@ test("the per-day table pages at fifteen rows and opens on the newest", () => {
   // The bar scale comes from the busiest day in the window, not on the page: day
   // 31 has 130 requests against a peak of 139.
   assert.match(el("daily").innerHTML, /data-w="93\.5"/);
+
+  // Weekday comes off the UTC date, so it cannot disagree with the date beside it.
+  assert.match(el("daily").innerHTML, /<td class="wk[^"]*">(Mon|Tue|Wed|Thu|Fri|Sat|Sun)</);
+  // Peak hour is shown in the reader's zone as the hour it covers, with the UTC
+  // hour kept in the title. Matched loosely because the test machine's zone
+  // decides the digits.
+  assert.match(el("daily").innerHTML, /\d\d:\d\d–\d\d:\d\d/);
+  assert.match(el("daily").innerHTML, /busiest hour · \d\d:00 UTC · \d+ requests/);
 
   // And the totals underneath describe the window, never the page.
   assert.match(el("daily-total").innerHTML, /days <b[^>]*>40</);
@@ -158,5 +169,8 @@ test("fifteen days or fewer shows no pager at all", () => {
 
   assert.equal(rowCount(el("daily").innerHTML), 15, "every day is on one page");
   assert.equal(el("daily-pager").hidden, true, "a control that can only do nothing is noise");
+  // Any fifteen consecutive days contain a weekend, whatever the dates are, and
+  // "the quiet days are Saturdays" is the reason the column exists.
+  assert.match(el("daily").innerHTML, /class="wk wkend"/);
   assert.match(el("daily-total").innerHTML, /days <b[^>]*>15</);
 });

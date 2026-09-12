@@ -429,7 +429,9 @@ test("exports CSV with a filename and the right content type", async () => {
   // spec, so the string would look BOM-less even when the wire format has one.
   const bytes = new Uint8Array(await res.arrayBuffer());
   assert.deepEqual([...bytes.slice(0, 3)], [0xef, 0xbb, 0xbf], "starts with a UTF-8 BOM for Excel");
-  assert.equal(new TextDecoder().decode(bytes.slice(3)), "day,requests,errors\r\n");
+  // peak_hour_utc joined the export so the csv cannot disagree with the table on
+  // screen, which now shows each day's busiest hour.
+  assert.equal(new TextDecoder().decode(bytes.slice(3)), "day,requests,errors,peak_hour_utc\r\n");
 });
 
 test("guards the CSV export and rejects an unknown dataset", async () => {

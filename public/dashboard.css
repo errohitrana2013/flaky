@@ -108,6 +108,12 @@
 }
 .seg.on { background: var(--accent); color: #fff; }
 
+/* Weekday and peak hour: supporting detail, so quieter than the numbers they sit
+   beside. A weekend is tinted, because "the quiet days are Saturdays" is the
+   whole reason to put a weekday on a row at all. */
+td.wk { color: var(--muted); font-size: 12.5px; white-space: nowrap; }
+td.wk.wkend { color: var(--accent); }
+
 /* Pager for the per-day table, in the same segmented style as the toggle above
    so it reads as a control and not as data. A class selector beats the UA
    stylesheet's [hidden] rule, so display has to be turned off explicitly. */

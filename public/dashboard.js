@@ -45,14 +45,16 @@ function renderDaily() {
     ? rows
         .map((d) => `<tr>
             <td class="mono">${d.day}</td>
+            <td class="wk${isWeekend(d.day) ? " wkend" : ""}">${weekdayOf(d.day)}</td>
             <td class="num">${num(d.requests)}</td>
             <td class="num">${num(d.errors)}</td>
             <td class="num">${num(DAILY_VISITORS[d.day])}</td>
+            <td class="mono wk"${d.peakHour == null ? ">—" : ` title="busiest hour · ${hhmm(d.peakHour)} UTC · ${num(d.peakRequests)} requests">${localRange(d.peakHour)}`}</td>
             <td class="chart"><div class="track${d.errors > d.requests * 0.1 ? " err" : ""}"
               data-w="${((d.requests / DAILY_PEAK) * 100).toFixed(1)}"></div></td>
           </tr>`)
         .join("")
-    : '<tr><td colspan="5" class="muted">No traffic yet.</td></tr>';
+    : '<tr><td colspan="7" class="muted">No traffic yet.</td></tr>';
   applySizes($("daily"));
 
   // No pager under sixteen rows — a control that can only do nothing is noise.
@@ -121,15 +123,29 @@ function render(data) {
 let LATEST = null;
 let MODE = "people";
 
+// Hours arrive in UTC. "When is it busy" is a local-time question, and India and
+// friends sit on a half-hour offset, so these carry fractions rather than
+// rotating whole hours. Shared by the histogram and the per-day peak column,
+// which must not drift apart.
+const hourOffset = () => -new Date().getTimezoneOffset() / 60;
+const hhmm = (v) => {
+  const hh = Math.floor(v);
+  return `${String(hh).padStart(2, "0")}:${String(Math.round((v - hh) * 60)).padStart(2, "0")}`;
+};
+const localHour = (utcHour) => (((utcHour + hourOffset()) % 24) + 24) % 24;
+// 17:00 UTC reads as 22:30–23:30 in IST.
+const localRange = (utcHour) => `${hhmm(localHour(utcHour))}–${hhmm(localHour(utcHour + 1))}`;
+
+// From the UTC date, because the rows are UTC days: a local weekday would
+// disagree with the date printed beside it for half the world.
+const asUtcDate = (day) => new Date(day + "T00:00:00Z");
+const weekdayOf = (day) => asUtcDate(day).toLocaleDateString(undefined, { weekday: "short", timeZone: "UTC" });
+const isWeekend = (day) => [0, 6].includes(asUtcDate(day).getUTCDay());
+
 function renderHours(hourly, visitors, mode) {
-  const offset = -new Date().getTimezoneOffset() / 60;
+  const offset = hourOffset();
   const zone = Intl.DateTimeFormat().resolvedOptions().timeZone;
   $("tz").textContent = zone ? `· ${zone}` : "· local time";
-
-  const label = (v) => {
-    const hh = Math.floor(v);
-    return `${String(hh).padStart(2, "0")}:${String(Math.round((v - hh) * 60)).padStart(2, "0")}`;
-  };
 
   // Two different questions: requests can be dominated by one busy script,
   // while arrivals say when people actually turn up.
@@ -151,9 +167,9 @@ function renderHours(hourly, visitors, mode) {
       const height = peak ? Math.max((b.value / peak) * 100, 1.5) : 1.5;
       // Every third label only; 24 of them overlap on a phone.
       return `<div class="hour${b.value === peak && peak > 0 ? " peak" : ""}"
-                   title="${label(b.local)}–${label((b.local + 1) % 24)} · ${num(b.value)} ${unit}">
+                   title="${hhmm(b.local)}–${hhmm((b.local + 1) % 24)} · ${num(b.value)} ${unit}">
         <div class="col" data-h="${height.toFixed(1)}"></div>
-        <div class="lab${i % 3 ? " hide" : ""}">${label(b.local).slice(0, 2)}</div>
+        <div class="lab${i % 3 ? " hide" : ""}">${hhmm(b.local).slice(0, 2)}</div>
       </div>`;
     })
     .join("");
