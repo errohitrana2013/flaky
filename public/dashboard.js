@@ -27,6 +27,46 @@ function applySizes(root) {
   for (const el of root.querySelectorAll("[data-h]")) el.style.height = el.dataset.h + "%";
 }
 
+// Fifteen rows a page. A 90-day window is a wall of numbers otherwise, and the
+// rows anyone actually reads are the recent ones.
+const DAILY_PAGE = 15;
+let DAILY = [];
+let DAILY_VISITORS = {};
+let DAILY_PEAK = 1;
+let DAILY_AT = 0;
+
+function renderDaily() {
+  const pages = Math.max(1, Math.ceil(DAILY.length / DAILY_PAGE));
+  DAILY_AT = Math.min(Math.max(0, DAILY_AT), pages - 1);
+  const from = DAILY_AT * DAILY_PAGE;
+  const rows = DAILY.slice(from, from + DAILY_PAGE);
+
+  $("daily").innerHTML = rows.length
+    ? rows
+        .map((d) => `<tr>
+            <td class="mono">${d.day}</td>
+            <td class="num">${num(d.requests)}</td>
+            <td class="num">${num(d.errors)}</td>
+            <td class="num">${num(DAILY_VISITORS[d.day])}</td>
+            <td class="chart"><div class="track${d.errors > d.requests * 0.1 ? " err" : ""}"
+              data-w="${((d.requests / DAILY_PEAK) * 100).toFixed(1)}"></div></td>
+          </tr>`)
+        .join("")
+    : '<tr><td colspan="5" class="muted">No traffic yet.</td></tr>';
+  applySizes($("daily"));
+
+  // No pager under sixteen rows — a control that can only do nothing is noise.
+  const pager = $("daily-pager");
+  pager.hidden = pages < 2;
+  if (pages < 2) return;
+
+  pager.innerHTML = [
+    `<button class="seg" data-daily="older"${DAILY_AT === 0 ? " disabled" : ""}>← older</button>`,
+    `<span class="pagerlabel">${from + 1}–${from + rows.length} of ${DAILY.length} days</span>`,
+    `<button class="seg" data-daily="newer"${DAILY_AT === pages - 1 ? " disabled" : ""}>newer →</button>`,
+  ].join("");
+}
+
 function render(data) {
   $("t-req").textContent = num(data.totals.requests);
   $("t-err").textContent = (data.totals.errorRate * 100).toFixed(1) + "%";
@@ -38,21 +78,18 @@ function render(data) {
   const visitorsByDay = Object.fromEntries(data.visitors.map((v) => [v.day, v.visitors]));
   $("t-vis").textContent = num(data.visitors.reduce((s, v) => s + v.visitors, 0));
 
-  const peak = Math.max(1, ...data.daily.map((d) => d.requests || 0));
-  $("daily").innerHTML = data.daily.length
-    ? data.daily
-        .map((d) => `<tr>
-            <td class="mono">${d.day}</td>
-            <td class="num">${num(d.requests)}</td>
-            <td class="num">${num(d.errors)}</td>
-            <td class="num">${num(visitorsByDay[d.day])}</td>
-            <td class="chart"><div class="track${d.errors > d.requests * 0.1 ? " err" : ""}"
-              data-w="${((d.requests / peak) * 100).toFixed(1)}"></div></td>
-          </tr>`)
-        .join("")
-    : '<tr><td colspan="5" class="muted">No traffic yet.</td></tr>';
+  DAILY = data.daily;
+  DAILY_VISITORS = visitorsByDay;
+  // Peak over every day, not the page: a bar scale that changed as you paged
+  // would make a quiet day look like a busy one.
+  DAILY_PEAK = Math.max(1, ...data.daily.map((d) => d.requests || 0));
+  // Days run oldest first, so the newest — the ones worth opening on — are on
+  // the last page.
+  DAILY_AT = Math.ceil(data.daily.length / DAILY_PAGE) - 1;
+  renderDaily();
 
-  applySizes($("daily"));
+  // Totals over the whole window, never the page on screen. Summing what is
+  // visible is exactly how the error table came to report "requested 0".
   summary("daily-total", [
     part("days", data.daily.length),
     part("requests", data.totals.requests),
@@ -383,6 +420,15 @@ function setMode(mode) {
   $("m-req").classList.toggle("on", mode === "requests");
   if (LATEST) renderHours(LATEST.hourly, LATEST.hourlyVisitors, mode);
 }
+// Delegated: the buttons are rebuilt on every page turn, and the CSP rules out
+// an inline handler on them.
+$("daily-pager").addEventListener("click", (event) => {
+  const button = event.target.closest("[data-daily]");
+  if (!button || button.disabled) return;
+  DAILY_AT += button.dataset.daily === "newer" ? 1 : -1;
+  renderDaily();
+});
+
 $("m-people").addEventListener("click", () => setMode("people"));
 $("m-req").addEventListener("click", () => setMode("requests"));
 

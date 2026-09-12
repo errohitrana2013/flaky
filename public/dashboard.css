@@ -108,6 +108,15 @@
 }
 .seg.on { background: var(--accent); color: #fff; }
 
+/* Pager for the per-day table, in the same segmented style as the toggle above
+   so it reads as a control and not as data. A class selector beats the UA
+   stylesheet's [hidden] rule, so display has to be turned off explicitly. */
+.pager { display: flex; align-items: center; gap: 10px; margin-top: 10px; }
+.pager[hidden] { display: none; }
+.pager .seg { border: 1px solid var(--line); border-radius: 7px; }
+.pager .seg[disabled] { opacity: .4; cursor: default; }
+.pagerlabel { color: var(--muted); font-size: 12px; }
+
 /* An error the caller asked for is the product working; one the service
    produced is not. They must not look alike. */
 .cause { font-size: 11px; letter-spacing: .05em; text-transform: uppercase; }
