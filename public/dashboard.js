@@ -11,11 +11,23 @@ function summary(id, parts) {
 const part = (label, value, cls = "") =>
   `<span>${label} <b class="${cls}">${typeof value === "number" ? num(value) : value}</b></span>`;
 
+// Paths come from callers, and callers include scanners posting markup. Nothing
+// here is ever assigned as HTML without going through this first. Not truncated:
+// a path is the thing you are trying to read, and half of one is a guess.
+const strip = (text) => String(text).replace(/[<>&"]/g, "");
+
 async function load(token) {
-  const res = await fetch("/v1/admin/stats?days=14", {
+  const res = await fetch("/v1/admin/stats?days=90", {
     headers: { authorization: "Bearer " + token },
   });
-  if (!res.ok) throw new Error(res.status === 401 ? "Token rejected." : "Request failed: " + res.status);
+  // The character count is the difference between "I mistyped it" and "this is
+  // the other environment's token", which "Token rejected." leaves you to guess
+  // at. The server logs the same comparison from its side.
+  if (!res.ok) {
+    throw new Error(res.status === 401
+      ? `Token rejected — sent ${token.length} characters to ${location.host}.`
+      : "Request failed: " + res.status);
+  }
   return res.json();
 }
 
@@ -27,46 +39,110 @@ function applySizes(root) {
   for (const el of root.querySelectorAll("[data-h]")) el.style.height = el.dataset.h + "%";
 }
 
-// Fifteen rows a page. A 90-day window is a wall of numbers otherwise, and the
-// rows anyone actually reads are the recent ones.
-const DAILY_PAGE = 15;
+// Every day in the window, in one scrolling panel. This was paged fifteen at a
+// time, which answered "how was last fortnight" and refused "when did that
+// spike start" — the question a 90-day table exists for. Scrolling keeps every
+// day reachable without a control that hides two thirds of them behind a click.
+//
+// Newest first, so today is the first row and needs no scroll at all. The CSV
+// button is unaffected: it has always written the whole window, not the page.
 let DAILY = [];
 let DAILY_VISITORS = {};
 let DAILY_PEAK = 1;
-let DAILY_AT = 0;
+
+// Which day's errors are open, and what came back for the days already asked
+// about. One day at a time: this is a "what happened on the 23rd" question, and
+// several open at once turns the table back into the wall of numbers the scroll
+// was meant to fix. Cached because the rollup for a past day cannot change.
+let DAY_ERRORS_OPEN = null;
+const DAY_ERRORS = new Map();
 
 function renderDaily() {
-  const pages = Math.max(1, Math.ceil(DAILY.length / DAILY_PAGE));
-  DAILY_AT = Math.min(Math.max(0, DAILY_AT), pages - 1);
-  const from = DAILY_AT * DAILY_PAGE;
-  const rows = DAILY.slice(from, from + DAILY_PAGE);
+  const rows = [...DAILY].reverse();
 
   $("daily").innerHTML = rows.length
-    ? rows
-        .map((d) => `<tr>
+    ? rows.map((d) => `<tr${DAY_ERRORS_OPEN === d.day ? ' class="open"' : ""}>
             <td class="mono">${d.day}</td>
             <td class="wk${isWeekend(d.day) ? " wkend" : ""}">${weekdayOf(d.day)}</td>
             <td class="num">${num(d.requests)}</td>
-            <td class="num">${num(d.errors)}</td>
+            <td class="num">${errorCell(d)}</td>
             <td class="num">${num(DAILY_VISITORS[d.day])}</td>
             <td class="mono wk"${d.peakHour == null ? ">—" : ` title="busiest hour · ${hhmm(d.peakHour)} UTC · ${num(d.peakRequests)} requests">${localRange(d.peakHour)}`}</td>
             <td class="chart"><div class="track${d.errors > d.requests * 0.1 ? " err" : ""}"
               data-w="${((d.requests / DAILY_PEAK) * 100).toFixed(1)}"></div></td>
-          </tr>`)
+          </tr>${DAY_ERRORS_OPEN === d.day ? dayErrorRow(d.day) : ""}`)
         .join("")
     : '<tr><td colspan="7" class="muted">No traffic yet.</td></tr>';
   applySizes($("daily"));
+}
 
-  // No pager under sixteen rows — a control that can only do nothing is noise.
-  const pager = $("daily-pager");
-  pager.hidden = pages < 2;
-  if (pages < 2) return;
+// A count worth opening is a button; a zero is text. A control that can only
+// tell you "nothing happened" is the same noise the pager was.
+function errorCell(d) {
+  if (!d.errors) return "0";
+  return `<button class="disclose errlink" data-errday="${d.day}"
+            aria-expanded="${DAY_ERRORS_OPEN === d.day}"
+            title="what failed on ${d.day}">${num(d.errors)}</button>`;
+}
 
-  pager.innerHTML = [
-    `<button class="seg" data-daily="older"${DAILY_AT === 0 ? " disabled" : ""}>← older</button>`,
-    `<span class="pagerlabel">${from + 1}–${from + rows.length} of ${DAILY.length} days</span>`,
-    `<button class="seg" data-daily="newer"${DAILY_AT === pages - 1 ? " disabled" : ""}>newer →</button>`,
-  ].join("");
+// The detail sits in a row of its own under the day, rather than in a panel
+// somewhere else on the page: the number you clicked and the answer belong in
+// the same place, and scrolling away from the row to read it loses which day
+// you were asking about.
+function dayErrorRow(day) {
+  const data = DAY_ERRORS.get(day);
+  if (!data) return detailRow('<span class="muted">Loading…</span>');
+  if (data.error) return detailRow(`<span class="warn">${strip(data.error)}</span>`);
+  if (!data.errors.length) return detailRow('<span class="muted">Nothing recorded for this day.</span>');
+
+  const body = data.errors.map((e) => `<tr>
+      <td><span class="st st-${String(e.status)[0]}">${Number(e.status) || "?"}</span></td>
+      <td class="mono">${strip(e.path)}</td>
+      <td><span class="cause cause-${cause(e)}">${cause(e)}</span></td>
+      <td><span class="cause ${e.bot ? "cause-client" : ""}">${e.bot ? "bot" : "caller"}</span></td>
+      <td class="num">${num(e.count)}</td>
+    </tr>`).join("");
+
+  const t = data.totals;
+  return detailRow(`
+    <table class="detail">
+      <thead><tr><th>Status</th><th>Path</th><th>Cause</th><th>From</th><th class="num">Count</th></tr></thead>
+      <tbody>${body}</tbody>
+    </table>
+    <div class="tabletotal">${[
+      part("kinds", t.kinds > data.errors.length ? `${num(data.errors.length)} of ${num(t.kinds)}` : num(t.kinds)),
+      part("total", num(t.total)),
+      part("requested", num(t.requested)),
+      part("from bots", num(t.bots)),
+      part("server", num(t.server), t.server ? "warn" : ""),
+    ].join("")}</div>`);
+}
+
+const detailRow = (inner) => `<tr class="daydetail"><td colspan="7">${inner}</td></tr>`;
+
+// Fetch once per day, then toggle from the cache. A day's rollup is finished
+// except for today's, and re-reading it on every open would cost a round trip
+// to answer the same question.
+async function toggleDayErrors(day) {
+  if (DAY_ERRORS_OPEN === day) { DAY_ERRORS_OPEN = null; renderDaily(); return; }
+
+  DAY_ERRORS_OPEN = day;
+  // Today is still being written to, so never serve it from the cache.
+  if (DAY_ERRORS.has(day) && day !== DAILY.at(-1)?.day) { renderDaily(); return; }
+
+  renderDaily(); // shows "Loading…" while the request is in flight
+  try {
+    const res = await fetch(`/v1/admin/errors?day=${encodeURIComponent(day)}`, {
+      headers: { authorization: "Bearer " + authToken },
+    });
+    if (!res.ok) throw new Error("Request failed: " + res.status);
+    DAY_ERRORS.set(day, await res.json());
+  } catch (err) {
+    // Into the row, not over the dashboard: one day's detail failing must not
+    // blank the table behind it.
+    DAY_ERRORS.set(day, { error: err.message });
+  }
+  if (DAY_ERRORS_OPEN === day) renderDaily();
 }
 
 function render(data) {
@@ -78,16 +154,17 @@ function render(data) {
   $("t-bot").textContent = num(data.totals.bots);
 
   const visitorsByDay = Object.fromEntries(data.visitors.map((v) => [v.day, v.visitors]));
-  $("t-vis").textContent = num(data.visitors.reduce((s, v) => s + v.visitors, 0));
+  // Distinct people, from the server. Summing the per-day counts here counted
+  // anyone who came back once per day they came back, so the tile read 215
+  // against 169 actual people and the gap to Addresses — a distinct count —
+  // compared two different quantities.
+  $("t-vis").textContent = num(data.totals.people);
 
   DAILY = data.daily;
   DAILY_VISITORS = visitorsByDay;
-  // Peak over every day, not the page: a bar scale that changed as you paged
-  // would make a quiet day look like a busy one.
+  // Peak over every day in the window, so the bars stay comparable the whole
+  // way down the scroll rather than rescaling to whatever is on screen.
   DAILY_PEAK = Math.max(1, ...data.daily.map((d) => d.requests || 0));
-  // Days run oldest first, so the newest — the ones worth opening on — are on
-  // the last page.
-  DAILY_AT = Math.ceil(data.daily.length / DAILY_PAGE) - 1;
   renderDaily();
 
   // Totals over the whole window, never the page on screen. Summing what is
@@ -101,8 +178,8 @@ function render(data) {
   LATEST = data;
   renderHours(data.hourly, data.hourlyVisitors, MODE);
   renderErrors(data.errors || [], data.errorTotals || {});
-  renderGeo(data.countries);
-  renderRegions(data.regions || []);
+  renderGeo(data.countries || [], data.regions || []);
+  syncGeoAll();
 
   summary("keys-total", [
     part("keys with traffic", data.topKeys.length),
@@ -211,7 +288,7 @@ function renderErrors(errors, totals) {
   $("errors").innerHTML = errors
     .map((e) => `<tr class="${cause(e) === "server" ? "real" : ""}">
         <td><span class="st st-${String(e.status)[0]}">${Number(e.status) || "?"}</span></td>
-        <td class="mono">${String(e.path).replace(/[<>&"]/g, "")}</td>
+        <td class="mono">${strip(e.path)}</td>
         <td><span class="cause cause-${cause(e)}">${cause(e)}</span></td>
         <td><span class="cause ${e.bot ? "cause-client" : ""}">${e.bot ? "bot" : "caller"}</span></td>
         <td class="num">${num(e.count)}</td>
@@ -235,51 +312,185 @@ function renderErrors(errors, totals) {
   ]);
 }
 
-function renderRegions(regions) {
-  if (!regions.length) {
-    $("regions").innerHTML = '<tr><td colspan="4" class="muted">No regions recorded yet. Cloudflare does not always report one.</td></tr>';
-    return;
+// ISO 3166-1 alpha-2 -> continent. Byte-identical to CONTINENT_GROUPS in
+// src/lib/geo.js, which the CSV export uses — the Worker and the browser share
+// no module, and tests/dashboard-geography.test.mjs fails if the two drift.
+const CONTINENT_GROUPS = {
+  Africa: "AO BF BI BJ BW CD CF CG CI CM CV DJ DZ EG EH ER ET GA GH GM GN GQ GW KE KM LR LS LY MA MG ML MR MU MW MZ NA NE NG RE RW SC SD SH SL SN SO SS ST SZ TD TG TN TZ UG YT ZA ZM ZW",
+  Asia: "AE AF AM AZ BD BH BN BT CN CY GE HK ID IL IN IQ IR JO JP KG KH KP KR KW KZ LA LB LK MM MN MO MV MY NP OM PH PK PS QA SA SG SY TH TJ TL TM TR TW UZ VN YE",
+  Europe: "AD AL AT AX BA BE BG BY CH CZ DE DK EE ES FI FO FR GB GG GI GR HR HU IE IM IS IT JE LI LT LU LV MC MD ME MK MT NL NO PL PT RO RS RU SE SI SJ SK SM UA VA XK",
+  "North America": "AG AI AW BB BL BM BQ BS BZ CA CR CU CW DM DO GD GL GP GT HN HT JM KN KY LC MF MQ MS MX NI PA PM PR SV SX TC TT US VC VG VI",
+  "South America": "AR BO BR CL CO EC FK GF GY PE PY SR UY VE",
+  Oceania: "AS AU CK FJ FM GU KI MH MP NC NF NR NU NZ PF PG PN PW SB TK TO TV VU WF WS",
+  Antarctica: "AQ BV GS HM TF",
+};
+const CONTINENT_BY_CODE = (() => {
+  const map = {};
+  for (const [name, codes] of Object.entries(CONTINENT_GROUPS)) {
+    for (const code of codes.split(" ")) map[code] = name;
   }
-  const peak = Math.max(...regions.map((r) => r.visitors));
-  $("regions").innerHTML = regions
-    .map((r) => `<tr>
-        <td><span class="flag">${flag(r.country)}</span>${String(r.region).replace(/[<>&"]/g, "").slice(0, 40)}
-            <span class="code">${isCode(r.country) ? r.country.toUpperCase() : ""}</span></td>
-        <td class="num">${num(r.visitors)}</td>
-        <td class="num">${num(r.addresses)}</td>
-        <td class="chart"><div class="track" data-w="${((r.visitors / peak) * 100).toFixed(1)}"></div></td>
-      </tr>`)
-    .join("");
-  applySizes($("regions"));
-  summary("regions-total", [
-    part("regions", regions.length),
-    part("people", regions.reduce((n, r) => n + r.visitors, 0)),
-    part("addresses", regions.reduce((n, r) => n + r.addresses, 0)),
-  ]);
-}
+  return map;
+})();
+const continentOf = (code) => (isCode(code) && CONTINENT_BY_CODE[code.toUpperCase()]) || "Unknown";
 
-function renderGeo(countries) {
-  if (!countries.length) {
-    $("geo").innerHTML = '<tr><td colspan="5" class="muted">No regions recorded yet.</td></tr>';
+// Which continents and countries are showing what is inside them. Continents
+// open, countries shut: that is the shape of the question the table answers
+// first — where in the world, and which country — and forty state rows spread
+// through it buries the twenty-seven country rows that are the actual answer.
+//
+// Keys are prefixed because a continent and a country can never collide, but a
+// two-letter code and a continent name sharing a set otherwise could.
+const GEO_KEY = { continent: (name) => "c:" + name, country: (code) => "n:" + code };
+let GEO_OPEN = null;
+
+// Continent, country and state in one table.
+//
+// Two tables meant reading a country's total in one and its states in another,
+// with nothing tying them together — and the numbers looked like they
+// disagreed, because the state list counts people while the country row counts
+// people, bots and requests. They were never the same quantity. Nesting them
+// says so.
+//
+// The two feeds cover different sets: countries is the top 25 by requests,
+// states the top 40 by visitors, so each has entries the other lacks. Both are
+// kept.
+function renderGeo(countries, regions) {
+  if (!countries.length && !regions.length) {
+    $("geo").innerHTML = '<tr><td colspan="6" class="muted">No regions recorded yet.</td></tr>';
+    summary("geo-total", [part("countries", 0)]);
     return;
   }
-  const peak = Math.max(...countries.map((c) => c.requests));
-  $("geo").innerHTML = countries
-    .map((c) => `<tr>
-        <td><span class="flag">${flag(c.country)}</span>${countryName(c.country)}
-            <span class="code">${isCode(c.country) ? c.country.toUpperCase() : ""}</span></td>
-        <td class="num">${num(c.visitors)}</td>
-        <td class="num">${num(c.bots)}</td>
-        <td class="num">${num(c.requests)}</td>
-        <td class="chart"><div class="track" data-w="${((c.requests / peak) * 100).toFixed(1)}"></div></td>
-      </tr>`)
-    .join("");
+
+  const byCountry = new Map();
+  const seed = (code) => {
+    const key = isCode(code) ? code.toUpperCase() : "XX";
+    if (!byCountry.has(key)) {
+      byCountry.set(key, { country: key, visitors: 0, bots: 0, requests: null, addresses: 0, states: [] });
+    }
+    return byCountry.get(key);
+  };
+  for (const c of countries) {
+    const row = seed(c.country);
+    row.visitors = c.visitors || 0;
+    row.bots = c.bots || 0;
+    row.requests = c.requests || 0;
+  }
+  for (const r of regions) {
+    seed(r.country).states.push(r);
+  }
+
+  for (const row of byCountry.values()) {
+    row.states.sort((a, b) => (b.visitors || 0) - (a.visitors || 0));
+    row.addresses = row.states.reduce((n, s) => n + (s.addresses || 0), 0);
+    const seen = (field) => row.states.reduce((n, s) => n + (s[field] || 0), 0);
+    // A country outside the top 25 by requests has no country row at all — its
+    // states are everything known about it, and requests stay blank rather than
+    // become a zero that reads as "nobody called".
+    if (row.requests === null) {
+      row.visitors = seen("visitors");
+      row.bots = seen("bots");
+    }
+    // The state list stops at 40, so a country's own people can outnumber the
+    // states listed under it. Naming the remainder beats a column that quietly
+    // does not add up — and only where there are states to fall short of.
+    row.restPeople = row.states.length ? Math.max(0, row.visitors - seen("visitors")) : 0;
+    row.restBots = row.states.length ? Math.max(0, row.bots - seen("bots")) : 0;
+  }
+
+  const continents = new Map();
+  for (const row of byCountry.values()) {
+    const name = continentOf(row.country);
+    if (!continents.has(name)) {
+      continents.set(name, { name, countries: [], visitors: 0, bots: 0, requests: 0, addresses: 0 });
+    }
+    const group = continents.get(name);
+    group.countries.push(row);
+    group.visitors += row.visitors;
+    group.bots += row.bots;
+    group.requests += row.requests || 0;
+    group.addresses += row.addresses;
+  }
+  const ordered = [...continents.values()].sort((a, b) => b.requests - a.requests || b.visitors - a.visitors);
+  for (const group of ordered) {
+    group.countries.sort((a, b) => (b.requests || 0) - (a.requests || 0) || b.visitors - a.visitors);
+  }
+
+  // Seeded once, then left alone: re-seeding on every render would spring open
+  // everything the reader had just shut, and the table re-renders on every
+  // click of a disclosure.
+  if (GEO_OPEN === null) GEO_OPEN = new Set(ordered.map((g) => GEO_KEY.continent(g.name)));
+
+  // Scaled to the busiest country, not the busiest continent: the bar is there
+  // to compare countries, and a continent that is one country would otherwise
+  // pin the scale and flatten everything below it.
+  const peak = Math.max(1, ...[...byCountry.values()].map((c) => c.requests || 0));
+  const cell = (value) => `<td class="num">${value === null ? '<span class="muted">—</span>' : num(value)}</td>`;
+  const safe = (text) => String(text).replace(/[<>&"]/g, "").slice(0, 40);
+
+  // A row that opens something is a button, not a clickable cell: the keyboard
+  // and a screen reader both need to know it does something, and aria-expanded
+  // is the only way to say which way it is currently pointing.
+  const disclose = (key, open, inner) =>
+    `<button class="disclose" type="button" data-geo="${key}" aria-expanded="${open}">
+       <span class="tri" aria-hidden="true">${open ? "▾" : "▸"}</span>${inner}
+     </button>`;
+
+  const rows = [];
+  for (const group of ordered) {
+    const groupKey = GEO_KEY.continent(group.name);
+    const groupOpen = GEO_OPEN.has(groupKey);
+    const label = `${safe(group.name)} <span class="code">${group.countries.length}</span>`;
+    rows.push(`<tr class="lvl-continent${groupOpen ? "" : " shut"}">
+        <td>${disclose(groupKey, groupOpen, label)}</td>
+        ${cell(group.visitors)}${cell(group.bots)}${cell(group.requests)}${cell(group.addresses)}
+        <td class="chart"></td>
+      </tr>`);
+    if (!groupOpen) continue;
+
+    for (const c of group.countries) {
+      const countryKey = GEO_KEY.country(c.country);
+      // A country with nothing underneath gets no control. A disclosure that
+      // opens onto nothing is worse than none: it reads as data still loading.
+      const hasStates = c.states.length > 0 || c.restPeople > 0 || c.restBots > 0;
+      const countryOpen = hasStates && GEO_OPEN.has(countryKey);
+      const label = `<span class="flag">${flag(c.country)}</span>${countryName(c.country)}
+              <span class="code">${isCode(c.country) ? c.country : ""}</span>`;
+      rows.push(`<tr class="lvl-country${hasStates && !countryOpen ? " shut" : ""}">
+          <td>${hasStates ? disclose(countryKey, countryOpen, label) : `<span class="leaf">${label}</span>`}</td>
+          ${cell(c.visitors)}${cell(c.bots)}${cell(c.requests)}${cell(c.addresses)}
+          <td class="chart"><div class="track" data-w="${(((c.requests || 0) / peak) * 100).toFixed(1)}"></div></td>
+        </tr>`);
+      if (!countryOpen) continue;
+
+      for (const s of c.states) {
+        rows.push(`<tr class="lvl-state">
+            <td>${safe(s.region)}</td>
+            ${cell(s.visitors || 0)}${cell(s.bots || 0)}${cell(null)}${cell(s.addresses || 0)}
+            <td class="chart"></td>
+          </tr>`);
+      }
+      if (c.restPeople || c.restBots) {
+        rows.push(`<tr class="lvl-state">
+            <td>Elsewhere in ${countryName(c.country)}</td>
+            ${cell(c.restPeople)}${cell(c.restBots)}${cell(null)}${cell(null)}
+            <td class="chart"></td>
+          </tr>`);
+      }
+    }
+  }
+  $("geo").innerHTML = rows.join("");
   applySizes($("geo"));
+
+  // Counted over the countries map, not the countries feed: states carry
+  // countries the feed never listed, and they are on screen.
+  const all = [...byCountry.values()];
   summary("geo-total", [
-    part("countries", countries.length),
-    part("people", countries.reduce((n, c) => n + c.visitors, 0)),
-    part("bots", countries.reduce((n, c) => n + (c.bots || 0), 0)),
-    part("requests", countries.reduce((n, c) => n + c.requests, 0)),
+    part("continents", ordered.length),
+    part("countries", all.length),
+    part("states", regions.length),
+    part("people", all.reduce((n, c) => n + c.visitors, 0)),
+    part("bots", all.reduce((n, c) => n + c.bots, 0)),
+    part("requests", all.reduce((n, c) => n + (c.requests || 0), 0)),
   ]);
 }
 
@@ -436,13 +647,60 @@ function setMode(mode) {
   $("m-req").classList.toggle("on", mode === "requests");
   if (LATEST) renderHours(LATEST.hourly, LATEST.hourlyVisitors, mode);
 }
-// Delegated: the buttons are rebuilt on every page turn, and the CSP rules out
+// Delegated, because the rows are rebuilt on every toggle and the CSP rules out
 // an inline handler on them.
-$("daily-pager").addEventListener("click", (event) => {
-  const button = event.target.closest("[data-daily]");
-  if (!button || button.disabled) return;
-  DAILY_AT += button.dataset.daily === "newer" ? 1 : -1;
-  renderDaily();
+// Delegated for the same reason as the geo table below: the rows are rebuilt on
+// every open and close, so a handler bound to a button would not survive the
+// first click, and the CSP rules out an inline one.
+$("daily").addEventListener("click", (event) => {
+  const button = event.target.closest("[data-errday]");
+  if (button) toggleDayErrors(button.dataset.errday);
+});
+
+$("geo").addEventListener("click", (event) => {
+  const button = event.target.closest?.("[data-geo]");
+  if (!button || !LATEST) return;
+  const key = button.dataset.geo;
+  if (GEO_OPEN.has(key)) GEO_OPEN.delete(key); else GEO_OPEN.add(key);
+  renderGeo(LATEST.countries || [], LATEST.regions || []);
+  syncGeoAll();
+});
+
+// One control for the whole table. "Expand all" while anything is shut, so the
+// button always offers the move that is not already made — a button whose label
+// describes the current state instead of the next one gets clicked by mistake
+// every time.
+function geoKeys() {
+  if (!LATEST) return [];
+  const keys = new Set();
+  for (const c of LATEST.countries || []) {
+    keys.add(GEO_KEY.continent(continentOf(c.country)));
+    keys.add(GEO_KEY.country(isCode(c.country) ? c.country.toUpperCase() : "XX"));
+  }
+  for (const r of LATEST.regions || []) {
+    keys.add(GEO_KEY.continent(continentOf(r.country)));
+    keys.add(GEO_KEY.country(isCode(r.country) ? r.country.toUpperCase() : "XX"));
+  }
+  return [...keys];
+}
+
+function syncGeoAll() {
+  const keys = geoKeys();
+  const shut = keys.some((key) => !GEO_OPEN?.has(key));
+  $("geo-all").textContent = shut ? "expand all" : "collapse all";
+  $("geo-all").dataset.open = shut ? "" : "1";
+}
+
+$("geo-all").addEventListener("click", () => {
+  if (!LATEST) return;
+  const keys = geoKeys();
+  // Collapsing all means back to continents only, not an empty table — a table
+  // with no rows in it reads as a failed load.
+  GEO_OPEN = keys.some((key) => !GEO_OPEN.has(key))
+    ? new Set(keys)
+    : new Set(keys.filter((key) => key.startsWith("c:")));
+  renderGeo(LATEST.countries || [], LATEST.regions || []);
+  syncGeoAll();
 });
 
 $("m-people").addEventListener("click", () => setMode("people"));

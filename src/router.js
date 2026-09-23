@@ -3,7 +3,7 @@ import { createSandbox, handleSandbox } from "./handlers/sandbox.js";
 import { createKey } from "./handlers/keys.js";
 import { getMeta } from "./handlers/meta.js";
 import { getOpenApi } from "./handlers/openapi.js";
-import { getStats, exportCsv, getInsights, listCustom, readCustomBody, getReturning } from "./handlers/admin.js";
+import { getStats, exportCsv, getInsights, listCustom, readCustomBody, getReturning, getDayErrors } from "./handlers/admin.js";
 import { recordBeacon } from "./handlers/beacon.js";
 import { createCustom, readCustom } from "./handlers/custom.js";
 import { createScenario, readScenario, resetScenario } from "./handlers/scenario.js";
@@ -15,6 +15,7 @@ const ROUTES = [
   { method: "GET",  path: "/v1/admin/stats",                          handler: getStats,      auth: "admin" },
   { method: "GET",  path: "/v1/admin/export",                         handler: exportCsv,     auth: "admin" },
   { method: "GET",  path: "/v1/admin/insights",                       handler: getInsights,   auth: "admin" },
+  { method: "GET",  path: "/v1/admin/errors",                         handler: getDayErrors,  auth: "admin" },
   { method: "GET",  path: "/v1/admin/returning",                      handler: getReturning,  auth: "admin" },
   { method: "GET",  path: "/v1/admin/custom",                         handler: listCustom,    auth: "admin" },
   { method: "GET",  path: "/v1/admin/custom/:id",                     handler: readCustomBody, auth: "admin" },

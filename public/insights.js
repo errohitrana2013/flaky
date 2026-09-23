@@ -290,7 +290,13 @@ async function attempt(token) {
     const res = await fetch("/v1/admin/insights?days=14", {
       headers: { authorization: "Bearer " + token },
     });
-    if (!res.ok) throw new Error(res.status === 401 ? "Token rejected." : "Request failed: " + res.status);
+    // Same message as the traffic dashboard: a character count tells you which
+    // environment's token you are holding, where "rejected" tells you nothing.
+    if (!res.ok) {
+      throw new Error(res.status === 401
+        ? `Token rejected — sent ${token.length} characters to ${location.host}.`
+        : "Request failed: " + res.status);
+    }
     render(await res.json());
     authToken = token;
     // A new token means a new session; the cached people belong to the old one.

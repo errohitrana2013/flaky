@@ -45,11 +45,12 @@
     </div>
 
     <h2>Per day <span class="tzlabel">· dates are UTC · peak hour in your zone</span> <button class="csv" data-csv="daily">csv</button></h2>
-    <table>
-      <thead><tr><th>Date</th><th>Day</th><th class="num">Requests</th><th class="num">Errors</th><th class="num">Visitors</th><th>Peak hour</th><th class="chart"></th></tr></thead>
-      <tbody id="daily"></tbody>
-    </table>
-    <div class="pager" id="daily-pager" hidden></div>
+    <div class="tablebox" id="daily-scroll">
+      <table>
+        <thead><tr><th>Date</th><th>Day</th><th class="num">Requests</th><th class="num">Errors</th><th class="num">Visitors</th><th>Peak hour</th><th class="chart"></th></tr></thead>
+        <tbody id="daily"></tbody>
+      </table>
+    </div>
     <div class="tabletotal" id="daily-total"></div>
 
     <h2>When people use it <span id="tz" class="tzlabel"></span>
@@ -60,19 +61,29 @@
     </h2>
     <div id="hours" class="hours"></div>
 
-    <h2>Where they come from <button class="csv" data-csv="countries">csv</button></h2>
+    <h2>Where they come from
+      <span class="toggle"><button id="geo-all" class="seg" type="button">expand all</button></span>
+      <button class="csv" data-csv="geography">csv</button>
+    </h2>
+    <p class="hint">
+      One table, three levels: continent, then country, then the states inside
+      it. Requests sit on the country row only — they come from the hourly
+      rollup, which stores a country and not a region, so there is no honest way
+      to split them further. There is no city column and there will not be one:
+      city plus a quiet day starts to identify someone. States stop at the 40
+      largest, and whatever a country has beyond them is on its own row rather
+      than left to go missing.
+      Continents open on a continent's countries, countries open on their
+      states.
+    </p>
     <table>
-      <thead><tr><th>Region</th><th class="num">People</th><th class="num">Bots</th><th class="num">Requests</th><th class="chart"></th></tr></thead>
+      <thead><tr>
+        <th>Region</th><th class="num">People</th><th class="num">Bots</th>
+        <th class="num">Requests</th><th class="num">Addresses</th><th class="chart"></th>
+      </tr></thead>
       <tbody id="geo"></tbody>
     </table>
     <div class="tabletotal" id="geo-total"></div>
-
-    <h2>States &amp; provinces <button class="csv" data-csv="regions">csv</button></h2>
-    <table>
-      <thead><tr><th>Region</th><th class="num">Visitors</th><th class="num">Addresses</th><th class="chart"></th></tr></thead>
-      <tbody id="regions"></tbody>
-    </table>
-    <div class="tabletotal" id="regions-total"></div>
 
     <h2>What is failing <button class="csv" data-csv="errors">csv</button></h2>
     <table>

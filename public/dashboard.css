@@ -114,15 +114,6 @@
 td.wk { color: var(--muted); font-size: 12.5px; white-space: nowrap; }
 td.wk.wkend { color: var(--accent); }
 
-/* Pager for the per-day table, in the same segmented style as the toggle above
-   so it reads as a control and not as data. A class selector beats the UA
-   stylesheet's [hidden] rule, so display has to be turned off explicitly. */
-.pager { display: flex; align-items: center; gap: 10px; margin-top: 10px; }
-.pager[hidden] { display: none; }
-.pager .seg { border: 1px solid var(--line); border-radius: 7px; }
-.pager .seg[disabled] { opacity: .4; cursor: default; }
-.pagerlabel { color: var(--muted); font-size: 12px; }
-
 /* An error the caller asked for is the product working; one the service
    produced is not. They must not look alike. */
 .cause { font-size: 11px; letter-spacing: .05em; text-transform: uppercase; }
@@ -147,6 +138,34 @@ tr.real td { background: var(--accent-soft, transparent); }
 .tablebox th:first-child, .tablebox td:first-child { padding-left: 14px; }
 .tablebox td { padding-right: 14px; }
 .tablebox tr:last-child td { border-bottom: 0; }
+/* Taller than the shared default: this one holds every day in the retention
+   window, and a box that shows eleven of ninety rows is a pager wearing a
+   scrollbar. Roughly a fortnight is visible before anyone has to scroll. */
+#daily-scroll { max-height: 560px; }
+
+/* An error count you can open. It stays a button — the keyboard and a screen
+   reader need to hear that — while looking like the number it replaced, so the
+   Errors column still reads as a column of numbers. */
+.errlink {
+  font-variant-numeric: tabular-nums;
+  text-decoration: underline; text-underline-offset: 3px;
+  text-decoration-color: var(--line);
+}
+.errlink:hover { text-decoration-color: currentColor; }
+.errlink:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+tr.open td { border-bottom-color: transparent; }
+tr.open .errlink { text-decoration-color: currentColor; }
+
+/* One day's errors, in a row of its own beneath the day. Its own table, because
+   these columns are nothing like the per-day ones above — the alignment the geo
+   panel needed to preserve is the alignment this one needs to escape. */
+tr.daydetail > td { padding: 0 0 14px 0; background: var(--panel); }
+table.detail { font-size: 13px; }
+table.detail th { padding: 8px 10px 8px 0; }
+table.detail th:first-child, table.detail td:first-child { padding-left: 14px; }
+table.detail td { padding: 6px 10px 6px 0; border-bottom: 1px solid var(--line); }
+table.detail tr:last-child td { border-bottom: 0; }
+tr.daydetail .tabletotal { border: 0; padding: 8px 14px 0; }
 
 /* The total sits outside the scroll on purpose: it is the one number you want
    without hunting, and scrolling it away would defeat that. */
@@ -186,3 +205,40 @@ tr.real td { background: var(--accent-soft, transparent); }
   font-size: 12.5px; line-height: 1.55; white-space: pre; tab-size: 2;
 }
 .hint { color: var(--muted); font-size: 13px; margin: -4px 0 12px; max-width: 68ch; }
+
+/* Three levels in one table. Indentation is the only thing separating a state
+   from the country above it, so it is padding on the cell rather than a nested
+   table — a nested table gets its own column widths and the numbers stop
+   lining up. */
+tr.lvl-continent td {
+  font-weight: 600; border-bottom-color: var(--ink);
+  padding-top: 18px;
+}
+tr.lvl-continent td:first-child {
+  text-transform: uppercase; letter-spacing: .06em; font-size: 11.5px;
+}
+tr.lvl-country td:first-child { padding-left: 14px; }
+
+/* The whole label is the control, so the hit target is a row's worth of text
+   rather than a triangle — and it stays a button, which is what the keyboard
+   and a screen reader need to hear. Inheriting the cell's type is what keeps a
+   continent bold and a country not. */
+.disclose {
+  background: none; border: 0; padding: 0; margin: 0; border-radius: 0;
+  font: inherit; color: inherit; letter-spacing: inherit; text-transform: inherit;
+  cursor: pointer; display: inline-flex; align-items: baseline; gap: 7px;
+  text-align: left;
+}
+.disclose:hover .tri { color: var(--ink); }
+.disclose:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+/* Fixed width so a shut row's label starts where an open one's does. Countries
+   with no states get .leaf, which is that same width of nothing. */
+.tri, .leaf::before { display: inline-block; width: 11px; }
+.tri { color: var(--muted); font-size: 10px; }
+.leaf::before { content: ""; }
+tr.lvl-country .leaf { display: inline-flex; align-items: baseline; gap: 7px; }
+/* A shut row is a summary of rows you cannot see, so it keeps its weight. The
+   triangle is the only thing that changes. */
+tr.shut .tri { color: var(--muted); }
+tr.lvl-state td { color: var(--muted); font-size: 13px; }
+tr.lvl-state td:first-child { padding-left: 40px; }

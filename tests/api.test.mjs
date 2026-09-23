@@ -8,7 +8,7 @@ import { readFileSync } from "node:fs";
 import worker from "../src/index.js";
 import { isProbe } from "../src/middleware/analytics.js";
 
-function makeEnv({ keys = [], sandboxes = [], records = [], customs = [], scenario = null, cohort = [], trails = [] } = {}) {
+function makeEnv({ keys = [], sandboxes = [], records = [], customs = [], scenario = null, cohort = [], trails = [], dayErrors = [] } = {}) {
   const kv = new Map();
   const points = [];
 
@@ -28,6 +28,18 @@ function makeEnv({ keys = [], sandboxes = [], records = [], customs = [], scenar
       return { live: live.length, samples: live.filter((c) => c.is_sample).length };
     }
     if (s.includes("MIN(day) AS from_day")) return { from_day: "2026-09-01" };
+    // One day's error detail: the rows, and the totals over every one of them.
+    if (s.includes("FROM error_bucket WHERE day = ?")) {
+      const rows = dayErrors.filter((e) => e.day === args[0]);
+      if (!s.includes("COUNT(*) AS kinds")) return null;
+      return {
+        kinds: rows.length,
+        total: rows.reduce((n, e) => n + e.count, 0),
+        requested: rows.filter((e) => e.injected).reduce((n, e) => n + e.count, 0),
+        server: rows.filter((e) => !e.injected && e.status >= 500).reduce((n, e) => n + e.count, 0),
+        bots: rows.filter((e) => e.bot).reduce((n, e) => n + e.count, 0),
+      };
+    }
     if (s.startsWith("SELECT fail_count, status, invert, attempts, expires_at FROM scenarios")) return scenario;
     // The counter advances in the same statement that reads it.
     if (s.startsWith("UPDATE scenarios SET attempts = attempts + 1")) {
@@ -75,6 +87,9 @@ function makeEnv({ keys = [], sandboxes = [], records = [], customs = [], scenar
             // The two halves of /v1/admin/returning: the people, then their paths.
             if (sql.includes("JOIN daily_visitors v")) return { results: cohort };
             if (sql.includes("FROM visitor_path vp")) return { results: trails };
+            if (sql.includes("FROM error_bucket WHERE day = ?")) {
+              return { results: dayErrors.filter((e) => e.day === args[0]) };
+            }
             if (sql.includes("FROM custom_apis")) {
               const live = customs.filter((c) => c.expires_at > Date.now());
               // The listing asks for is_sample = 0; the counting query does not.
@@ -564,6 +579,120 @@ test("accepts multiple admin tokens so one can be rotated without downtime", asy
     assert.equal(res.status, 200, `${token} should be accepted`);
   }
   assert.equal((await call("/v1/admin/stats", { headers: { authorization: "Bearer neither" } }, env)).status, 401);
+});
+
+// A 401 in the request log is a status and nothing else, so every way of
+// getting one looks identical from the outside. These assert on the line the
+// Worker writes instead — and on what it must never contain.
+test("a rejected admin token says why in the log, without leaking the token", async () => {
+  const said = [];
+  const warn = console.warn;
+  console.warn = (...args) => said.push(args.join(" "));
+
+  try {
+    const env = makeEnv();
+    env.ADMIN_TOKEN = "admin-token"; // 11 characters
+
+    await call("/v1/admin/stats", {}, env);
+    assert.match(said.at(-1), /no bearer token/, "a missing header is its own case");
+
+    await call("/v1/admin/stats", { headers: { authorization: "Bearer 0123456789012345678901234567890123456789" } }, env);
+    assert.match(said.at(-1), /token is 40 chars, expected 11/);
+    assert.match(said.at(-1), /wrong token for this environment/,
+      "a length mismatch means the wrong environment, not a typo");
+
+    await call("/v1/admin/stats", { headers: { authorization: "Bearer wrong-token" } }, env);
+    assert.match(said.at(-1), /right length, wrong value/,
+      "the same length is a typo, and saying so stops the hunt for the wrong thing");
+
+    const unset = makeEnv();
+    unset.ADMIN_TOKEN = "";
+    await call("/v1/admin/stats", { headers: { authorization: "Bearer anything" } }, unset);
+    assert.match(said.at(-1), /ADMIN_TOKEN is not set/,
+      "an unconfigured environment must not look like a bad token");
+
+    // The path is worth having; the secret never is, in any form.
+    assert.ok(said.every((line) => line.includes("/v1/admin/stats")));
+    for (const line of said) {
+      assert.ok(!line.includes("admin-token"), "the configured token must never be logged");
+      assert.ok(!line.includes("wrong-token"), "nor the one that was presented");
+    }
+  } finally {
+    console.warn = warn;
+  }
+});
+
+// --- One day's errors -------------------------------------------------------
+//
+// The per-day table gives a count. These cover the read behind it.
+const DAY_ERRORS = [
+  { day: "2026-09-23", status: 401, path: "/v1/admin/stats", injected: 0, bot: 1, count: 3 },
+  { day: "2026-09-23", status: 404, path: "/v1/agent.json", injected: 0, bot: 1, count: 1 },
+  { day: "2026-09-23", status: 503, path: "/v1/posts", injected: 1, bot: 0, count: 2 },
+  { day: "2026-09-23", status: 500, path: "/v1/custom", injected: 0, bot: 0, count: 1 },
+  { day: "2026-09-22", status: 404, path: "/v1/.env", injected: 0, bot: 1, count: 9 },
+];
+
+test("one day's errors come back for that day only", async () => {
+  const env = makeEnv({ dayErrors: DAY_ERRORS });
+  const res = await call("/v1/admin/errors?day=2026-09-23", ADMIN, env);
+  assert.equal(res.status, 200);
+
+  const data = await body(res);
+  assert.equal(data.day, "2026-09-23");
+  assert.equal(data.errors.length, 4, "the 22nd's rows belong to the 22nd");
+  assert.ok(data.errors.every((e) => e.path !== "/v1/.env"));
+});
+
+test("a day's totals separate requested failures and real ones", async () => {
+  const env = makeEnv({ dayErrors: DAY_ERRORS });
+  const { totals } = await body(await call("/v1/admin/errors?day=2026-09-23", ADMIN, env));
+
+  assert.equal(totals.total, 7);
+  // A 503 somebody asked for with _status is the product working, and must not
+  // be counted as something broken — this is the whole point of the column.
+  assert.equal(totals.requested, 2);
+  assert.equal(totals.server, 1, "only the unrequested 5xx");
+  assert.equal(totals.bots, 4);
+});
+
+test("a day with nothing recorded says so rather than 404ing", async () => {
+  const env = makeEnv({ dayErrors: DAY_ERRORS });
+  const data = await body(await call("/v1/admin/errors?day=2026-01-01", ADMIN, env));
+  assert.deepEqual(data.errors, []);
+  assert.equal(data.totals.total, 0);
+});
+
+test("a day that is not a date is a 400, not an empty list", async () => {
+  const env = makeEnv({ dayErrors: DAY_ERRORS });
+  // An empty list would read as "nothing broke that day", which is a lie about
+  // data that was never looked at.
+  for (const bad of ["", "yesterday", "2026-9-3", "2026-09-23T00:00"]) {
+    const res = await call(`/v1/admin/errors?day=${encodeURIComponent(bad)}`, ADMIN, env);
+    assert.equal(res.status, 400, `${bad || "(empty)"} should be rejected`);
+  }
+  // And the hint never echoes anything that is not plainly alphanumeric.
+  const hint = await body(await call("/v1/admin/errors?day=<script>", ADMIN, env));
+  assert.ok(!JSON.stringify(hint).includes("<script>"));
+});
+
+test("one day's errors need the admin token", async () => {
+  assert.equal((await call("/v1/admin/errors?day=2026-09-23")).status, 401);
+});
+
+// A token that works must not write a line at all: a warning on the happy path
+// is noise that trains you to ignore the log.
+test("an accepted admin token logs nothing", async () => {
+  const said = [];
+  const warn = console.warn;
+  console.warn = (...args) => said.push(args.join(" "));
+  try {
+    const res = await call("/v1/admin/stats", { headers: { authorization: "Bearer admin-token" } });
+    assert.equal(res.status, 200);
+    assert.deepEqual(said, []);
+  } finally {
+    console.warn = warn;
+  }
 });
 
 test("groups error paths so record ids do not each become a row", async () => {

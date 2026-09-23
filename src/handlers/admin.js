@@ -1,6 +1,7 @@
 import { json, fail, echo } from "../lib/response.js";
 import { daysAgo, today } from "../lib/hash.js";
 import { toCsv, csvResponse } from "../lib/csv.js";
+import { continentOf } from "../lib/geo.js";
 
 // Reads the D1 rollups, never the raw request log. The dashboard has to stay
 // fast and free, and Analytics Engine is for ad-hoc SQL when a question comes
@@ -23,16 +24,38 @@ function safeEqual(a, b) {
   return diff === 0;
 }
 
+// A 401 in the request log is a status and nothing else, so "the dashboard says
+// token rejected" and "ADMIN_TOKEN was never set on this environment" and "that
+// is the production token typed into the local server" are the same line. This
+// says which, in `wrangler dev` output and `npm run tail`, without ever putting
+// the token — or anything that would narrow a guess at it — on a log line.
+//
+// Lengths only. A length is what separates the three cases above, it is the one
+// thing the person typing already knows, and it is no use to anyone who does
+// not have the token: these are random, so knowing the size of the haystack
+// does not shrink it.
+function describeRejection(presented, candidates, url) {
+  const where = (() => { try { return new URL(url).pathname; } catch { return "?"; } })();
+  if (!candidates.length) return `[admin] 401 ${where} — ADMIN_TOKEN is not set on this environment`;
+  if (!presented) return `[admin] 401 ${where} — no bearer token on the request`;
+  const sizes = [...new Set(candidates.map((c) => c.length))].join("/");
+  const same = candidates.some((c) => c.length === presented.length);
+  return `[admin] 401 ${where} — token is ${presented.length} chars, expected ${sizes}` +
+    (same ? " — right length, wrong value" : " — wrong token for this environment");
+}
+
 function authorised(request, env) {
   const header = request.headers.get("authorization") || "";
   const token = header.replace(/^Bearer\s+/i, "").trim();
-  if (!token || !env.ADMIN_TOKEN) return false;
-
-  return String(env.ADMIN_TOKEN)
+  const candidates = String(env.ADMIN_TOKEN || "")
     .split(",")
     .map((candidate) => candidate.trim())
-    .filter(Boolean)
-    .some((candidate) => safeEqual(token, candidate));
+    .filter(Boolean);
+
+  if (token && candidates.some((candidate) => safeEqual(token, candidate))) return true;
+
+  console.warn(describeRejection(token, candidates, request.url));
+  return false;
 }
 
 // GET /v1/admin/stats?days=14
@@ -41,7 +64,11 @@ export async function getStats(ctx) {
     return fail(401, "Admin token required", "Send Authorization: Bearer <ADMIN_TOKEN>.");
   }
 
-  const days = Math.min(Math.max(Number(ctx.query.get("days")) || 14, 1), 90);
+  // 90 by default, which is the whole retention window: the nightly cron purges
+  // visitor hashes past 90 days, so a longer one could only ever be part-filled.
+  // The per-day table scrolls rather than pages, so the extra rows cost a taller
+  // panel and nothing else.
+  const days = Math.min(Math.max(Number(ctx.query.get("days")) || 90, 1), 90);
   const since = daysAgo(days);
 
   const [daily, visitors, keys, topKeys, hourly, geoRequests, geoVisitors, errors_, errorSums, regions, addresses, arrivals, peaks] = await Promise.all([
@@ -72,16 +99,29 @@ export async function getStats(ctx) {
        FROM usage_bucket WHERE day >= ? GROUP BY hour ORDER BY hour`
     ).bind(since).all(),
 
+    // No country's requests may go missing. At 25 this cut the list below the
+    // number of countries actually seen, and the dashboard — which builds its
+    // country rows from this feed — showed the ones past the cut with a blank
+    // requests cell, so 31 of 1,894 requests were on no row at all while the
+    // panel's own copy promised nothing was left out. 250 is every country
+    // there is, so the cap can no longer bind on real data.
     ctx.env.DB.prepare(
       `SELECT country, SUM(requests) AS requests
-       FROM usage_bucket WHERE day >= ? GROUP BY country ORDER BY requests DESC LIMIT 25`
+       FROM usage_bucket WHERE day >= ? GROUP BY country ORDER BY requests DESC LIMIT 250`
     ).bind(since).all(),
 
+    // People per country, counted once each. Summing the per-day rows counted a
+    // visitor again for every day they came back, which is a visit and not a
+    // person. The inner MAX(bot) extends the day-level stickiness across the
+    // window: one probe request is enough to call that hash a scanner for good,
+    // so people and bots stay disjoint and add up.
     ctx.env.DB.prepare(
       `SELECT country,
               SUM(CASE WHEN bot = 0 THEN 1 ELSE 0 END) AS visitors,
               SUM(bot) AS bots
-       FROM daily_visitors WHERE day >= ? GROUP BY country`
+       FROM (SELECT country, visitor, MAX(bot) AS bot
+             FROM daily_visitors WHERE day >= ? GROUP BY country, visitor)
+       GROUP BY country`
     ).bind(since).all(),
 
     ctx.env.DB.prepare(
@@ -109,19 +149,34 @@ export async function getStats(ctx) {
     // Blanks are grouped as Unknown rather than filtered out. Dropping them
     // makes the region rows silently fail to add up to the visitor total, and
     // a number that does not reconcile reads as a bug even when it is not.
+    // Counted once per person, like every other people figure — see the country
+    // query above. The inner alias is `state` rather than `region`: SQLite will
+    // resolve a GROUP BY against an output alias, and an alias that shadows a
+    // real column of the same table is a coin toss nobody should have to read.
     ctx.env.DB.prepare(
-      `SELECT country, CASE WHEN region = '' THEN 'Unknown' ELSE region END AS region,
+      `SELECT country, state AS region,
               SUM(CASE WHEN bot = 0 THEN 1 ELSE 0 END) AS visitors,
               SUM(bot) AS bots,
-              COUNT(DISTINCT NULLIF(ip_hash, '')) AS addresses
-       FROM daily_visitors WHERE day >= ?
-       GROUP BY country, region ORDER BY visitors DESC, bots DESC LIMIT 40`
+              COUNT(DISTINCT ip_hash) AS addresses
+       FROM (SELECT country,
+                    CASE WHEN region = '' THEN 'Unknown' ELSE region END AS state,
+                    visitor, MAX(bot) AS bot, MAX(NULLIF(ip_hash, '')) AS ip_hash
+             FROM daily_visitors WHERE day >= ?
+             GROUP BY country, state, visitor)
+       GROUP BY country, state ORDER BY visitors DESC, bots DESC LIMIT 40`
     ).bind(since).all(),
 
+    // People and addresses on the same grain, which is the only way the gap
+    // between them means anything: a visitor is salt+ip+user-agent and an
+    // address is salt+ip, so distinct-against-distinct really does answer "ten
+    // people, or one person with ten browsers". Against a sum of per-day counts
+    // it answered nothing — the tile read 215 while 169 people had been here.
     ctx.env.DB.prepare(
-      `SELECT COUNT(DISTINCT CASE WHEN bot = 0 THEN NULLIF(ip_hash, '') END) AS count,
-              SUM(bot) AS bots
-       FROM daily_visitors WHERE day >= ?`
+      `SELECT SUM(CASE WHEN bot = 0 THEN 1 ELSE 0 END) AS people,
+              SUM(bot) AS bots,
+              COUNT(DISTINCT CASE WHEN bot = 0 THEN ip_hash END) AS count
+       FROM (SELECT visitor, MAX(bot) AS bot, MAX(NULLIF(ip_hash, '')) AS ip_hash
+             FROM daily_visitors WHERE day >= ? GROUP BY visitor)`
     ).bind(since).first(),
 
     // Arrivals per hour: people, not requests, and bots excluded.
@@ -188,6 +243,11 @@ export async function getStats(ctx) {
       clientErrors: errorSums?.client || 0,
       keysIssued: keys?.count || 0,
       countries: countries.length,
+      // Distinct people over the window, not a sum of the per-day counts. The
+      // per-day column still says how many turned up that day; this says how
+      // many different people there have been, and the two are not the same
+      // number once anybody comes back.
+      people: addresses?.people || 0,
       // The gap between visitors and addresses answers "ten people, or one
       // person with ten tabs".
       addresses: addresses?.count || 0,
@@ -457,6 +517,70 @@ export async function readCustomBody(ctx) {
   });
 }
 
+// --- What failed on one day ------------------------------------------------
+//
+// The per-day table gives an error count and no way to read it. Six errors is
+// a bad afternoon, a scanner, or the owner mistyping the admin token, and those
+// want three different reactions — but the window-wide "What is failing" panel
+// averages the day away, and by the time a spike is a week old it is buried
+// under whatever has happened since.
+//
+// error_bucket is already keyed by day, so this is a read of data that was
+// always there. Deliberately its own endpoint rather than another array on
+// /v1/admin/stats: ninety days of error detail is most of the table, fetched on
+// every dashboard load, to answer a question nobody asks about most days.
+//
+// Lives here with the other admin endpoints rather than in a file of its own —
+// `authorised` is private to this module, and moving it to lib/ to justify the
+// split would be a bigger change than the feature.
+//
+// GET /v1/admin/errors?day=YYYY-MM-DD
+export async function getDayErrors(ctx) {
+  if (!authorised(ctx.request, ctx.env)) {
+    return fail(401, "Admin token required", "Send Authorization: Bearer <ADMIN_TOKEN>.");
+  }
+
+  const day = ctx.query.get("day") || "";
+  // Never fail quietly: a day that does not parse is a caller bug, and answering
+  // with an empty list would read as "nothing broke that day".
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(day)) {
+    return fail(400, `Not a date: ${echo(day)}`, "Use day=YYYY-MM-DD, the same UTC dates the per-day table shows.");
+  }
+
+  const [rows, totals] = await Promise.all([
+    ctx.env.DB.prepare(
+      `SELECT status, path, injected, bot, SUM(count) AS count
+       FROM error_bucket WHERE day = ?
+       GROUP BY status, path, injected, bot
+       ORDER BY count DESC, status ASC, path ASC LIMIT 100`
+    ).bind(day).all(),
+
+    // Over every error that day, not a sum of the rows above — the same trap the
+    // window-wide panel already fell into once, where a capped list reported
+    // "requested 0" beside 182 of them.
+    ctx.env.DB.prepare(
+      `SELECT COUNT(*) AS kinds, SUM(count) AS total,
+              SUM(CASE WHEN injected = 1 THEN count ELSE 0 END) AS requested,
+              SUM(CASE WHEN injected = 0 AND status >= 500 THEN count ELSE 0 END) AS server,
+              SUM(CASE WHEN bot = 1 THEN count ELSE 0 END) AS bots
+       FROM (SELECT status, injected, bot, SUM(count) AS count
+             FROM error_bucket WHERE day = ? GROUP BY status, path, injected, bot)`
+    ).bind(day).first(),
+  ]);
+
+  return json({
+    day,
+    errors: rows.results || [],
+    totals: {
+      kinds: totals?.kinds || 0,
+      total: totals?.total || 0,
+      requested: totals?.requested || 0,
+      server: totals?.server || 0,
+      bots: totals?.bots || 0,
+    },
+  });
+}
+
 // --- Returning people ------------------------------------------------------
 //
 // The frequency table on /insights says how many people came back and nothing
@@ -604,6 +728,35 @@ const DATASETS = {
     binds: 2,
     columns: [["country_code", "country"], ["country", "name"], ["visitors", "visitors"], ["requests", "requests"]],
     decorate: (rows) => rows.map((row) => ({ ...row, name: countryName(row.country) })),
+  },
+  // The table on /dashboard, flattened: one row per state, carrying the
+  // continent and the country totals it sits under. Requests are the country's
+  // — usage_bucket stores a country and no region, so there is nothing finer to
+  // export, and repeating the country figure beats inventing a split.
+  //
+  // Driven off daily_visitors rather than usage_bucket because only the former
+  // has a region. Nothing is lost by it: both tables are written on the same
+  // request, so a country in one is in the other.
+  geography: {
+    sql: `SELECT v.country AS country,
+                 CASE WHEN v.region = '' THEN 'Unknown' ELSE v.region END AS state,
+                 SUM(CASE WHEN v.bot = 0 THEN 1 ELSE 0 END) AS people,
+                 SUM(v.bot) AS bots,
+                 COUNT(DISTINCT NULLIF(v.ip_hash, '')) AS addresses,
+                 (SELECT SUM(u.requests) FROM usage_bucket u
+                  WHERE u.day >= ? AND u.country = v.country) AS country_requests
+          FROM daily_visitors v WHERE v.day >= ?
+          GROUP BY v.country, v.region
+          ORDER BY country_requests DESC, v.country, people DESC`,
+    binds: 2,
+    columns: [["continent", "continent"], ["country_code", "country"], ["country", "name"],
+              ["state", "state"], ["people", "people"], ["bots", "bots"],
+              ["addresses", "addresses"], ["country_requests", "country_requests"]],
+    decorate: (rows) => rows.map((row) => ({
+      ...row,
+      name: countryName(row.country),
+      continent: continentOf(row.country),
+    })),
   },
   visitors: {
     sql: `SELECT day,
