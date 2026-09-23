@@ -1,0 +1,102 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><style>
+  /* 1200x1200, square for the same reason linkedin-card.html is: a square image
+     takes roughly twice the feed height of a 1.91:1 one on a phone, and the
+     phone is where it gets seen. Same palette as the other two cards — a third
+     card that looked like a different product would be worse than no card.
+
+     This one sells the export, so the six formats ARE the picture. They are set
+     as real filenames rather than logos: no logo to fetch at render time, no
+     trademark to get wrong, and a filename says "you get a file" better than a
+     wordmark does. The failure parameters stay on the card because they are the
+     reason to take the file rather than a db.json from anywhere else. */
+  * { margin: 0; box-sizing: border-box; }
+  body {
+    width: 1200px; height: 1200px; overflow: hidden;
+    background: #100f0e; color: #ece9e1;
+    font-family: ui-sans-serif, -apple-system, "Helvetica Neue", Arial, sans-serif;
+    display: flex; flex-direction: column; justify-content: space-between;
+    padding: 80px 88px; position: relative;
+  }
+  .ghostmark { position: absolute; right: -140px; bottom: -120px; width: 760px; opacity: .05; }
+
+  .top { display: flex; align-items: center; gap: 20px; }
+  .mark { width: 62px; height: 62px; }
+  .word { font-size: 46px; font-weight: 700; letter-spacing: -.035em; }
+  .word .dot { color: #fb923c; }
+
+  h1 { font-size: 78px; line-height: 1.07; letter-spacing: -.04em; font-weight: 700; }
+  h1 em { font-style: normal; color: #fb923c; }
+
+  /* Two rows of three. The four written languages first, then the two file
+     formats, because Java and C# are the ones nobody else offers. */
+  .langs { display: grid; grid-template-columns: repeat(3, 1fr); gap: 18px; }
+  .lang {
+    font-family: ui-monospace, "SF Mono", Menlo, monospace;
+    font-size: 27px; letter-spacing: -.015em; color: #ece9e1;
+    background: #1a1917; border: 1px solid #2f2e2a;
+    border-radius: 14px; padding: 26px 24px; text-align: center;
+  }
+  .lang span { display: block; font-size: 18px; color: #928f85; margin-top: 8px; letter-spacing: 0; }
+
+  .offline {
+    font-family: ui-monospace, "SF Mono", Menlo, monospace;
+    font-size: 26px; letter-spacing: -.015em; color: #cfccc2;
+    border-left: 3px solid #fb923c; padding-left: 26px; line-height: 1.55;
+  }
+  .offline b { color: #fb923c; font-weight: 600; }
+  .offline .c { color: #7d7a71; }
+
+  .bottom { display: flex; align-items: flex-end; justify-content: space-between; gap: 40px; }
+  .url { font-size: 38px; font-weight: 600; letter-spacing: -.025em; }
+  .sub { font-size: 25px; color: #928f85; margin-top: 10px; }
+  .free {
+    font-size: 22px; color: #fb923c; border: 1px solid #46331f;
+    background: #1d1712; border-radius: 999px; padding: 12px 22px; white-space: nowrap;
+  }
+</style></head><body>
+
+  <svg class="ghostmark" viewBox="0 0 32 32" aria-hidden="true">
+    <rect x="3" y="18" width="5" height="9" rx="2.5" fill="#ece9e1"/>
+    <rect x="10" y="12" width="5" height="15" rx="2.5" fill="#ece9e1"/>
+    <rect x="17" y="22" width="5" height="5" rx="2.5" fill="#fb923c"/>
+    <rect x="24" y="4" width="5" height="23" rx="2.5" fill="#ece9e1"/>
+  </svg>
+
+  <div class="top">
+    <svg class="mark" viewBox="0 0 32 32" aria-hidden="true">
+      <rect x="3" y="18" width="5" height="9" rx="2.5" fill="#ece9e1"/>
+      <rect x="10" y="12" width="5" height="15" rx="2.5" fill="#ece9e1"/>
+      <rect x="17.6" y="8.6" width="4.8" height="11" rx="2.4" fill="none" stroke="#ece9e1" stroke-width="1.25" stroke-dasharray="2.5 2.5" opacity=".32"/>
+      <rect x="17" y="22" width="5" height="5" rx="2.5" fill="#fb923c"/>
+      <rect x="24" y="4" width="5" height="23" rx="2.5" fill="#ece9e1"/>
+    </svg>
+    <span class="word">flaky<span class="dot">.</span></span>
+  </div>
+
+  <h1>Paste your JSON.<br>Take the mock server<br><em>away in six ways.</em></h1>
+
+  <div class="langs">
+    <div class="lang">mock-server.mjs<span>Node</span></div>
+    <div class="lang">mock_server.py<span>Python</span></div>
+    <div class="lang">MockServer.java<span>Java</span></div>
+    <div class="lang">MockServer.cs<span>C#</span></div>
+    <div class="lang">db.json<span>json-server</span></div>
+    <div class="lang">handlers.js<span>MSW</span></div>
+  </div>
+
+  <div class="offline">
+    <span class="c">#</span> one file, no dependencies, still fails on demand<br>
+    curl 'localhost:4000/widgets?<b>_status=503</b>'<br>
+    curl 'localhost:4000/widgets?<b>_fail_rate=0.3</b>'
+  </div>
+
+  <div class="bottom">
+    <div>
+      <div class="url">flakyapi.dev/createMockServer</div>
+      <div class="sub">Your shapes. Your machine. Your failures.</div>
+    </div>
+    <div class="free">Free · no account</div>
+  </div>
+
+</body></html>
