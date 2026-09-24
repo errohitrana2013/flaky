@@ -1,6 +1,6 @@
 // Generators for a self-contained mock server the caller downloads and runs.
 //
-// The hosted API expires in 24 hours. These files do not, work offline, and go
+// The hosted API expires in at most nine days. These files do not, work offline, and go
 // in a repo — which is what someone actually wants once they have stopped
 // experimenting. Giving people the exit is the strongest argument for trusting
 // the front door.

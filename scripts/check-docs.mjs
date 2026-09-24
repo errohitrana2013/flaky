@@ -37,16 +37,17 @@ for (const [file, label] of targets) {
 // coming back in as a paste. A static asset cannot import from src/, so the
 // copies are checked instead of shared. If they drift, every example paste
 // starts showing up in the admin table as if it were someone's real data.
-{
-  const inPage = readFileSync("public/custom.js", "utf8").match(/const SAMPLE = `([\s\S]*?)`;/)?.[1];
-  const inConfig = readFileSync("src/config/example.js", "utf8").match(/CUSTOM_EXAMPLE = `([\s\S]*?)`;/)?.[1];
+// The OpenAPI page's example spec is kept twice for the same reason.
+for (const [inJs, inSrc, page] of [["SAMPLE", "CUSTOM_EXAMPLE", "/custom"], ["SPEC_SAMPLE", "CUSTOM_SPEC_EXAMPLE", "/openapiMockServer"]]) {
+  const inPage = readFileSync("public/custom.js", "utf8").match(new RegExp(`const ${inJs} = \`([\\s\\S]*?)\`;`))?.[1];
+  const inConfig = readFileSync("src/config/example.js", "utf8").match(new RegExp(`${inSrc} = \`([\\s\\S]*?)\`;`))?.[1];
 
   if (!inPage || !inConfig) {
     failed++;
-    console.error("✗ could not find the /custom example in both places");
+    console.error(`✗ could not find the ${page} example in both places`);
   } else if (inPage !== inConfig) {
     failed++;
-    console.error("✗ the /custom example differs between public/custom.js and src/config/example.js");
+    console.error(`✗ the ${page} example differs between public/custom.js and src/config/example.js`);
   }
 }
 

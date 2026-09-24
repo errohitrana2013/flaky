@@ -72,7 +72,8 @@ npm run deploy
 | `* /v1/sandbox/:id/:resource` | The same routes, nested included, and the writes persist |
 
 Any other method on a resource path is a 405 with an `Allow` header and the URL that would have worked, e.g. `PUT /v1/posts` points at `PUT /v1/posts/1`.
-| `POST /v1/custom` | Turn your own JSON into a mock API for 24 hours |
+| `POST /v1/custom` | Turn your own JSON into a mock API for 1 to 9 days (`?days=`, default 1) |
+| `POST /v1/custom/openapi` | The same, from an OpenAPI 3 or Swagger 2.0 spec (JSON) |
 | `GET /v1/custom/:id/:resource` | Read it, with every query and chaos parameter |
 | `GET /v1/custom/:id/export?format=` | Download it as a runnable server, or `json-server` / `msw` files |
 | `GET /v1/meta` | Resource counts, tier limits, your tier |
@@ -220,7 +221,8 @@ uses one, and nothing at all for anyone who does not.
 ## Your own JSON
 
 `POST /v1/custom` takes an array, or an object whose values are arrays, and every
-array becomes an endpoint for 24 hours. No account. The point is not that it
+array becomes an endpoint for 1 to 9 days — `?days=9` for the longest, one day
+if you leave it out. No account. The point is not that it
 serves your data — plenty of things do — but that **the chaos controls work on
 it**, so you can force a 503 against your own shapes rather than someone else's
 sample records.

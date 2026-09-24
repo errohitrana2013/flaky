@@ -461,7 +461,7 @@ export async function getInsights(ctx) {
 //
 // The live contents of /custom: who created what, and the JSON itself.
 //
-// Only the ones still inside their 24 hours, because that is the whole life of
+// Only the ones still inside their lifetime, because that is the whole life of
 // the row — the nightly purge deletes the rest, and listing a body that is
 // about to disappear invites acting on it. This reads `custom_apis` directly
 // rather than a rollup: there are at most a few dozen live at a time, and a

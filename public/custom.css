@@ -44,6 +44,12 @@
 #json:focus-visible { box-shadow: inset 0 0 0 2px var(--accent); }
 
 .hint { font-size: 13px; color: var(--muted); }
+.keep { display: inline-flex; align-items: center; gap: 6px; }
+.keep select {
+  font: inherit; font-size: 13px; color: var(--ink); background: var(--panel);
+  border: 1px solid var(--line); border-radius: 6px; padding: 4px 6px;
+}
+.keep select:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 .ghostbtn {
   background: none; color: var(--ink);
   border: 1px solid var(--line); border-radius: 7px;
@@ -68,3 +74,16 @@ td.mono a:hover { text-decoration: underline; }
    already know they want them. */
 .ghostbtn.primary { background: var(--accent); color: #fff; border-color: transparent; }
 .ghostbtn.primary:hover { color: #fff; opacity: .9; }
+
+/* What a spec import has to say about itself: where to point the app, what
+   differs from the spec, and what was left out. Quiet, because it is reference
+   rather than result — but above the table, because the first line is a step
+   the person has to take. */
+.specnotes {
+  border-left: 3px solid var(--line); padding: 4px 0 4px 16px; margin: 0 0 18px;
+  font-size: 14.5px;
+}
+.specnotes h4 { margin: 14px 0 6px; font-size: 13px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); }
+.specnotes ul { margin: 0; padding-left: 18px; }
+.specnotes li { margin: 4px 0; }
+.specnotes code { font-size: 12.5px; overflow-wrap: anywhere; }

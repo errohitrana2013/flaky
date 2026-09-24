@@ -1021,6 +1021,53 @@ test("rejects JSON it cannot serve, and says why", async () => {
   assert.match((await body(noArrays)).error.hint, /becomes an endpoint/);
 });
 
+test("turns an OpenAPI spec into an API", async () => {
+  const spec = readFileSync("src/config/example.js", "utf8").match(/CUSTOM_SPEC_EXAMPLE = `([\s\S]*?)`;/)[1];
+  const env = makeEnv();
+  const res = await call("/v1/custom/openapi", { method: "POST", body: spec }, env);
+  assert.equal(res.status, 201);
+
+  const made = await body(res);
+  assert.deepEqual(made.resources.map((r) => [r.name, r.count]), [["customers", 10], ["orders", 10]]);
+  assert.equal(made.replaces, "https://api.example.com/api/v1");
+  assert.equal(made.from.title, "Orders API");
+  assert.ok(made.skipped.length && made.warnings.length, "what was left out, and what differs, come back with it");
+  // The same exports as a paste: it is stored as one, and served as one.
+  assert.match(made.export.java, /format=java/);
+
+  const insert = env._writes.find((w) => w._sql.startsWith("INSERT INTO custom_apis"));
+  assert.equal(JSON.parse(insert._args[1]).orders.length, 10);
+  assert.equal(insert._args.at(-1), 1, "the page's own example is flagged as the example");
+
+  const edited = makeEnv();
+  await call("/v1/custom/openapi", { method: "POST", body: spec.replace('"city"', '"town"').replace('"city"', '"town"') }, edited);
+  assert.equal(edited._writes.find((w) => w._sql.startsWith("INSERT INTO custom_apis"))._args.at(-1), 0, "a changed spec is somebody's own");
+});
+
+test("an OpenAPI import refuses what it cannot use, and says why", async () => {
+  const post = (payload) => call("/v1/custom/openapi", { method: "POST", body: payload });
+
+  // YAML is named as YAML, not reported as a JSON error at position 0.
+  const yaml = await post("openapi: 3.0.0\ninfo:\n  title: x\n");
+  assert.equal(yaml.status, 400);
+  const y = await body(yaml);
+  assert.match(y.error.message, /YAML/);
+  assert.match(y.error.hint, /openapi\.json/);
+
+  assert.match((await body(await post("{oops"))).error.message, /not valid JSON/);
+  assert.match((await body(await post('{"users":[{"id":1}]}'))).error.hint, /createMockServer/);
+
+  const nothing = await body(await post(JSON.stringify({ openapi: "3.0.0", paths: { "/me": { get: { responses: { 200: { description: "x" } } } } } })));
+  assert.match(nothing.error.message, /Nothing in this spec could be mocked/);
+  assert.match(nothing.error.hint, /GET \/me/, "the reasons, not just the verdict");
+
+  const huge = await call("/v1/custom/openapi", { method: "POST", headers: { "content-length": String(2 * 1024 * 1024) }, body: "{}" });
+  assert.equal(huge.status, 413);
+
+  // The path takes POST only; a GET is the wrong method, not a missing API.
+  assert.equal((await call("/v1/custom/openapi")).status, 405);
+});
+
 test("serves a custom API with the usual query parameters", async () => {
   const env = makeEnv({ customs: [CUSTOM] });
   const base = `/v1/custom/${CUSTOM.id}`;
@@ -1120,11 +1167,47 @@ test("an expired custom API is gone, not empty", async () => {
   const env = makeEnv({ customs: [{ ...CUSTOM, expires_at: Date.now() - 1000 }] });
   const res = await call(`/v1/custom/${CUSTOM.id}/employees`, {}, env);
   assert.equal(res.status, 410);
-  assert.match((await body(res)).error.hint, /24 hours/);
+  assert.match((await body(res)).error.hint, /1 to 9/);
+});
+
+test("a custom API lives the days asked for, one if none, nine at most", async () => {
+  const DAY = 24 * 60 * 60 * 1000;
+  const create = async (query, path = "/v1/custom", payload = '{"todos":[{"id":1}]}') => {
+    const env = makeEnv();
+    const res = await call(`${path}${query}`, { method: "POST", body: payload }, env);
+    const insert = env._writes.find((w) => w._sql.startsWith("INSERT INTO custom_apis"));
+    return { res, made: await body(res), insert };
+  };
+  const lifetime = (insert) => insert._args[4] - insert._args[3];
+  const near = (ms, days) => Math.abs(ms - days * DAY) < 5000;
+
+  const plain = await create("");
+  assert.equal(plain.made.days, 1, "an API call that never asks gets what it always got");
+  assert.ok(near(lifetime(plain.insert), 1));
+  assert.match(plain.made.note, /24 hours/);
+
+  const nine = await create("?days=9");
+  assert.equal(nine.res.status, 201);
+  assert.ok(near(lifetime(nine.insert), 9), "the row itself expires in nine days, not just the answer");
+  assert.match(nine.made.note, /9 days/);
+
+  // A spec import takes the same option and means the same thing by it.
+  const spec = readFileSync("src/config/example.js", "utf8").match(/CUSTOM_SPEC_EXAMPLE = `([\s\S]*?)`;/)[1];
+  const fromSpec = await create("?days=5", "/v1/custom/openapi", spec);
+  assert.ok(near(lifetime(fromSpec.insert), 5));
+
+  // Never a quiet cap: 30 served as 9 would be discovered by a test that
+  // suddenly 410s on day ten.
+  for (const bad of ["10", "0", "-1", "1.5", "abc", ""]) {
+    const refused = await create(`?days=${bad}`);
+    assert.equal(refused.res.status, 400, `days=${bad}`);
+    assert.match(refused.made.error.message, /1 to 9/);
+    assert.equal(refused.insert, undefined, "nothing stored for a refused lifetime");
+  }
 });
 
 // The admin view of /custom. Two guards matter more than the shape: the token,
-// and the 24-hour window — a listing that outlived the row would show documents
+// and the lifetime window — a listing that outlived the row would show documents
 // the person who pasted them believes are gone.
 const ADMIN = { headers: { authorization: "Bearer admin-token" } };
 

@@ -3,13 +3,13 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Create a mock server from your JSON — free, no signup | flaky</title>
-<meta name="description" content="Paste any JSON and get a working mock server for it in one click. Filtering, sorting and paging included — plus the chaos controls, so you can force a 503 against your own data. Export it to Node, Python, Java or C# and run it offline. Free, no account.">
-<link rel="canonical" href="https://flakyapi.dev/createMockServer">
+<title>OpenAPI mock server — paste your spec, get your API | flaky</title>
+<meta name="description" content="Paste an OpenAPI or Swagger spec and get a working mock of your own API in one click, with realistic records for every list endpoint — plus the chaos controls, so you can force a 503, a timeout or a flaky connection against it. Export it to Node, Python, Java or C#. Free, no account.">
+<link rel="canonical" href="https://flakyapi.dev/openapiMockServer">
 <meta property="og:type" content="website">
-<meta property="og:url" content="https://flakyapi.dev/createMockServer">
-<meta property="og:title" content="Create a mock server from your JSON — with failures you can ask for">
-<meta property="og:description" content="One click, no account. Your own data, served as a mock server, with the chaos controls that make flaky different. Export it to Node, Python, Java or C# and keep it forever.">
+<meta property="og:url" content="https://flakyapi.dev/openapiMockServer">
+<meta property="og:title" content="A mock of your own API, from its OpenAPI spec — with failures you can ask for">
+<meta property="og:description" content="Paste your spec, get your endpoints with realistic records, then make them fail on purpose. No account. Export it to Node, Python, Java or C# and keep it forever.">
 <meta property="og:image" content="https://flakyapi.dev/og.png">
 <meta name="twitter:card" content="summary_large_image">
 <link rel="icon" href="/favicon.svg" type="image/svg+xml">
@@ -17,7 +17,7 @@
 <link rel="stylesheet" href="/app.css">
 <link rel="stylesheet" href="/custom.css">
 </head>
-<body>
+<body data-mode="openapi">
 <div class="wrap">
 
   <header class="doc-head">
@@ -34,37 +34,42 @@
 
     <nav class="tabs" aria-label="Which API">
       <a href="/">Ready-made API</a>
-      <a href="/createMockServer" class="on" aria-current="page">Create Mock Server</a>
-      <a href="/openapiMockServer">From OpenAPI Spec</a>
+      <a href="/createMockServer">Create Mock Server</a>
+      <a href="/openapiMockServer" class="on" aria-current="page">From OpenAPI Spec</a>
     </nav>
 
-    <h1>Paste your JSON. Get an API.</h1>
+    <h1>Paste your spec. Get your API.</h1>
     <p class="lede">
-      No account, no schema, no configuration. Every array in what you paste
-      becomes an endpoint — and <strong>the chaos controls work on it</strong>, so
-      you can force a 503 against your own shapes rather than someone else's
-      sample data.
+      Your app's real endpoints, with believable records behind every list —
+      and <strong>the chaos controls work on them</strong>, so you can see what
+      your app does when its own API answers 503, times out, or fails one
+      request in three. OpenAPI 3 or Swagger 2.0, as JSON.
     </p>
   </header>
 
   <section>
     <div class="editor">
       <div class="editor-top">
-        <span class="label">Your JSON</span>
+        <span class="label">Your OpenAPI spec (JSON)</span>
         <div class="editor-actions">
           <button id="sample" class="ghostbtn" type="button">Use an example</button>
           <span id="size" class="size"></span>
         </div>
       </div>
-      <textarea id="json" spellcheck="false" aria-label="JSON to turn into an API"
+      <textarea id="json" spellcheck="false" aria-label="OpenAPI spec to mock"
         placeholder='{
-  "todos": [
-    { "id": 1, "title": "Test the loading state", "done": false },
-    { "id": 2, "title": "Test the error state",   "done": true }
-  ]
-}'></textarea>
+  "openapi": "3.0.3",
+  "paths": {
+    "/users": { "get": { "responses": { "200": { … } } } }
+  }
+}
+
+Most frameworks serve this already:
+  FastAPI      /openapi.json
+  springdoc    /v3/api-docs
+  Swashbuckle  /swagger/v1/swagger.json'></textarea>
       <div class="editor-bottom">
-        <button id="create">Create the API</button>
+        <button id="create">Mock my API</button>
 <label class="hint keep">Keep it for
             <select id="days" aria-label="How many days to keep it">
               <option value="1">1 day</option>
@@ -93,6 +98,7 @@
     </p>
 
     <h3>Your endpoints</h3>
+    <div id="spec-notes" class="specnotes" hidden></div>
     <div class="scroller">
       <table>
         <thead><tr><th>Resource</th><th class="num">Records</th><th>URL</th></tr></thead>
@@ -124,8 +130,8 @@ java MockServer.java
 dotnet run MockServer.cs
 
 <span class="tok-com"># then, on your own machine:</span>
-curl 'http://localhost:4000/todos?_status=503'
-curl 'http://localhost:4000/todos?_fail_rate=0.3'</pre>
+curl 'http://localhost:4000/customers?_status=503'
+curl 'http://localhost:4000/customers?_fail_rate=0.3'</pre>
     <p class="mt-16">
       All four servers are self-contained: your data is embedded in the file and
       parsed at startup, so there is nothing to install and nothing to fetch — no
@@ -140,6 +146,7 @@ curl 'http://localhost:4000/todos?_fail_rate=0.3'</pre>
   <footer>
     <p class="m-0">
       <a href="/">Ready-made API</a> ·
+      <a href="/createMockServer">Mock server from JSON</a> ·
       <a href="/docs/jsonplaceholder">Moving from JSONPlaceholder</a> ·
       <a href="/privacy">Privacy &amp; contact</a> ·
       <a href="https://github.com/errohitrana2013/flaky">Source</a>

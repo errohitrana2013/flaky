@@ -19,3 +19,56 @@ export const CUSTOM_EXAMPLE = `{
     { "id": 2, "name": "Wei Chen",    "team": "Product" }
   ]
 }`;
+
+// The spec behind "Use an example" on /openapiMockServer, kept twice and checked
+// the same way. Chosen to show what the import does with a real API rather than
+// a toy one: a shared /api/v1 prefix to strip, a list wrapped in { data }, a
+// foreign key to keep in range, and a write that is not mocked.
+export const CUSTOM_SPEC_EXAMPLE = `{
+  "openapi": "3.0.3",
+  "info": { "title": "Orders API", "version": "1.0.0" },
+  "servers": [{ "url": "https://api.example.com" }],
+  "paths": {
+    "/api/v1/customers": {
+      "get": { "responses": { "200": { "description": "All customers",
+        "content": { "application/json": { "schema": {
+          "type": "array", "items": { "$ref": "#/components/schemas/Customer" } } } } } } }
+    },
+    "/api/v1/customers/{id}": {
+      "get": { "responses": { "200": { "description": "One customer",
+        "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Customer" } } } } } }
+    },
+    "/api/v1/orders": {
+      "get": { "responses": { "200": { "description": "A page of orders",
+        "content": { "application/json": { "schema": {
+          "type": "object",
+          "properties": {
+            "data": { "type": "array", "items": { "$ref": "#/components/schemas/Order" } },
+            "total": { "type": "integer" } } } } } } } },
+      "post": { "responses": { "201": { "description": "Created" } } }
+    }
+  },
+  "components": {
+    "schemas": {
+      "Customer": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "integer" },
+          "name": { "type": "string" },
+          "email": { "type": "string", "format": "email" },
+          "city": { "type": "string" }
+        }
+      },
+      "Order": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "integer" },
+          "customerId": { "type": "integer" },
+          "status": { "type": "string", "enum": ["placed", "shipped", "delivered", "cancelled"] },
+          "total": { "type": "number" },
+          "createdAt": { "type": "string", "format": "date-time" }
+        }
+      }
+    }
+  }
+}`;

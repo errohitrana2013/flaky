@@ -29,4 +29,5 @@ Query parameters that work on every endpoint:
 
 ## Optional
 
-- [Create a mock server from your own JSON](https://flakyapi.dev/createMockServer): POST /v1/custom returns endpoints for 24 hours, with the same controls, exportable to run locally
+- [Create a mock server from your own JSON](https://flakyapi.dev/createMockServer): POST /v1/custom returns endpoints for 1 to 9 days (?days=, default 1), with the same controls, exportable to run locally
+- [Mock your own API from its OpenAPI spec](https://flakyapi.dev/openapiMockServer): POST /v1/custom/openapi with an OpenAPI 3 or Swagger 2.0 JSON document; generates records for each list endpoint and serves them the same way, reporting every route it could not mock and why

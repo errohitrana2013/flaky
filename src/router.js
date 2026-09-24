@@ -6,6 +6,7 @@ import { getOpenApi } from "./handlers/openapi.js";
 import { getStats, exportCsv, getInsights, listCustom, readCustomBody, getReturning, getDayErrors } from "./handlers/admin.js";
 import { recordBeacon } from "./handlers/beacon.js";
 import { createCustom, readCustom } from "./handlers/custom.js";
+import { createFromSpec } from "./handlers/custom-openapi.js";
 import { createScenario, readScenario, resetScenario } from "./handlers/scenario.js";
 
 // Routes are matched top to bottom, first match wins. Static segments beat
@@ -28,6 +29,7 @@ const ROUTES = [
   { method: "GET",  path: "/v1/scenario/:id",                         handler: readScenario },
   { method: "POST", path: "/v1/scenario/:id/reset",                   handler: resetScenario },
   { method: "POST", path: "/v1/custom",                               handler: createCustom },
+  { method: "POST", path: "/v1/custom/openapi",                       handler: createFromSpec },
   { method: "GET",  path: "/v1/custom/:id",                           handler: readCustom },
   { method: "GET",  path: "/v1/custom/:id/:resource",                 handler: readCustom },
   { method: "GET",  path: "/v1/custom/:id/:resource/:recordId",       handler: readCustom },

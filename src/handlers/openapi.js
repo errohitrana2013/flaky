@@ -255,12 +255,20 @@ export function getOpenApi(ctx) {
       responses: { 200: { description: "Rewound." }, 404: errorResponse("No such scenario.") } },
   };
 
+  // Both create routes take it, and both mean the same thing by it.
+  const DAYS_PARAM = {
+    name: "days", in: "query",
+    description: "How many days it stays live before it is deleted. Anything outside 1–9 is a 400, not a quiet cap.",
+    schema: { type: "integer", minimum: 1, maximum: 9, default: 1 },
+  };
+
   paths["/custom"] = {
     post: {
       summary: "Create a mock server from your own JSON",
+      parameters: [DAYS_PARAM],
       description:
         "Send an array, or an object whose values are arrays; each array becomes an endpoint. " +
-        "No account needed. Lives 24 hours, then is deleted — export it to keep it. Every query " +
+        "No account needed. Lives for ?days= days, 1 to 9 (default 1), then is deleted — export it to keep it. Every query " +
         "and chaos parameter works on the result, which is the point: your shapes, failing how you ask.",
       tags: ["custom"],
       requestBody: {
@@ -269,8 +277,30 @@ export function getOpenApi(ctx) {
       },
       responses: {
         201: { description: "The id, the endpoints it created, and an export link." },
-        400: errorResponse("Not valid JSON, or no arrays in it to serve."),
+        400: errorResponse("Not valid JSON, no arrays in it to serve, or days outside 1–9."),
         413: errorResponse("Larger than 256 KB."),
+        429: errorResponse("Too many custom APIs from this address today."),
+      },
+    },
+  };
+
+  paths["/custom/openapi"] = {
+    post: {
+      summary: "Create a mock of your own API from its OpenAPI spec",
+      description:
+        "Send an OpenAPI 3 or Swagger 2.0 document as JSON. Each GET list endpoint, and its /{id} route, " +
+        "becomes a resource with ten generated records shaped by the spec — ids in order, foreign keys " +
+        "that point at records that exist, enums and examples respected — stored and served exactly like " +
+        "POST /custom, so every chaos parameter and every export works on it. The response names what the " +
+        "app's base URL should be swapped for, every route that was not mocked and why, and every way the " +
+        "mock differs from the spec. Writes are not mocked. YAML is refused with a hint; send JSON.",
+      tags: ["custom"],
+      parameters: [DAYS_PARAM],
+      requestBody: { required: true, content: { "application/json": { schema: { type: "object" } } } },
+      responses: {
+        201: { description: "The same answer as POST /custom, plus from, replaces, skipped and warnings." },
+        400: errorResponse("Not JSON, not an OpenAPI document, YAML, nothing in it could be mocked, or days outside 1–9."),
+        413: errorResponse("Larger than 1 MB."),
         429: errorResponse("Too many custom APIs from this address today."),
       },
     },
@@ -289,7 +319,7 @@ export function getOpenApi(ctx) {
       responses: {
         200: { description: "Your records." },
         404: errorResponse("No such API, or no such resource in it."),
-        410: errorResponse("It expired. They last 24 hours."),
+        410: errorResponse("It expired. Each lasts the days it was created for, 1 to 9."),
       },
     },
   };
@@ -342,7 +372,7 @@ export function getOpenApi(ctx) {
       tags: [
         ...RESOURCES.map((name) => ({ name, description: `${COUNTS[name]} records` })),
         { name: "sandbox", description: "Writes that persist for 24 hours" },
-        { name: "custom", description: "Create a mock server from your own JSON, live for 24 hours" },
+        { name: "custom", description: "Create a mock server from your own JSON or OpenAPI spec, live for 1 to 9 days" },
         { name: "scenario", description: "Failure sequences that recover, for retry and circuit-breaker tests" },
         { name: "account", description: "Keys and API description" },
       ],

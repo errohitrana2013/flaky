@@ -1,11 +1,11 @@
 import { json, fail, echo } from "../lib/response.js";
 import { queryCollection, pageHeaders } from "../lib/query.js";
 import { today } from "../lib/hash.js";
-import { TIERS, MAX_CUSTOM_BYTES, CUSTOM_TTL_MS, CUSTOM_PER_IP_PER_DAY } from "../config/tiers.js";
+import { TIERS, MAX_CUSTOM_BYTES, DAY_MS, CUSTOM_DEFAULT_DAYS, CUSTOM_MAX_DAYS, CUSTOM_PER_IP_PER_DAY } from "../config/tiers.js";
 import { CUSTOM_EXAMPLE } from "../config/example.js";
 import { nodeRunner, pythonRunner, javaRunner, csharpRunner } from "./runner.js";
 
-// Paste JSON, get a REST API for it, for 24 hours.
+// Paste JSON, get a REST API for it, for one to nine days.
 //
 // The whole point is that nothing else has to happen: no account, no schema, no
 // dashboard. Someone with a JSON file gets working endpoints before they have
@@ -64,6 +64,23 @@ export async function createCustom(ctx) {
     );
   }
 
+  return publish(ctx, data);
+}
+
+// Stores a set of collections as a custom API and answers with where it lives.
+// Shared with the OpenAPI import, which reaches the same { name: [rows] } by a
+// different road; `extra` is whatever that road has to say about the result,
+// and `sample` marks the other road's own example coming back in.
+export async function publish(ctx, data, extra = {}, { sample = false } = {}) {
+  // Checked before anything is counted or stored. A lifetime of 30 quietly
+  // served as 9 would be found out on day 10, by a test that suddenly 410s.
+  const asked = ctx.query.get("days");
+  const days = asked === null ? CUSTOM_DEFAULT_DAYS : Number(asked);
+  if (!Number.isInteger(days) || days < 1 || days > CUSTOM_MAX_DAYS) {
+    return fail(400, `days must be a whole number from 1 to ${CUSTOM_MAX_DAYS}`,
+      `Leave it out for ${CUSTOM_DEFAULT_DAYS} day. For longer than ${CUSTOM_MAX_DAYS}, export it — the export runs locally and never expires.`);
+  }
+
   // Rate limited by address, not by key, because this is meant to work with no
   // account at all. Fails open like everything else.
   if (ctx.env.RATE_LIMITS) {
@@ -73,7 +90,7 @@ export async function createCustom(ctx) {
       try {
         const made = Number(await ctx.env.RATE_LIMITS.get(bucket)) || 0;
         if (made >= CUSTOM_PER_IP_PER_DAY) {
-          return fail(429, "Too many custom APIs from this address today", `Up to ${CUSTOM_PER_IP_PER_DAY} a day. They expire after 24 hours.`);
+          return fail(429, "Too many custom APIs from this address today", `Up to ${CUSTOM_PER_IP_PER_DAY} a day. Each expires after the days it was created for.`);
         }
         ctx.ctx?.waitUntil?.(
           ctx.env.RATE_LIMITS.put(bucket, String(made + 1), { expirationTtl: 172800 }).catch(() => {})
@@ -83,7 +100,7 @@ export async function createCustom(ctx) {
   }
 
   const id = crypto.randomUUID().replace(/-/g, "").slice(0, 16);
-  const expiresAt = Date.now() + CUSTOM_TTL_MS;
+  const expiresAt = Date.now() + days * DAY_MS;
   const body = JSON.stringify(data);
 
   // Country and region only, matching daily_visitors. A summary of the shapes
@@ -102,7 +119,7 @@ export async function createCustom(ctx) {
     ctx.request.cf?.country || "XX", ctx.request.cf?.region || "", summary,
     // Recorded, not rejected: the example still has to work like anything else.
     // The flag only decides whether it is worth an operator's attention later.
-    body === EXAMPLE_BODY ? 1 : 0
+    body === EXAMPLE_BODY || sample ? 1 : 0
   ).run();
 
   const base = `/v1/custom/${id}`;
@@ -111,6 +128,7 @@ export async function createCustom(ctx) {
       id,
       baseUrl: base,
       expiresAt: new Date(expiresAt).toISOString(),
+      days,
       resources: Object.entries(data).map(([name, rows]) => ({
         name,
         count: rows.length,
@@ -125,7 +143,8 @@ export async function createCustom(ctx) {
         jsonServer: `${base}/export?format=json-server`,
         msw: `${base}/export?format=msw`,
       },
-      note: "Deleted 24 hours from now. Export it if you want to keep it — the export runs locally and never expires.",
+      note: `Deleted ${days === 1 ? "24 hours" : `${days} days`} from now. Export it if you want to keep it — the export runs locally and never expires.`,
+      ...extra,
     },
     { status: 201 }
   );
@@ -136,7 +155,7 @@ async function load(env, id) {
   const row = await env.DB.prepare("SELECT body, expires_at FROM custom_apis WHERE id = ?").bind(id).first();
   if (!row) return { error: fail(404, "No such API", "It may have expired. Create another at POST /v1/custom.") };
   if (row.expires_at < Date.now()) {
-    return { error: fail(410, "That API expired", "They last 24 hours. Create another at POST /v1/custom.") };
+    return { error: fail(410, "That API expired", `Each lasts the days it was created for, 1 to ${CUSTOM_MAX_DAYS}. Create another at POST /v1/custom.`) };
   }
   return { data: JSON.parse(row.body) };
 }

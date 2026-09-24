@@ -568,7 +568,7 @@ function renderCustoms(data) {
   if (!apis.length) {
     const nothing = data.samplesHidden
       ? `Nothing but the example — ${num(data.samplesHidden)} of those, hidden.`
-      : "Nothing live. They last 24 hours.";
+      : "Nothing live. Each lasts the 1 to 9 days it was made for.";
     $("customs").innerHTML = `<tr><td colspan="6" class="muted">${nothing}</td></tr>`;
     return;
   }

@@ -24,12 +24,12 @@ const made = (expiresIn) => ({
 // Thin enough to read, thick enough to run the page. Every element records what
 // was written to it, so a test can assert something arrived rather than that
 // nothing threw.
-function load({ stored = null, respond } = {}) {
+function load({ stored = null, respond, mode, key = "flaky.custom.v1" } = {}) {
   const nodes = new Map();
   const handlers = new Map();
   // A string is stored verbatim, so a test can hand it something unparseable.
   const store = new Map(
-    stored ? [["flaky.custom.v1", typeof stored === "string" ? stored : JSON.stringify(stored)]] : []
+    stored ? [[key, typeof stored === "string" ? stored : JSON.stringify(stored)]] : []
   );
   const requested = [];
 
@@ -47,7 +47,8 @@ function load({ stored = null, respond } = {}) {
     set textContent(v) { this._text = String(v); },
     get textContent() { return this._text; },
     addEventListener(event, fn) { handlers.set(`${id}:${event}`, fn); },
-    querySelector: () => element(`${id} child`),
+    // The same node on every call, so what a handler writes can be read back.
+    querySelector: (sel) => el(`${id} ${sel}`),
     scrollIntoView() {},
     focus() {},
     remove() {},
@@ -65,7 +66,7 @@ function load({ stored = null, respond } = {}) {
     JSON,
     TextEncoder,
     setInterval: () => 0,
-    document: { getElementById: el, createElement: () => element("a"), body: { appendChild() {} } },
+    document: { getElementById: el, createElement: () => element("a"), body: { appendChild() {}, dataset: mode ? { mode } : {} } },
     localStorage: {
       getItem: (k) => (store.has(k) ? store.get(k) : null),
       setItem: (k, v) => store.set(k, v),
@@ -73,6 +74,7 @@ function load({ stored = null, respond } = {}) {
     },
     location: { origin: "https://flakyapi.dev" },
     URL: { createObjectURL: () => "blob:x", revokeObjectURL() {} },
+    encodeURIComponent,
     fetch: async (url, init) => {
       requested.push(url);
       return respond ? respond(url, init) : { ok: true, status: 200, json: async () => ({}) };
@@ -99,6 +101,19 @@ test("restores a saved API on load, exactly as it was rendered", async () => {
   await new Promise((r) => setImmediate(r));
   assert.deepEqual(requested, ["/v1/custom/0123456789abcdef"]);
   assert.equal(el("result").hidden, false);
+});
+
+test("a longer lifetime counts down in days", () => {
+  const { el } = load({ stored: { data: made(8 * DAY + 3 * 3600000 + 60000), json: "{}" } });
+  assert.match(el("expires").textContent, /in 8d 3h/);
+});
+
+test("the lifetime chosen on the page is sent with the create", async () => {
+  const { el, fire, requested } = load({ respond: async () => ({ ok: true, status: 201, json: async () => made(9 * DAY) }) });
+  el("days").value = "9";
+  el("json").value = '{"todos":[{"id":1}]}';
+  await fire("create:click");
+  assert.deepEqual(requested, ["/v1/custom?days=9"]);
 });
 
 test("drops an API whose day is up rather than showing dead links", () => {
@@ -162,4 +177,64 @@ test("a failed create leaves the previous one alone", async () => {
 
   assert.equal(JSON.parse(store.get("flaky.custom.v1")).data.id, data.id);
   assert.equal(el("error").hidden, false);
+});
+
+// --- The OpenAPI page, which runs this same file ------------------------------
+
+const fromSpec = () => ({
+  ...made(DAY),
+  resources: [{ name: "customers", count: 10, url: "/v1/custom/0123456789abcdef/customers" }],
+  replaces: "https://api.example.com/api/v1",
+  skipped: [{ path: "GET /pets/{id}/owners", reason: "Nested under another resource." }],
+  warnings: ['GET /orders returns its rows inside {"data": [...]}.'],
+});
+
+test("the spec page sends a spec to the spec endpoint, and keeps it apart from a paste", async () => {
+  const { el, store, fire, requested } = load({
+    mode: "openapi",
+    respond: async () => ({ ok: true, status: 201, json: async () => fromSpec() }),
+  });
+
+  el("json").value = '{"openapi":"3.0.3","paths":{}}';
+  await fire("create:click");
+
+  assert.deepEqual(requested, ["/v1/custom/openapi"]);
+  // Its own key: importing a spec must not throw away the JSON API someone made
+  // on the other page, and the other way round.
+  assert.ok(store.has("flaky.custom.openapi.v1"));
+  assert.equal(store.has("flaky.custom.v1"), false);
+});
+
+test("the spec page says where to point the app, and what was left out", () => {
+  const { el } = load({ mode: "openapi", key: "flaky.custom.openapi.v1", stored: { data: fromSpec(), json: "{}" } });
+
+  const notes = el("spec-notes");
+  assert.equal(notes.hidden, false);
+  assert.match(notes.innerHTML, /where it now uses <code>https:\/\/api\.example\.com\/api\/v1<\/code>/);
+  assert.match(notes.innerHTML, /Not mocked/);
+  assert.match(notes.innerHTML, /GET \/pets\/\{id\}\/owners/);
+  assert.match(notes.innerHTML, /Differs from your spec/);
+  assert.match(notes.innerHTML, /\{&#34;data&#34;: \[\.\.\.\]\}/, "escaped, not markup");
+});
+
+test("a JSON paste has no spec notes to show", () => {
+  const { el } = load({ stored: { data: made(DAY), json: "{}" } });
+  assert.equal(el("spec-notes").hidden, true);
+});
+
+test("a resource name is text, not markup", () => {
+  const data = { ...made(DAY), resources: [{ name: "<img src=x onerror=alert(1)>", count: 1 }] };
+  const { el } = load({ stored: { data, json: "{}" } });
+  assert.ok(!el("endpoints").innerHTML.includes("<img"));
+});
+
+test("a YAML spec is named as YAML before any request is made", async () => {
+  const { el, fire, requested } = load({ mode: "openapi" });
+  el("json").value = "openapi: 3.0.0\ninfo:\n  title: x";
+  await fire("create:click");
+
+  assert.deepEqual(requested, []);
+  assert.equal(el("error").hidden, false);
+  assert.match(el("error b").textContent, /YAML/);
+  assert.match(el("error span").textContent, /openapi\.json/, "and where the JSON version already is");
 });

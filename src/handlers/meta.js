@@ -16,7 +16,7 @@ export function getMeta(ctx) {
     tagline: "A mock REST API that fails on purpose.",
     version: "1",
     openapi: "/v1/openapi.json",
-    custom: { url: "/v1/custom", method: "POST", note: "Send your own JSON, get a mock server for it for 24 hours." },
+    custom: { url: "/v1/custom", method: "POST", note: "Send your own JSON, get a mock server for it for 1 to 9 days (?days=, default 1). POST /v1/custom/openapi takes an OpenAPI spec instead." },
     // What /v1/posts, /v1/posts/1 and /v1/posts/1/comments each accept. Writes
     // are echoed, not stored, except inside a sandbox.
     methods: METHODS,
