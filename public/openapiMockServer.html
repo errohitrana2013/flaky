@@ -34,8 +34,8 @@
 
     <nav class="tabs" aria-label="Which API">
       <a href="/">Ready-made API</a>
-      <a href="/createMockServer">Create Mock Server</a>
-      <a href="/openapiMockServer" class="on" aria-current="page">From OpenAPI Spec</a>
+      <a href="/createMockServer">Use Your Own Data</a>
+      <a href="/openapiMockServer" class="on" aria-current="page">Generate from OpenAPI</a>
     </nav>
 
     <h1>Paste your spec. Get your API.</h1>
@@ -44,6 +44,10 @@
       and <strong>the chaos controls work on them</strong>, so you can see what
       your app does when its own API answers 503, times out, or fails one
       request in three. OpenAPI 3 or Swagger 2.0, as JSON.
+    </p>
+    <p class="hint">
+      Already have the data you want served? <a href="/createMockServer">Use your own data</a>
+      instead — it serves exactly what you paste.
     </p>
   </header>
 
@@ -146,7 +150,7 @@ curl 'http://localhost:4000/customers?_fail_rate=0.3'</pre>
   <footer>
     <p class="m-0">
       <a href="/">Ready-made API</a> ·
-      <a href="/createMockServer">Mock server from JSON</a> ·
+      <a href="/createMockServer">Use your own data</a> ·
       <a href="/docs/jsonplaceholder">Moving from JSONPlaceholder</a> ·
       <a href="/privacy">Privacy &amp; contact</a> ·
       <a href="https://github.com/errohitrana2013/flaky">Source</a>
