@@ -197,13 +197,15 @@ export async function getStats(ctx) {
        ) WHERE rn = 1`
     ).bind(since).all(),
 
-    // Each day's errors split into the ones the caller asked for (_status,
-    // _fail_rate) and the rest. A 503 somebody requested is the product
-    // working; lumped in one column with a real failure, the count said
-    // nothing about whether anything was wrong that day.
+    // Each day's errors split three ways: asked for (_status, _fail_rate), the
+    // caller's own mistake (an unrequested 4xx — a 404 for a post that does not
+    // exist is the API answering correctly), and an unrequested 5xx, which is
+    // the only kind that means flaky itself broke. Lumped in one column, a 503
+    // somebody requested and a bot's 404 both read as something to fix.
     ctx.env.DB.prepare(
       `SELECT day, SUM(count) AS total,
-              SUM(CASE WHEN injected = 1 THEN count ELSE 0 END) AS requested
+              SUM(CASE WHEN injected = 1 THEN count ELSE 0 END) AS requested,
+              SUM(CASE WHEN injected = 0 AND status >= 500 THEN count ELSE 0 END) AS broken
        FROM error_bucket WHERE day >= ? GROUP BY day`
     ).bind(since).all(),
   ]);
@@ -213,7 +215,7 @@ export async function getStats(ctx) {
   const peakByDay = Object.fromEntries((peaks.results || []).map((r) => [r.day, r]));
   // error_bucket began part-way through 2026-08-30, so on the days before it
   // the rollup has errors the detail never saw. Those days get null rather than
-  // a split of the part that was recorded: "real 168" beside 519 errors would
+  // a split of the part that was recorded: "user 155" beside 519 errors would
   // be a number that looks exact and is not.
   const splitByDay = Object.fromEntries((splits.results || []).map((r) => [r.day, r]));
   const rows = (daily.results || []).map((row) => {
@@ -221,17 +223,19 @@ export async function getStats(ctx) {
     const whole = (split?.total || 0) === (row.errors || 0);
     return {
       ...row,
-      realErrors: whole ? (row.errors || 0) - (split?.requested || 0) : null,
+      userErrors: whole ? (row.errors || 0) - (split?.requested || 0) - (split?.broken || 0) : null,
       requestedErrors: whole ? split?.requested || 0 : null,
+      fixErrors: whole ? split?.broken || 0 : null,
       peakHour: peakByDay[row.day]?.hour ?? null,
       peakRequests: peakByDay[row.day]?.requests ?? 0,
     };
   });
   const requests = rows.reduce((sum, row) => sum + (row.requests || 0), 0);
   const errors = rows.reduce((sum, row) => sum + (row.errors || 0), 0);
-  const known = rows.filter((row) => row.realErrors != null);
-  const realErrors = known.reduce((sum, row) => sum + row.realErrors, 0);
+  const known = rows.filter((row) => row.userErrors != null);
+  const userErrors = known.reduce((sum, row) => sum + row.userErrors, 0);
   const requestedErrors = known.reduce((sum, row) => sum + row.requestedErrors, 0);
+  const fixErrors = known.reduce((sum, row) => sum + row.fixErrors, 0);
 
   // Requests and visitors per country come from different tables, so join them
   // here rather than making the dashboard do it.
@@ -260,11 +264,12 @@ export async function getStats(ctx) {
       requests,
       errors,
       errorRate: requests ? Number((errors / requests).toFixed(4)) : 0,
-      // These two plus unsplitErrors add up to errors, so the totals under the
-      // per-day table reconcile with its columns.
-      realErrors,
+      // These three plus unsplitErrors add up to errors, so the totals under
+      // the per-day table reconcile with its columns.
+      userErrors,
       requestedErrors,
-      unsplitErrors: errors - realErrors - requestedErrors,
+      fixErrors,
+      unsplitErrors: errors - userErrors - requestedErrors - fixErrors,
       // Only unrequested 5xx. A 404 for a mistyped path is the API answering
       // correctly, and counting it here would bury the one number that means
       // something is actually broken.
@@ -740,17 +745,21 @@ const DATASETS = {
     // disagree. Correlated subquery rather than a window function: at most 365
     // rows, and it keeps the shape of the outer query obvious.
     sql: `SELECT day, requests, errors,
-                 CASE WHEN detailed = errors THEN errors - requested END AS real_errors,
+                 CASE WHEN detailed = errors THEN errors - requested - broken END AS user_errors,
                  CASE WHEN detailed = errors THEN requested END AS requested_errors,
+                 CASE WHEN detailed = errors THEN broken END AS fix_errors,
                  peak_hour_utc
           FROM (SELECT u.day AS day, SUM(u.requests) AS requests, SUM(u.errors) AS errors,
                  (SELECT IFNULL(SUM(e.count), 0) FROM error_bucket e WHERE e.day = u.day) AS detailed,
                  (SELECT IFNULL(SUM(e.count), 0) FROM error_bucket e WHERE e.day = u.day AND e.injected = 1) AS requested,
+                 (SELECT IFNULL(SUM(e.count), 0) FROM error_bucket e
+                  WHERE e.day = u.day AND e.injected = 0 AND e.status >= 500) AS broken,
                  (SELECT h.hour FROM usage_bucket h WHERE h.day = u.day
                   GROUP BY h.hour ORDER BY SUM(h.requests) DESC, h.hour LIMIT 1) AS peak_hour_utc
           FROM usage_bucket u WHERE u.day >= ? GROUP BY u.day) ORDER BY day`,
     columns: [["day", "day"], ["requests", "requests"], ["errors", "errors"],
-              ["real_errors", "real_errors"], ["requested_errors", "requested_errors"],
+              ["user_errors", "user_errors"], ["requested_errors", "requested_errors"],
+              ["fix_errors", "fix_errors"],
               ["peak_hour_utc", "peak_hour_utc"]],
   },
   hourly: {

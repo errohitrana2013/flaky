@@ -178,6 +178,8 @@ tr.daydetail .tabletotal { border: 0; padding: 8px 14px 0; }
 }
 .tabletotal b { color: var(--ink); font-weight: 600; }
 .tabletotal .warn { color: var(--accent); }
+/* A day with an unrequested 5xx: the one count on the table that means act. */
+td.warn, td.warn .errlink { color: var(--accent); font-weight: 600; }
 
 /* Custom APIs: a "view" that reads as a link but is a button, because it
    fetches with the admin header rather than navigating — a plain <a> would open

@@ -435,19 +435,19 @@ test("error totals cover every error, not just the 40 rows listed", async () => 
   assert.equal(stats.totals.clientErrors, 2330);
 });
 
-test("each day's errors are split into real and requested, where the split is known", async () => {
+test("each day's errors are split into user, requested and need-fixing, where the split is known", async () => {
   // The 29th is from before error_bucket existed; the 30th is the day it began,
-  // part-way through, so it saw 168 of 519. Neither may be split: a "real 155"
+  // part-way through, so it saw 168 of 519. Neither may be split: a "user 155"
   // beside 519 errors is a number that looks exact and is not.
   const daily = [
     { day: "2026-08-29", requests: 1094, errors: 433 },
     { day: "2026-08-30", requests: 726, errors: 519 },
-    { day: "2026-09-24", requests: 103, errors: 21 },
+    { day: "2026-09-24", requests: 103, errors: 23 },
     { day: "2026-09-25", requests: 40, errors: 0 },
   ];
   const splits = [
-    { day: "2026-08-30", total: 168, requested: 13 },
-    { day: "2026-09-24", total: 21, requested: 15 },
+    { day: "2026-08-30", total: 168, requested: 13, broken: 0 },
+    { day: "2026-09-24", total: 23, requested: 15, broken: 2 },
   ];
 
   const env = makeEnv();
@@ -460,19 +460,24 @@ test("each day's errors are split into real and requested, where the split is kn
 
   const stats = await body(await call("/v1/admin/stats", { headers: { authorization: "Bearer admin-token" } }, env));
   const byDay = Object.fromEntries(stats.daily.map((d) => [d.day, d]));
-  assert.equal(byDay["2026-08-29"].realErrors, null);
-  assert.equal(byDay["2026-08-30"].realErrors, null, "a partly recorded day is not split");
-  assert.equal(byDay["2026-09-24"].realErrors, 6);
+  assert.equal(byDay["2026-08-29"].userErrors, null);
+  assert.equal(byDay["2026-08-30"].userErrors, null, "a partly recorded day is not split");
+  assert.equal(byDay["2026-08-30"].fixErrors, null);
+  // 23 errors: 15 asked for, 2 unrequested 5xx, and the 6 left are 4xx.
+  assert.equal(byDay["2026-09-24"].userErrors, 6);
   assert.equal(byDay["2026-09-24"].requestedErrors, 15);
-  // No errors at all is a known split of 0 and 0, not an unknown one.
-  assert.equal(byDay["2026-09-25"].realErrors, 0);
+  assert.equal(byDay["2026-09-24"].fixErrors, 2);
+  // No errors at all is a known split of zeros, not an unknown one.
+  assert.equal(byDay["2026-09-25"].userErrors, 0);
   assert.equal(byDay["2026-09-25"].requestedErrors, 0);
+  assert.equal(byDay["2026-09-25"].fixErrors, 0);
 
-  // And the totals reconcile with the columns: 6 + 15 + (433 + 519) = 973.
-  assert.equal(stats.totals.realErrors, 6);
+  // And the totals reconcile with the columns: 6 + 15 + 2 + (433 + 519) = 975.
+  assert.equal(stats.totals.userErrors, 6);
   assert.equal(stats.totals.requestedErrors, 15);
+  assert.equal(stats.totals.fixErrors, 2);
   assert.equal(stats.totals.unsplitErrors, 952);
-  assert.equal(stats.totals.errors, 973);
+  assert.equal(stats.totals.errors, 975);
 });
 
 test("exports CSV with a filename and the right content type", async () => {
@@ -487,7 +492,7 @@ test("exports CSV with a filename and the right content type", async () => {
   // peak_hour_utc and the error split joined the export so the csv cannot
   // disagree with the table on screen.
   assert.equal(new TextDecoder().decode(bytes.slice(3)),
-    "day,requests,errors,real_errors,requested_errors,peak_hour_utc\r\n");
+    "day,requests,errors,user_errors,requested_errors,fix_errors,peak_hour_utc\r\n");
 });
 
 test("guards the CSV export and rejects an unknown dataset", async () => {

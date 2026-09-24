@@ -65,20 +65,21 @@ function renderDaily() {
             <td class="mono">${d.day}</td>
             <td class="wk${isWeekend(d.day) ? " wkend" : ""}">${weekdayOf(d.day)}</td>
             <td class="num">${num(d.requests)}</td>
-            <td class="num">${errorCell(d, d.realErrors)}</td>
+            <td class="num">${errorCell(d, d.userErrors)}</td>
             <td class="num">${errorCell(d, d.requestedErrors)}</td>
+            <td class="num${d.fixErrors ? " warn" : ""}">${errorCell(d, d.fixErrors)}</td>
             <td class="num">${num(DAILY_VISITORS[d.day])}</td>
             <td class="mono wk"${d.peakHour == null ? ">—" : ` title="busiest hour · ${hhmm(d.peakHour)} UTC · ${num(d.peakRequests)} requests">${localRange(d.peakHour)}`}</td>
-            <td class="chart"><div class="track${(d.realErrors ?? d.errors) > d.requests * 0.1 ? " err" : ""}"
+            <td class="chart"><div class="track${(d.fixErrors ?? (d.errors > d.requests * 0.1)) ? " err" : ""}"
               data-w="${((d.requests / DAILY_PEAK) * 100).toFixed(1)}"></div></td>
           </tr>${DAY_ERRORS_OPEN === d.day ? dayErrorRow(d.day) : ""}`)
         .join("")
-    : '<tr><td colspan="8" class="muted">No traffic yet.</td></tr>';
+    : '<tr><td colspan="9" class="muted">No traffic yet.</td></tr>';
   applySizes($("daily"));
 }
 
 // A count worth opening is a button; a zero is text. A control that can only
-// tell you "nothing happened" is the same noise the pager was. Both columns
+// tell you "nothing happened" is the same noise the pager was. All three
 // open the same detail, which labels every row with its cause anyway.
 // null is a day from before errors were recorded by kind: the total is known,
 // the split is not, and a dash says so where a 0 would claim it.
@@ -123,7 +124,7 @@ function dayErrorRow(day) {
     ].join("")}</div>`);
 }
 
-const detailRow = (inner) => `<tr class="daydetail"><td colspan="8">${inner}</td></tr>`;
+const detailRow = (inner) => `<tr class="daydetail"><td colspan="9">${inner}</td></tr>`;
 
 // Fetch once per day, then toggle from the cache. A day's rollup is finished
 // except for today's, and re-reading it on every open would cost a round trip
@@ -177,8 +178,9 @@ function render(data) {
   summary("daily-total", [
     part("days", data.daily.length),
     part("requests", data.totals.requests),
-    part("real errors", data.totals.realErrors ?? 0),
+    part("user errors", data.totals.userErrors ?? 0),
     part("built-in errors", data.totals.requestedErrors ?? 0),
+    part("need fixing", data.totals.fixErrors ?? 0, data.totals.fixErrors ? "warn" : ""),
     ...(data.totals.unsplitErrors ? [part("not split", data.totals.unsplitErrors)] : []),
     part("error rate", (data.totals.errorRate * 100).toFixed(1) + "%"),
   ]);

@@ -98,10 +98,12 @@ const payload = (dayCount) => {
     day: new Date(Date.UTC(2026, 5, 1) + i * 86400000).toISOString().slice(0, 10),
     requests: 100 + i,
     errors: i,
-    // Every third error asked for, the rest real; the first days predate the
-    // split, the way 2026-08-29 does in production.
-    realErrors: i < 3 ? null : i - Math.floor(i / 3),
+    // Every third error asked for, one a broken 5xx on every fifth day, the rest
+    // the caller's; the first days predate the split, the way 2026-08-29 does in
+    // production.
+    userErrors: i < 3 ? null : i - Math.floor(i / 3) - (i % 5 === 0 ? 1 : 0),
     requestedErrors: i < 3 ? null : Math.floor(i / 3),
+    fixErrors: i < 3 ? null : (i % 5 === 0 ? 1 : 0),
     // UTC, as the API sends it; the page converts to the reader's zone.
     peakHour: (i * 3) % 24,
     peakRequests: 10 + i,
@@ -112,7 +114,7 @@ const payload = (dayCount) => {
       requests: daily.reduce((n, d) => n + d.requests, 0),
       errors: daily.reduce((n, d) => n + d.errors, 0),
       errorRate: 0.2, serverErrors: 0, clientErrors: 0,
-      realErrors: 500, requestedErrors: 200, unsplitErrors: 3,
+      userErrors: 500, requestedErrors: 200, fixErrors: 7, unsplitErrors: 3,
       keysIssued: 0, countries: 1, addresses: 3, bots: 2,
       // Deliberately unequal to the sum of the per-day counts below, which is
       // the bug this figure exists to keep fixed: 5 people a day for 40 days is
@@ -212,24 +214,32 @@ test("a day with errors offers them, a day without does not", () => {
   assert.ok(!oldest.includes("data-errday"), "a zero is text, not a button that can do nothing");
 });
 
-test("errors are split into real and built-in, and an unknown split is a dash", () => {
+test("errors are split into user, built-in and need fixing, and an unknown split is a dash", () => {
   const { el, render } = load();
   render(payload(40));
 
   const html = el("daily").innerHTML;
-  // Day 9 (2026-06-10) has 9 errors: 6 real and 3 asked for.
+  // Day 9 (2026-06-10) has 9 errors: 6 the caller's, 3 asked for, none broken.
   const row = html.slice(html.indexOf("2026-06-10"), html.indexOf("</tr>", html.indexOf("2026-06-10")));
   const counts = [...row.matchAll(/data-errday="2026-06-10"[^>]*>(\d+)</g)].map((m) => m[1]);
-  assert.deepEqual(counts, ["6", "3"], "real first, then built-in");
+  assert.deepEqual(counts, ["6", "3"], "user, then built-in; a zero is not a button");
+  assert.ok(!row.includes('class="num warn"'), "nothing to fix, nothing highlighted");
+  assert.ok(!row.includes("track err"));
+
+  // Day 10 (2026-06-11) has one unrequested 5xx: flagged, and its bar is red.
+  const broken = html.slice(html.indexOf("2026-06-11"), html.indexOf("</tr>", html.indexOf("2026-06-11")));
+  assert.match(broken, /<td class="num warn"><button[^>]*>1</);
+  assert.match(broken, /track err/);
 
   // Day 2 predates the split: its 2 errors are known, their kind is not.
   const early = html.slice(html.indexOf("2026-06-03"), html.indexOf("</tr>", html.indexOf("2026-06-03")));
-  assert.equal((early.match(/>—</g) || []).length, 2);
+  assert.equal((early.match(/>—</g) || []).length, 3);
   assert.ok(!early.includes(">0<"), "an unknown split is not a zero");
 
   const total = el("daily-total").innerHTML;
-  assert.match(total, /real errors <b[^>]*>500</);
+  assert.match(total, /user errors <b[^>]*>500</);
   assert.match(total, /built-in errors <b[^>]*>200</);
+  assert.match(total, /need fixing <b class="warn">7</);
   assert.match(total, /not split <b[^>]*>3</);
 });
 
