@@ -8,3 +8,9 @@ node_modules/
 # .claude/skills/flaky/SKILL.md names infrastructure and internal reasoning that
 # does not belong in a public README.
 .claude/
+
+# Rendered share cards. The card is scripts/<name>-card.html and render-card.mjs
+# regenerates the PNG from it, so committing the output means a binary that goes
+# stale the moment anyone edits the HTML. public/og.png is the exception and is
+# tracked on purpose — that one is served to anyone who shares a link.
+content/*.png

@@ -1,7 +1,7 @@
 // Rasterises a card in scripts/ to a PNG, at exactly the size its body declares.
 //
 //   node scripts/render-card.mjs og-card.html public/og.png
-//   node scripts/render-card.mjs linkedin-card.html content/linkedin-card.png
+//   node scripts/render-card.mjs scripts/og-card.html public/og.png
 //
 // Headless Chrome, which is already on this machine — the cards are hand-written
 // HTML precisely so that generating them needs nothing installed. The window
@@ -30,7 +30,16 @@ if (!card || !out) {
   process.exit(2);
 }
 
-const source = resolve("scripts", card);
+// Bare filename or a path — both work. This only took the name and joined it
+// onto "scripts", so the tab-completed `scripts/og-card.html` that every shell
+// hands you turned into scripts/scripts/og-card.html and failed on a path that
+// was never typed. Whichever form exists wins; neither is a clear error rather
+// than a confusing one.
+const source = [resolve(card), resolve("scripts", card)].find((p) => existsSync(p));
+if (!source) {
+  console.error(`No such card: ${card}\nLooked in the working directory and in scripts/.`);
+  process.exit(1);
+}
 const html = readFileSync(source, "utf8");
 
 // Read the size out of the card itself, so the two can never disagree.
