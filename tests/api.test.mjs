@@ -796,13 +796,19 @@ test("classifies a credential sweep as a bot despite a browser user agent", asyn
   const browser = new Request("https://flaky.test/", { headers: { "user-agent": "Mozilla/5.0 Chrome/120" } });
 
   // What it asks for beats what it claims to be.
-  for (const path of ["/.env", "/.env.production", "/.git/config", "/config.json", "/js/env.js", "/backup.sql"]) {
+  for (const path of ["/.env", "/.env.production", "/.git/config", "/config.json", "/js/env.js", "/backup.sql",
+    // The 2026-09-06..09 wave: Laravel and WordPress fingerprinting, and tools
+    // hunting for an MCP server or a Gemini-shaped model API.
+    "/livewire/update", "/blog/livewire/update", "/license.txt", "/mcp", "/sse", "/.well-known/mcp", "/v1beta/models"]) {
     assert.equal(classifyClient(browser, path), "bot", `${path} should read as a probe`);
     assert.ok(isProbe(path));
   }
 
   // Real paths from the same user agent stay a browser.
-  for (const path of ["/", "/docs/jsonplaceholder", "/v1/posts", "/v1/posts/1/comments", "/dashboard"]) {
+  for (const path of ["/", "/docs/jsonplaceholder", "/v1/posts", "/v1/posts/1/comments", "/dashboard",
+    // A developer might guess these, and a resource in someone's own JSON can be
+    // called anything — only the root is a scanner's.
+    "/pricing", "/openapi.json", "/api-docs", "/openapiMockServer", "/v1/custom/0123456789abcdef/mcp", "/v1/custom/0123456789abcdef/models"]) {
     assert.equal(classifyClient(browser, path), "browser", `${path} must not be a probe`);
     assert.ok(!isProbe(path));
   }

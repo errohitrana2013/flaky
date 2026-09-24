@@ -47,6 +47,18 @@ const PROBE = new RegExp([
   "^\\/(wordpress|wp)(\\/|$)",
   // We are a Worker. Any .php request is somebody looking for a different site.
   "\\.php($|\\?)",
+  // The 2026-09-06..09 wave, which is what still got through: 17 of that week's
+  // 85 "people" had every request fail. Laravel's Livewire endpoint and
+  // WordPress's licence file are fingerprinting; /mcp, /sse and /v1beta/models
+  // are tools hunting for an MCP server or a Gemini-shaped model API. Nobody
+  // browsing a mock API types any of these. Root-anchored where the word could
+  // be a resource in someone's own pasted JSON. /pricing, /openapi.json and
+  // /api-docs are left alone on purpose: a developer might well guess those.
+  "(^|\\/)livewire\\/",
+  "^\\/license\\.txt$",
+  "^\\/(mcp|sse)(\\/|$)",
+  "^\\/\\.well-known\\/mcp",
+  "^\\/v1beta\\/",
   // Credential and backup file shapes, wherever they appear.
   "(env|config|credentials|secrets|settings|shell|eval-stdin)\\.(js|json|php|ya?ml|txt|bak|old)$",
   "\\.(sql|sqlite|bak|old|zip|tar|gz|pem|key)$",
