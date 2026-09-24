@@ -98,6 +98,10 @@ const payload = (dayCount) => {
     day: new Date(Date.UTC(2026, 5, 1) + i * 86400000).toISOString().slice(0, 10),
     requests: 100 + i,
     errors: i,
+    // Every third error asked for, the rest real; the first days predate the
+    // split, the way 2026-08-29 does in production.
+    realErrors: i < 3 ? null : i - Math.floor(i / 3),
+    requestedErrors: i < 3 ? null : Math.floor(i / 3),
     // UTC, as the API sends it; the page converts to the reader's zone.
     peakHour: (i * 3) % 24,
     peakRequests: 10 + i,
@@ -108,6 +112,7 @@ const payload = (dayCount) => {
       requests: daily.reduce((n, d) => n + d.requests, 0),
       errors: daily.reduce((n, d) => n + d.errors, 0),
       errorRate: 0.2, serverErrors: 0, clientErrors: 0,
+      realErrors: 500, requestedErrors: 200, unsplitErrors: 3,
       keysIssued: 0, countries: 1, addresses: 3, bots: 2,
       // Deliberately unequal to the sum of the per-day counts below, which is
       // the bug this figure exists to keep fixed: 5 people a day for 40 days is
@@ -205,6 +210,27 @@ test("a day with errors offers them, a day without does not", () => {
   assert.match(html, /data-errday="2026-07-10"/, "a count worth reading is a control");
   const oldest = html.slice(html.indexOf("2026-06-01"));
   assert.ok(!oldest.includes("data-errday"), "a zero is text, not a button that can do nothing");
+});
+
+test("errors are split into real and built-in, and an unknown split is a dash", () => {
+  const { el, render } = load();
+  render(payload(40));
+
+  const html = el("daily").innerHTML;
+  // Day 9 (2026-06-10) has 9 errors: 6 real and 3 asked for.
+  const row = html.slice(html.indexOf("2026-06-10"), html.indexOf("</tr>", html.indexOf("2026-06-10")));
+  const counts = [...row.matchAll(/data-errday="2026-06-10"[^>]*>(\d+)</g)].map((m) => m[1]);
+  assert.deepEqual(counts, ["6", "3"], "real first, then built-in");
+
+  // Day 2 predates the split: its 2 errors are known, their kind is not.
+  const early = html.slice(html.indexOf("2026-06-03"), html.indexOf("</tr>", html.indexOf("2026-06-03")));
+  assert.equal((early.match(/>—</g) || []).length, 2);
+  assert.ok(!early.includes(">0<"), "an unknown split is not a zero");
+
+  const total = el("daily-total").innerHTML;
+  assert.match(total, /real errors <b[^>]*>500</);
+  assert.match(total, /built-in errors <b[^>]*>200</);
+  assert.match(total, /not split <b[^>]*>3</);
 });
 
 test("opening a day fetches that day and shows what failed", async () => {

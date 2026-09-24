@@ -71,7 +71,7 @@ export async function getStats(ctx) {
   const days = Math.min(Math.max(Number(ctx.query.get("days")) || 90, 1), 90);
   const since = daysAgo(days);
 
-  const [daily, visitors, keys, topKeys, hourly, geoRequests, geoVisitors, errors_, errorSums, regions, addresses, arrivals, peaks] = await Promise.all([
+  const [daily, visitors, keys, topKeys, hourly, geoRequests, geoVisitors, errors_, errorSums, regions, addresses, arrivals, peaks, splits] = await Promise.all([
     ctx.env.DB.prepare(
       `SELECT day, SUM(requests) AS requests, SUM(errors) AS errors
        FROM usage_bucket WHERE day >= ? GROUP BY day ORDER BY day`
@@ -196,18 +196,42 @@ export async function getStats(ctx) {
          FROM usage_bucket WHERE day >= ? GROUP BY day, hour
        ) WHERE rn = 1`
     ).bind(since).all(),
+
+    // Each day's errors split into the ones the caller asked for (_status,
+    // _fail_rate) and the rest. A 503 somebody requested is the product
+    // working; lumped in one column with a real failure, the count said
+    // nothing about whether anything was wrong that day.
+    ctx.env.DB.prepare(
+      `SELECT day, SUM(count) AS total,
+              SUM(CASE WHEN injected = 1 THEN count ELSE 0 END) AS requested
+       FROM error_bucket WHERE day >= ? GROUP BY day`
+    ).bind(since).all(),
   ]);
 
   // Hour stays UTC here, as everywhere else in this payload; the dashboard
   // converts it to whatever zone the reader is in.
   const peakByDay = Object.fromEntries((peaks.results || []).map((r) => [r.day, r]));
-  const rows = (daily.results || []).map((row) => ({
-    ...row,
-    peakHour: peakByDay[row.day]?.hour ?? null,
-    peakRequests: peakByDay[row.day]?.requests ?? 0,
-  }));
+  // error_bucket began part-way through 2026-08-30, so on the days before it
+  // the rollup has errors the detail never saw. Those days get null rather than
+  // a split of the part that was recorded: "real 168" beside 519 errors would
+  // be a number that looks exact and is not.
+  const splitByDay = Object.fromEntries((splits.results || []).map((r) => [r.day, r]));
+  const rows = (daily.results || []).map((row) => {
+    const split = splitByDay[row.day];
+    const whole = (split?.total || 0) === (row.errors || 0);
+    return {
+      ...row,
+      realErrors: whole ? (row.errors || 0) - (split?.requested || 0) : null,
+      requestedErrors: whole ? split?.requested || 0 : null,
+      peakHour: peakByDay[row.day]?.hour ?? null,
+      peakRequests: peakByDay[row.day]?.requests ?? 0,
+    };
+  });
   const requests = rows.reduce((sum, row) => sum + (row.requests || 0), 0);
   const errors = rows.reduce((sum, row) => sum + (row.errors || 0), 0);
+  const known = rows.filter((row) => row.realErrors != null);
+  const realErrors = known.reduce((sum, row) => sum + row.realErrors, 0);
+  const requestedErrors = known.reduce((sum, row) => sum + row.requestedErrors, 0);
 
   // Requests and visitors per country come from different tables, so join them
   // here rather than making the dashboard do it.
@@ -236,6 +260,11 @@ export async function getStats(ctx) {
       requests,
       errors,
       errorRate: requests ? Number((errors / requests).toFixed(4)) : 0,
+      // These two plus unsplitErrors add up to errors, so the totals under the
+      // per-day table reconcile with its columns.
+      realErrors,
+      requestedErrors,
+      unsplitErrors: errors - realErrors - requestedErrors,
       // Only unrequested 5xx. A 404 for a mistyped path is the API answering
       // correctly, and counting it here would bury the one number that means
       // something is actually broken.
@@ -710,11 +739,19 @@ const DATASETS = {
     // Carries the peak hour too, so the export and the table on screen cannot
     // disagree. Correlated subquery rather than a window function: at most 365
     // rows, and it keeps the shape of the outer query obvious.
-    sql: `SELECT u.day AS day, SUM(u.requests) AS requests, SUM(u.errors) AS errors,
+    sql: `SELECT day, requests, errors,
+                 CASE WHEN detailed = errors THEN errors - requested END AS real_errors,
+                 CASE WHEN detailed = errors THEN requested END AS requested_errors,
+                 peak_hour_utc
+          FROM (SELECT u.day AS day, SUM(u.requests) AS requests, SUM(u.errors) AS errors,
+                 (SELECT IFNULL(SUM(e.count), 0) FROM error_bucket e WHERE e.day = u.day) AS detailed,
+                 (SELECT IFNULL(SUM(e.count), 0) FROM error_bucket e WHERE e.day = u.day AND e.injected = 1) AS requested,
                  (SELECT h.hour FROM usage_bucket h WHERE h.day = u.day
                   GROUP BY h.hour ORDER BY SUM(h.requests) DESC, h.hour LIMIT 1) AS peak_hour_utc
-          FROM usage_bucket u WHERE u.day >= ? GROUP BY u.day ORDER BY u.day`,
-    columns: [["day", "day"], ["requests", "requests"], ["errors", "errors"], ["peak_hour_utc", "peak_hour_utc"]],
+          FROM usage_bucket u WHERE u.day >= ? GROUP BY u.day) ORDER BY day`,
+    columns: [["day", "day"], ["requests", "requests"], ["errors", "errors"],
+              ["real_errors", "real_errors"], ["requested_errors", "requested_errors"],
+              ["peak_hour_utc", "peak_hour_utc"]],
   },
   hourly: {
     sql: `SELECT hour, SUM(requests) AS requests, SUM(errors) AS errors

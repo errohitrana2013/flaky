@@ -435,6 +435,46 @@ test("error totals cover every error, not just the 40 rows listed", async () => 
   assert.equal(stats.totals.clientErrors, 2330);
 });
 
+test("each day's errors are split into real and requested, where the split is known", async () => {
+  // The 29th is from before error_bucket existed; the 30th is the day it began,
+  // part-way through, so it saw 168 of 519. Neither may be split: a "real 155"
+  // beside 519 errors is a number that looks exact and is not.
+  const daily = [
+    { day: "2026-08-29", requests: 1094, errors: 433 },
+    { day: "2026-08-30", requests: 726, errors: 519 },
+    { day: "2026-09-24", requests: 103, errors: 21 },
+    { day: "2026-09-25", requests: 40, errors: 0 },
+  ];
+  const splits = [
+    { day: "2026-08-30", total: 168, requested: 13 },
+    { day: "2026-09-24", total: 21, requested: 15 },
+  ];
+
+  const env = makeEnv();
+  const prepare = env.DB.prepare;
+  env.DB.prepare = (sql) => {
+    if (sql.includes("SUM(errors) AS errors") && sql.includes("GROUP BY day")) return { bind: () => ({ all: async () => ({ results: daily }) }) };
+    if (sql.includes("FROM error_bucket WHERE day >= ? GROUP BY day")) return { bind: () => ({ all: async () => ({ results: splits }) }) };
+    return prepare(sql);
+  };
+
+  const stats = await body(await call("/v1/admin/stats", { headers: { authorization: "Bearer admin-token" } }, env));
+  const byDay = Object.fromEntries(stats.daily.map((d) => [d.day, d]));
+  assert.equal(byDay["2026-08-29"].realErrors, null);
+  assert.equal(byDay["2026-08-30"].realErrors, null, "a partly recorded day is not split");
+  assert.equal(byDay["2026-09-24"].realErrors, 6);
+  assert.equal(byDay["2026-09-24"].requestedErrors, 15);
+  // No errors at all is a known split of 0 and 0, not an unknown one.
+  assert.equal(byDay["2026-09-25"].realErrors, 0);
+  assert.equal(byDay["2026-09-25"].requestedErrors, 0);
+
+  // And the totals reconcile with the columns: 6 + 15 + (433 + 519) = 973.
+  assert.equal(stats.totals.realErrors, 6);
+  assert.equal(stats.totals.requestedErrors, 15);
+  assert.equal(stats.totals.unsplitErrors, 952);
+  assert.equal(stats.totals.errors, 973);
+});
+
 test("exports CSV with a filename and the right content type", async () => {
   const res = await call("/v1/admin/export?dataset=daily", { headers: { authorization: "Bearer admin-token" } });
   assert.equal(res.status, 200);
@@ -444,9 +484,10 @@ test("exports CSV with a filename and the right content type", async () => {
   // spec, so the string would look BOM-less even when the wire format has one.
   const bytes = new Uint8Array(await res.arrayBuffer());
   assert.deepEqual([...bytes.slice(0, 3)], [0xef, 0xbb, 0xbf], "starts with a UTF-8 BOM for Excel");
-  // peak_hour_utc joined the export so the csv cannot disagree with the table on
-  // screen, which now shows each day's busiest hour.
-  assert.equal(new TextDecoder().decode(bytes.slice(3)), "day,requests,errors,peak_hour_utc\r\n");
+  // peak_hour_utc and the error split joined the export so the csv cannot
+  // disagree with the table on screen.
+  assert.equal(new TextDecoder().decode(bytes.slice(3)),
+    "day,requests,errors,real_errors,requested_errors,peak_hour_utc\r\n");
 });
 
 test("guards the CSV export and rejects an unknown dataset", async () => {

@@ -47,7 +47,7 @@
     <h2>Per day <span class="tzlabel">· dates are UTC · peak hour in your zone</span> <button class="csv" data-csv="daily">csv</button></h2>
     <div class="tablebox" id="daily-scroll">
       <table>
-        <thead><tr><th>Date</th><th>Day</th><th class="num">Requests</th><th class="num">Errors</th><th class="num">Visitors</th><th>Peak hour</th><th class="chart"></th></tr></thead>
+        <thead><tr><th>Date</th><th>Day</th><th class="num">Requests</th><th class="num" title="Errors nobody asked for">Real errors</th><th class="num" title="Asked for with _status or _fail_rate">Built-in errors</th><th class="num">Visitors</th><th>Peak hour</th><th class="chart"></th></tr></thead>
         <tbody id="daily"></tbody>
       </table>
     </div>
