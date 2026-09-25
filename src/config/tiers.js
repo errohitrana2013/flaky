@@ -62,3 +62,8 @@ export const CUSTOM_PER_IP_PER_DAY = 20;
 // else. 50 failures is far more than any retry policy or breaker threshold.
 export const SCENARIO_TTL_MS = 24 * 60 * 60 * 1000;
 export const MAX_SCENARIO_THRESHOLD = 50;
+
+// The longest a single page reading can count for. Anything past it is a tab
+// left open, not reading, so the beacon stops counting there — and the admin
+// page shows a reading at the cap as "10m+", not as ten minutes read.
+export const MAX_DWELL_SECONDS = 600;

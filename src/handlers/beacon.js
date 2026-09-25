@@ -1,4 +1,5 @@
 import { json, fail } from "../lib/response.js";
+import { MAX_DWELL_SECONDS } from "../config/tiers.js";
 import { today, visitorId } from "../lib/hash.js";
 import { normalisePath, classifyClient } from "../middleware/analytics.js";
 
@@ -16,7 +17,7 @@ import { normalisePath, classifyClient } from "../middleware/analytics.js";
 // was 30 of a 30-minute total across three visits, making the average read as
 // ten minutes of reading. Nobody reads a docs page for ten minutes either, so
 // anything at the cap is a tab left open and the cap is where it stops counting.
-const MAX_SECONDS = 600;
+const MAX_SECONDS = MAX_DWELL_SECONDS;
 const BOUNCE_UNDER = 10;     // seconds
 
 export async function recordBeacon(ctx) {

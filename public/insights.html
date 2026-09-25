@@ -89,9 +89,9 @@
     <div class="tabletotal" id="frequency-total"></div>
 
     <h2>Time on page</h2>
-    <p class="lead">Measured in the browser and sent on unload. Background tabs do not count — the clock stops when the page is hidden.</p>
+    <p class="lead">Measured in the browser and sent when the page is closed. Background tabs do not count — the clock stops when the page is hidden. One reading counts for at most 10 minutes; past that it is a tab left open, and it still pulls the average up.</p>
     <table>
-      <thead><tr><th>Page</th><th class="num">Visits</th><th class="num">Average</th><th class="num">Longest</th><th class="num">Bounced</th></tr></thead>
+      <thead><tr><th>Page</th><th class="num">Visits</th><th class="num">Average</th><th class="num">Longest</th><th class="num" title="Left within 10 seconds">Left in &lt;10s</th></tr></thead>
       <tbody id="dwell"></tbody>
     </table>
     <div class="tabletotal" id="dwell-total"></div>

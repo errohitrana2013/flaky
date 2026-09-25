@@ -425,6 +425,7 @@ test("returners who never loaded a page are counted, reading the trail only for 
   };
   const data = await body(await call("/v1/admin/insights", { headers: { authorization: "Bearer admin-token" } }, env));
   assert.deepEqual(data.returning.frequency[1], { days: 2, people: 9, noPages: 3 });
+  assert.equal(data.dwellCapSeconds, 600, "the page learns the cap from the server, not from a copy of it");
   // The privacy page: the trail is read only for people who came back, so the
   // EXISTS sits behind a CASE that has already answered for one-day visitors.
   assert.match(freqSql, /CASE WHEN days < 2 THEN 0 WHEN EXISTS/);

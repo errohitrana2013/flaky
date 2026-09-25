@@ -45,7 +45,7 @@ function render(d) {
       : `People are reaching for the controls. This is the number to protect. ${excluded}`;
 
   renderReturning(d.returning, d.window?.days);
-  renderDwell(d.dwell || []);
+  renderDwell(d.dwell || [], d.dwellCapSeconds);
 
   const refs = d.referrers;
   $("referrers").innerHTML = refs.length
@@ -266,13 +266,18 @@ async function openPeople(cohort, button) {
   }
 }
 
-function renderDwell(rows) {
+function renderDwell(rows, cap) {
+  // At the cap is a tab left open, not ten minutes of reading — the beacon
+  // stops counting there. Printed as "10m 0s" it read as the page's best reader.
+  const longest = (s) => cap && s >= cap
+    ? `<span class="muted" title="A reading this long is a tab left open; it is counted as ${secs(cap)} and no more.">${secs(cap).replace(" 0s", "")}+ · tab left open</span>`
+    : secs(s);
   $("dwell").innerHTML = rows.length
     ? rows.map((p) => `<tr>
         <td class="mono">${clean(p.path)}</td>
         <td class="num">${num(p.visits)}</td>
         <td class="num">${secs(p.avgSeconds)}</td>
-        <td class="num">${secs(p.maxSeconds)}</td>
+        <td class="num">${longest(p.maxSeconds)}</td>
         <td class="num">${(p.bounceRate * 100).toFixed(0)}%</td>
       </tr>`).join("")
     : '<tr><td colspan="5" class="muted">No page visits recorded yet. Only the landing page reports this, and only once someone leaves it.</td></tr>';

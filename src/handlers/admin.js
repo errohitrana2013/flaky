@@ -1,4 +1,5 @@
 import { json, fail, echo } from "../lib/response.js";
+import { MAX_DWELL_SECONDS } from "../config/tiers.js";
 import { daysAgo, today } from "../lib/hash.js";
 import { toCsv, csvResponse } from "../lib/csv.js";
 import { continentOf } from "../lib/geo.js";
@@ -470,6 +471,9 @@ export async function getInsights(ctx) {
       // [{days, people}] — people who appeared on exactly that many days.
       frequency: frequency.results || [],
     },
+    // A reading at the cap is a tab left open. The page needs the cap to say so
+    // rather than print "10m 0s" as though someone read for ten minutes.
+    dwellCapSeconds: MAX_DWELL_SECONDS,
     dwell: (dwell.results || []).map((r) => ({
       path: r.path,
       visits: r.visits,
