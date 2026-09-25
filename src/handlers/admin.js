@@ -417,14 +417,33 @@ export async function getInsights(ctx) {
          ON prior.visitor = t.visitor`
     ).bind(today(), since, today()).first(),
 
-    // How many separate days each person showed up across the window.
+    // How many separate days each person showed up across the window, and —
+    // for those who came back — how many never once loaded a page. The four
+    // most frequent "returners" in September were Virginia and Iowa datacentre
+    // addresses calling the same endpoints on a schedule and never reading
+    // anything. They are counted and labelled rather than dropped: a developer's
+    // code calling flaky daily looks the same and is real use, just not a
+    // person coming back.
+    //
+    // Page reads reach the trail through the beacon only from 2026-09-06
+    // (5f18513), so a window reaching further back can flag someone who read
+    // pages before then. The default 14 days is clear of it.
+    //
+    // The trail is only consulted for days >= 2 — CASE stops before the
+    // EXISTS for everyone else — because the privacy page promises it is read
+    // only for people who returned.
     ctx.env.DB.prepare(
-      `SELECT days, COUNT(*) AS people FROM (
+      `SELECT days, COUNT(*) AS people,
+              SUM(CASE WHEN days < 2 THEN 0
+                       WHEN EXISTS (SELECT 1 FROM visitor_path vp
+                                    WHERE vp.visitor = v.visitor AND vp.day >= ? AND vp.path NOT LIKE '/v1/%')
+                       THEN 0 ELSE 1 END) AS noPages
+       FROM (
          SELECT visitor, COUNT(DISTINCT day) AS days
          FROM daily_visitors WHERE day >= ? AND bot = 0 AND visitor NOT IN (${NOT_PEOPLE})
          GROUP BY visitor
-       ) GROUP BY days ORDER BY days`
-    ).bind(since, since).all(),
+       ) v GROUP BY days ORDER BY days`
+    ).bind(since, since, since).all(),
 
     ctx.env.DB.prepare(
       `SELECT path, SUM(visits) AS visits, SUM(sum_seconds) AS sum_seconds,

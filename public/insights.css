@@ -118,3 +118,7 @@ tr.repeat td:first-child { color: var(--accent); font-weight: 600; }
 /* The per-control tiles are all traffic, so they sit under a heading that says
    so rather than beside the people-only figures they were mistaken for. */
 .sub-h { font-size: 13px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); margin: 18px 0 10px; font-weight: 600; }
+
+/* Not a judgement, a flag: API calls only on every visit is a script or a
+   monitor as often as it is someone's code, so it is quieter than "used chaos". */
+.person-top .tag.tag-muted { background: none; color: var(--muted); border: 1px solid var(--line); }

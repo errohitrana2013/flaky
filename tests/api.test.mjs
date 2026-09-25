@@ -412,6 +412,24 @@ test("guards the admin endpoint", async () => {
   assert.equal((await call("/v1/admin/stats", { headers: { authorization: "Bearer admin-token" } })).status, 200);
 });
 
+test("returners who never loaded a page are counted, reading the trail only for returners", async () => {
+  const env = makeEnv();
+  const prepare = env.DB.prepare;
+  let freqSql = "";
+  env.DB.prepare = (sql) => {
+    if (sql.includes("AS noPages")) {
+      freqSql = sql.replace(/\s+/g, " ");
+      return { bind: () => ({ all: async () => ({ results: [{ days: 1, people: 176, noPages: 0 }, { days: 2, people: 9, noPages: 3 }, { days: 10, people: 1, noPages: 1 }] }) }) };
+    }
+    return prepare(sql);
+  };
+  const data = await body(await call("/v1/admin/insights", { headers: { authorization: "Bearer admin-token" } }, env));
+  assert.deepEqual(data.returning.frequency[1], { days: 2, people: 9, noPages: 3 });
+  // The privacy page: the trail is read only for people who came back, so the
+  // EXISTS sits behind a CASE that has already answered for one-day visitors.
+  assert.match(freqSql, /CASE WHEN days < 2 THEN 0 WHEN EXISTS/);
+});
+
 test("insights' adoption share is floored per row, so old rows cannot zero it", async () => {
   const env = makeEnv();
   const prepare = env.DB.prepare;

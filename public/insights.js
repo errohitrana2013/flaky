@@ -44,7 +44,7 @@ function render(d) {
       ? "Low. People are using this as a plain mock API — the thing that makes it different is not landing."
       : `People are reaching for the controls. This is the number to protect. ${excluded}`;
 
-  renderReturning(d.returning);
+  renderReturning(d.returning, d.window?.days);
   renderDwell(d.dwell || []);
 
   const refs = d.referrers;
@@ -105,20 +105,16 @@ function render(d) {
 
 const secs = (n) => (n >= 60 ? Math.floor(n / 60) + "m " + (n % 60) + "s" : n + "s");
 
-function renderReturning(r) {
+function renderReturning(r, days) {
+  if (days) $("r-window").textContent = num(days);
   const back = r.today.returning, fresh = r.today.new, total = back + fresh;
   $("r-new").textContent = num(fresh);
   $("r-back").textContent = num(back);
   $("r-rate").textContent = total ? ((back / total) * 100).toFixed(0) + "%" : "—";
 
-  // Ordinals rather than "2 days", which makes the reader do the translation.
-  // A day is the unit because a visitor is counted once per day — two visits in
-  // one afternoon is one row, and the note above the table says so.
-  const ordinal = (n) =>
-    n === 1 ? "Once — never returned"
-    : n === 2 ? "Twice"
-    : n === 3 ? "Three times"
-    : `${n} times`;
+  // Days visited, said as days. This read "Twice" for someone seen on two days,
+  // who came back once — off by one on every row but the first.
+  const ordinal = (n) => (n === 1 ? "1 day — never came back" : `${n} days`);
 
   const rows = r.frequency;
   const everyone = rows.reduce((sum, f) => sum + f.people, 0);
@@ -135,19 +131,26 @@ function renderReturning(r) {
                 : num(f.people)
             }</td>
             <td class="num">${everyone ? ((f.people / everyone) * 100).toFixed(1) + "%" : "—"}</td>
+            <td class="num">${f.days > 1 ? (f.noPages ? `<span class="warn">${num(f.noPages)}</span>` : "0") : '<span class="muted">—</span>'}</td>
             <td class="chart"><div class="track${f.days > 1 ? " sev" : ""}" data-w="${((f.people / peak) * 100).toFixed(1)}"></div></td>
           </tr>`).join("");
       })()
-    : '<tr><td colspan="4" class="muted">Nobody recorded yet.</td></tr>';
+    : '<tr><td colspan="5" class="muted">Nobody recorded yet.</td></tr>';
   applySizes($("frequency"));
   for (const b of $("frequency").querySelectorAll("[data-cohort]")) {
     b.addEventListener("click", () => openPeople(Number(b.dataset.cohort), b));
   }
   const came = rows.filter((f) => f.days > 1).reduce((n, f) => n + f.people, 0);
+  const scripted = rows.reduce((n, f) => n + (f.noPages || 0), 0);
+  const rate = (n) => (everyone ? ((n / everyone) * 100).toFixed(1) + "%" : "—");
   summary("frequency-total", [
     part("people", everyone),
-    part("came back at all", came),
-    part("return rate", everyone ? ((came / everyone) * 100).toFixed(1) + "%" : "—"),
+    part("came back", came),
+    part("of whom never loaded a page", scripted, scripted ? "warn" : ""),
+    part("return rate", rate(came)),
+    // Without the likely scripts on top. The one-day visitors are not screened
+    // the same way — their trail is not read — so this is a lower bound.
+    part("counting only those who read a page", rate(came - scripted)),
   ]);
 }
 
@@ -160,8 +163,7 @@ function renderReturning(r) {
 
 let peopleCache = null;
 
-const ordinalTitle = (n) =>
-  n === 2 ? "Came back twice" : n === 3 ? "Came back three times" : `Came back ${n} times`;
+const ordinalTitle = (n) => `Visited on ${n} days`;
 
 // "30 Aug" — the year is never in question over a 90-day window.
 const shortDay = (iso) =>
@@ -204,6 +206,7 @@ function personBlock(p) {
       <span class="person-where">${clean(where)}</span>
       <span class="meta">${p.days} days · ${span}${p.hour >= 0 ? " · " + atHour(p.hour) : ""}</span>
       ${p.chaos ? '<span class="tag">used chaos</span>' : ""}
+      ${p.paths.length && !p.paths.some((t) => !isEndpoint(t.path)) ? '<span class="tag tag-muted" title="Every visit was API calls only: a script, a monitor, or someone\'s code on a schedule">never loaded a page</span>' : ""}
     </div>
     <ul class="trail">${trail}</ul>
   </div>`;

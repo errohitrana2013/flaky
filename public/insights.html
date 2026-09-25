@@ -70,14 +70,14 @@
     </p>
 
     <h2>Do people come back?</h2>
-    <p class="lead">Days are UTC, so "today" rolls over at 05:30 IST rather than midnight. A visitor is the same salted hash as elsewhere. Someone whose address changes between visits looks like a new person, so this under-counts returns rather than over-counting them.</p>
+    <p class="lead">Over the last <span id="r-window">14</span> days, counted by the days each visitor was seen — two visits in one afternoon are one day. Days are UTC. Someone whose address changes looks new, so this under-counts returns rather than over-counting them.</p>
     <div class="tiles tiles-3">
       <div class="tile"><div class="k">New today</div><div class="v" id="r-new">—</div></div>
       <div class="tile"><div class="k">Returning today</div><div class="v" id="r-back">—</div></div>
       <div class="tile"><div class="k">Return rate today</div><div class="v" id="r-rate">—</div></div>
     </div>
     <table>
-      <thead><tr><th>Came back</th><th class="num">People</th><th class="num">Share</th><th class="chart"></th></tr></thead>
+      <thead><tr><th>Visited on</th><th class="num">People</th><th class="num">Share</th><th class="num" title="Came back but never loaded a page: a script, a monitor, or someone's code calling the API on a schedule">Never loaded a page</th><th class="chart"></th></tr></thead>
       <tbody id="frequency"></tbody>
     </table>
     <p class="hint">
