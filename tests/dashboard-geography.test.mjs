@@ -189,7 +189,7 @@ test("a shut country keeps its own numbers", () => {
   assert.deepEqual(india.nums, ["42", "5", "3,612", "21"]);
 });
 
-test("expand all opens everything, and collapsing returns to continents", () => {
+test("expand all opens everything, and collapse all shuts every continent", () => {
   const { el, render, openAll } = load();
   render(payload());
   assert.equal(el("geo-all").textContent, "expand all");
@@ -203,9 +203,14 @@ test("expand all opens everything, and collapsing returns to continents", () => 
   openAll();
   const shut = rowsOf(el("geo").innerHTML);
   assert.equal(shut.filter((r) => r.level === "state").length, 0);
-  // Collapsed means continents and their countries, never an empty table.
-  assert.ok(shut.filter((r) => r.level === "country").length > 0, "countries stay");
+  assert.equal(shut.filter((r) => r.level === "country").length, 0, "the continents shut too");
+  // Never an empty table: each continent keeps its row and its totals.
+  assert.ok(shut.filter((r) => r.level === "continent").length > 0, "continent rows stay");
   assert.equal(el("geo-all").textContent, "expand all");
+
+  // And expand all brings every level back from there.
+  openAll();
+  assert.equal(rowsOf(el("geo").innerHTML).filter((r) => r.level === "state").length, 7);
 });
 
 test("the summary describes the window, not what is currently open", () => {

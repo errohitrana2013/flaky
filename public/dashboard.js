@@ -795,11 +795,11 @@ function syncGeoAll() {
 $("geo-all").addEventListener("click", () => {
   if (!LATEST) return;
   const keys = geoKeys();
-  // Collapsing all means back to continents only, not an empty table — a table
-  // with no rows in it reads as a failed load.
-  GEO_OPEN = keys.some((key) => !GEO_OPEN.has(key))
-    ? new Set(keys)
-    : new Set(keys.filter((key) => key.startsWith("c:")));
+  // Collapse all shuts the continents too, so it is the reverse of expand all:
+  // one row per continent, each still carrying its totals. It used to keep the
+  // continents open, which left every country on screen and looked like the
+  // button had done nothing.
+  GEO_OPEN = keys.some((key) => !GEO_OPEN.has(key)) ? new Set(keys) : new Set();
   renderGeo(LATEST.countries || [], LATEST.regions || []);
   syncGeoAll();
 });
