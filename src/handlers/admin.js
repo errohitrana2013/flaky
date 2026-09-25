@@ -383,7 +383,14 @@ export async function getInsights(ctx) {
               SUM(with_scenario) AS scenario, SUM(with_malformed) AS malformed,
               SUM(with_any) AS any_chaos,
               SUM(onsite) AS onsite, SUM(onsite_chaos) AS onsite_chaos,
-              SUM(bot_requests) AS bot_requests, SUM(bot_chaos) AS bot_chaos
+              SUM(bot_requests) AS bot_requests, SUM(bot_chaos) AS bot_chaos,
+              -- People outside this site, floored per row before summing.
+              -- with_any was backfilled by migration 0017 as MAX of three
+              -- columns, so on rows before 2026-09-05 bot_chaos can exceed it;
+              -- subtracted on the totals instead, the 90-day window went
+              -- negative and the page read 0% beside a fortnight of 14.6%.
+              SUM(MAX(requests - onsite - bot_requests, 0)) AS ext_requests,
+              SUM(MAX(with_any - onsite_chaos - bot_chaos, 0)) AS ext_chaos
        FROM path_bucket WHERE day >= ?`
     ).bind(since).first(),
 
@@ -458,16 +465,14 @@ export async function getInsights(ctx) {
       // asking for a slow failure carries two of them and is still one request.
       const used = chaos?.any_chaos || 0;
       const onsite = chaos?.onsite || 0;
-      const onsiteChaos = chaos?.onsite_chaos || 0;
       // The figure that matters is the one excluding our own try-it widget:
       // clicking Send on the landing page is not someone adopting the feature.
       // Neither our own widget nor anything automated. Test scripts run from
       // curl, which is a bot, and counting them made a test suite look like
-      // adoption.
+      // adoption. Both subtractions happen per row in the query.
       const botReq = chaos?.bot_requests || 0;
-      const botChaos = chaos?.bot_chaos || 0;
-      const extRequests = Math.max(0, total - onsite - botReq);
-      const extUsed = Math.max(0, used - onsiteChaos - botChaos);
+      const extRequests = chaos?.ext_requests || 0;
+      const extUsed = chaos?.ext_chaos || 0;
       return {
         requests: total,
         delay: chaos?.delay || 0,
@@ -479,6 +484,7 @@ export async function getInsights(ctx) {
         onsite,
         bots: botReq,
         externalRequests: extRequests,
+        externalChaos: extUsed,
         externalShare: extRequests ? Number((extUsed / extRequests).toFixed(4)) : 0,
       };
     })(),

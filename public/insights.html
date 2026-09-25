@@ -48,7 +48,15 @@
       </div>
     </div>
     <div class="tiles tiles-3">
-      <div class="tile"><div class="k">humans counted</div><div class="v" id="c-ext">—</div></div>
+      <div class="tile"><div class="k">requests from people</div><div class="v" id="c-ext">—</div></div>
+      <div class="tile"><div class="k">of those, asked to fail</div><div class="v" id="c-ext-chaos">—</div></div>
+    </div>
+    <!-- Kept apart from the two above: these are every request, bots and the
+         site's own widget included, and beside "requests from people" they were
+         read as people. The rollup records which control a request used but not
+         which of those came from a bot, so a people-only split is not available. -->
+    <h3 class="sub-h">Which controls, across all traffic <span class="tzlabel">· includes bots, test scripts and the try-it widget</span></h3>
+    <div class="tiles tiles-3">
       <div class="tile"><div class="k">_delay</div><div class="v" id="c-delay">—</div></div>
       <div class="tile"><div class="k">_status</div><div class="v" id="c-status">—</div></div>
       <div class="tile"><div class="k">_fail_rate</div><div class="v" id="c-fail">—</div></div>
@@ -56,10 +64,9 @@
       <div class="tile"><div class="k">_malformed</div><div class="v" id="c-malformed">—</div></div>
     </div>
     <p class="hint">
-      Per-control counts include this site's own widget and automated traffic, so
-      they are larger than the share above and add up to more than the requests
-      that used chaos — one request can ask for a slow failure. _retry_after and
-      _cors=off count towards the share but have no column of their own.
+      One request can ask for a slow failure, so these add up to more than the
+      requests that used chaos. _retry_after and _cors=off count towards the share
+      but have no column of their own.
     </p>
 
     <h2>Do people come back?</h2>

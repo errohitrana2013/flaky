@@ -114,3 +114,7 @@ tr.repeat td:first-child { color: var(--accent); font-weight: 600; }
 /* The empty state is a sentence, not a row of columns. */
 .trail li.none { display: block; }
 .trail .none { color: var(--muted); font-style: italic; }
+
+/* The per-control tiles are all traffic, so they sit under a heading that says
+   so rather than beside the people-only figures they were mistaken for. */
+.sub-h { font-size: 13px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); margin: 18px 0 10px; font-weight: 600; }

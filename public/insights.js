@@ -21,6 +21,7 @@ function render(d) {
   // widget on our own landing page, which is us, not adoption.
   $("chaos-share").textContent = (c.externalShare * 100).toFixed(1) + "%";
   $("c-ext").textContent = num(c.externalRequests);
+  $("c-ext-chaos").textContent = num(c.externalChaos || 0);
   $("c-delay").textContent = num(c.delay);
   $("c-status").textContent = num(c.status);
   $("c-fail").textContent = num(c.failRate);

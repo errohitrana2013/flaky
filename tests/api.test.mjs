@@ -412,6 +412,32 @@ test("guards the admin endpoint", async () => {
   assert.equal((await call("/v1/admin/stats", { headers: { authorization: "Bearer admin-token" } })).status, 200);
 });
 
+test("insights' adoption share is floored per row, so old rows cannot zero it", async () => {
+  const env = makeEnv();
+  const prepare = env.DB.prepare;
+  let chaosSql = "";
+  env.DB.prepare = (sql) => {
+    if (sql.includes("AS ext_chaos")) {
+      chaosSql = sql.replace(/\s+/g, " ");
+      // Totals like the real 90 days: summed unclamped, bot_chaos (855) beats
+      // with_any (755) and the share came out as 0.
+      return { bind: () => ({ first: async () => ({
+        requests: 9021, delay: 237, status: 450, fail_rate: 301, scenario: 195, malformed: 2,
+        any_chaos: 755, onsite: 2396, onsite_chaos: 6, bot_requests: 4977, bot_chaos: 855,
+        ext_requests: 1648, ext_chaos: 103,
+      }) }) };
+    }
+    return prepare(sql);
+  };
+
+  const data = await body(await call("/v1/admin/insights?days=90", { headers: { authorization: "Bearer admin-token" } }, env));
+  assert.match(chaosSql, /SUM\(MAX\(with_any - onsite_chaos - bot_chaos, 0\)\) AS ext_chaos/);
+  assert.match(chaosSql, /SUM\(MAX\(requests - onsite - bot_requests, 0\)\) AS ext_requests/);
+  assert.equal(data.chaos.externalRequests, 1648);
+  assert.equal(data.chaos.externalChaos, 103);
+  assert.equal(data.chaos.externalShare, 0.0625, "103 of 1,648 — not the 0 the unclamped sum gave");
+});
+
 test("the headline tiles get the bot share and what people asked to fail", async () => {
   const env = makeEnv();
   const prepare = env.DB.prepare;
