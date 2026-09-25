@@ -1612,6 +1612,45 @@ const rollup = async (url, env, init = {}) => {
   return { error: find("error_bucket"), path: find("path_bucket") };
 };
 
+test("a referrer is recorded for visitors, not for the operator", async () => {
+  const referred = async (url, headers) => {
+    const env = makeEnv();
+    await call(url, { headers: { referer: "http://localhost:3000/app", ...headers } }, env);
+    await Promise.allSettled(waits);
+    return env._writes.some((w) => w._sql.startsWith("INSERT INTO referrer_bucket"));
+  };
+  // A developer's own app on localhost is a channel worth seeing.
+  assert.equal(await referred("/v1/posts"), true);
+  // The dashboard run locally against the live database is not: six
+  // "localhost" referrals on 2026-09-25 were exactly that.
+  assert.equal(await referred("/v1/admin/stats", { authorization: "Bearer admin-token" }), false);
+  assert.equal(await referred("/v1/posts", { "x-flaky-owner": "1" }), false, "nor the owner's own browser");
+});
+
+test("insights' endpoint lists are what visitors call, not the admin pages", async () => {
+  const env = makeEnv();
+  const prepare = env.DB.prepare;
+  const sqls = [];
+  env.DB.prepare = (sql) => {
+    const flat = sql.replace(/\s+/g, " ");
+    if (flat.includes("FROM path_bucket") && flat.includes("GROUP BY path")) {
+      sqls.push(flat);
+      return { bind: () => ({ all: async () => ({ results: [{ path: "/v1/scenario/:sandbox/reset", requests: 7, bots: 2, sum_ms: 700, max_ms: 979, avg_ms: 100 }] }) }) };
+    }
+    return prepare(sql);
+  };
+  const data = await body(await call("/v1/admin/insights", { headers: { authorization: "Bearer admin-token" } }, env));
+  assert.equal(sqls.length, 2, "most-used and slowest");
+  for (const q of sqls) {
+    assert.match(q, /path NOT LIKE '\/v1\/admin%'/);
+    assert.match(q, /path != '\/v1\/beacon'/);
+  }
+  // A scenario id is not a sandbox.
+  assert.equal(data.paths[0].path, "/v1/scenario/:id/reset");
+  assert.equal(data.slowest[0].path, "/v1/scenario/:id/reset");
+  assert.equal(data.paths[0].bots, 2);
+});
+
 test("a scenario failure is recorded as requested, not as a server fault", async () => {
   const env = makeEnv({ scenario: { fail_count: 1, status: 503, attempts: 0, expires_at: Date.now() + 60000 } });
   const { error, path } = await rollup("/v1/posts?_scenario=a1b2c3d4e5f60718", env);

@@ -34,7 +34,7 @@ function render(d) {
     "of requests from outside this site reach for a chaos parameter";
 
   const ext = c.externalRequests;
-  const excluded = `Excluded: ${c.onsite.toLocaleString()} from this site's try-it widget and ${(c.bots || 0).toLocaleString()} automated — test scripts run from curl, which is a bot.`;
+  const excluded = `Excluded: ${c.onsite.toLocaleString()} made by this site's own pages — the try-it box and the landing page loading /v1/meta — and ${(c.bots || 0).toLocaleString()} automated, test scripts run from curl included.`;
   $("chaos-hint").textContent =
     ext < 100
       ? `Only ${ext.toLocaleString()} request${ext === 1 ? "" : "s"} have come from a human outside this site, so there is nothing to read yet. ${excluded}`
@@ -71,12 +71,13 @@ function render(d) {
         return paths.map((p) => `<tr>
             <td class="mono">${clean(p.path)}</td>
             <td class="num">${num(p.requests)}</td>
+            <td class="num">${p.bots ? `<span class="muted">${num(p.bots)}</span>` : "0"}</td>
             <td class="ms">${ms(p.avgMs)}</td>
             <td class="ms${p.maxMs > 2000 ? " slow" : ""}">${ms(p.maxMs)}</td>
             <td class="chart"><div class="track" data-w="${((p.requests / peak) * 100).toFixed(1)}"></div></td>
           </tr>`).join("");
       })()
-    : '<tr><td colspan="5" class="muted">No requests recorded yet.</td></tr>';
+    : '<tr><td colspan="6" class="muted">No requests recorded yet.</td></tr>';
   applySizes($("paths"));
   summary("paths-total", [
     part("endpoints", paths.length),

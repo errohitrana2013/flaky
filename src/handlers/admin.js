@@ -354,6 +354,12 @@ const NOT_PEOPLE = `SELECT visitor FROM visitor_path WHERE day >= ?
                     GROUP BY visitor
                     HAVING SUM(errors) >= SUM(requests) OR SUM(path LIKE '/v1/admin%') > 0`;
 
+// normalisePath stores any 16-hex segment as ":sandbox", which is true only
+// under /v1/sandbox — /v1/custom/:sandbox/widgets and /v1/scenario/:sandbox/reset
+// are a custom API and a scenario. Relabelled for display only; the stored key
+// is left alone so history does not split in two.
+const idLabel = (path) => (path.startsWith("/v1/sandbox") ? path : path.replace(/:sandbox/g, ":id"));
+
 // GET /v1/admin/insights?days=14
 //
 // Separate from /stats on purpose: stats answers "how is it going", insights
@@ -368,9 +374,15 @@ export async function getInsights(ctx) {
   const since = daysAgo(days);
 
   const [paths, referrers, chaos, slowest, retention, frequency, dwell] = await Promise.all([
+    // What visitors call, so not the operator's admin pages — 156 requests to
+    // /v1/admin/stats sat second in this list — nor the beacon, which is the
+    // pages' own plumbing. Bots are split out beside the total rather than left
+    // in it unmarked.
     ctx.env.DB.prepare(
-      `SELECT path, SUM(requests) AS requests, SUM(sum_ms) AS sum_ms, MAX(max_ms) AS max_ms
-       FROM path_bucket WHERE day >= ? GROUP BY path ORDER BY requests DESC LIMIT 25`
+      `SELECT path, SUM(requests) AS requests, SUM(bot_requests) AS bots,
+              SUM(sum_ms) AS sum_ms, MAX(max_ms) AS max_ms
+       FROM path_bucket WHERE day >= ? AND path NOT LIKE '/v1/admin%' AND path != '/v1/beacon'
+       GROUP BY path ORDER BY requests DESC LIMIT 25`
     ).bind(since).all(),
 
     ctx.env.DB.prepare(
@@ -399,8 +411,8 @@ export async function getInsights(ctx) {
     // average — that is where a real problem shows first.
     ctx.env.DB.prepare(
       `SELECT path, MAX(max_ms) AS max_ms, SUM(sum_ms) / SUM(requests) AS avg_ms, SUM(requests) AS requests
-       FROM path_bucket WHERE day >= ? GROUP BY path
-       HAVING requests > 0 ORDER BY max_ms DESC LIMIT 10`
+       FROM path_bucket WHERE day >= ? AND path NOT LIKE '/v1/admin%' AND path != '/v1/beacon'
+       GROUP BY path HAVING requests > 0 ORDER BY max_ms DESC LIMIT 10`
     ).bind(since).all(),
 
     // New vs returning today. "Returning" means this visitor hash was also seen
@@ -454,8 +466,9 @@ export async function getInsights(ctx) {
   ]);
 
   const rows = (paths.results || []).map((r) => ({
-    path: r.path,
+    path: idLabel(r.path),
     requests: r.requests,
+    bots: r.bots || 0,
     avgMs: r.requests ? Math.round(r.sum_ms / r.requests) : 0,
     maxMs: r.max_ms,
   }));
@@ -465,7 +478,7 @@ export async function getInsights(ctx) {
     window: { from: since, to: today(), days },
     paths: rows,
     referrers: referrers.results || [],
-    slowest: slowest.results || [],
+    slowest: (slowest.results || []).map((r) => ({ ...r, path: idLabel(r.path) })),
     returning: {
       today: { new: retention?.fresh || 0, returning: retention?.came_back || 0 },
       // [{days, people}] — people who appeared on exactly that many days.
@@ -746,7 +759,7 @@ export async function getDayVisits(ctx) {
       bounced: r.bounced,
     })),
     api: (api.results || []).map((r) => ({
-      path: r.path,
+      path: idLabel(r.path),
       requests: r.requests,
       chaos: Math.max(0, r.chaos),
       // From the site's own try-it box, which is the page demonstrating itself

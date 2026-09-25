@@ -195,7 +195,12 @@ export async function rollUp(env, ctx, meta) {
         ).bind(meta.day, meta.visitor, path, usedChaos, isError),
       ];
 
-  const referrerRow = host && !onsite
+  // Not for the operator, for the same reasons as the trail: admin requests
+  // and the owner's own browser are us. Six "localhost" referrals on
+  // 2026-09-25 were the dashboard run through a local dev server against the
+  // live database. localhost itself stays — a developer calling flaky from an
+  // app on localhost:3000 is exactly the channel worth seeing.
+  const referrerRow = host && !onsite && !meta.owner && !path.startsWith("/v1/admin")
     ? [
         env.DB.prepare(
           `INSERT INTO referrer_bucket (day, referrer, requests) VALUES (?, ?, 1)
