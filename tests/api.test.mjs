@@ -722,6 +722,51 @@ test("a day that is not a date is a 400, not an empty list", async () => {
   assert.ok(!JSON.stringify(hint).includes("<script>"));
 });
 
+test("what people did on a day comes back as totals, bots left out", async () => {
+  const env = makeEnv();
+  const prepare = env.DB.prepare;
+  const seen = [];
+  env.DB.prepare = (sql) => {
+    const s = sql.replace(/\s+/g, " ");
+    const rows = (results) => ({ bind: (...args) => { seen.push({ s, args }); return { all: async () => ({ results }) }; } });
+    const one = (row) => ({ bind: (...args) => { seen.push({ s, args }); return { first: async () => row }; } });
+    if (s.includes("FROM page_time") && s.includes("LIMIT 30")) return rows([{ path: "/createMockServer", visits: 3, sum_seconds: 527, max_seconds: 521, bounced: 2 }]);
+    if (s.includes("FROM path_bucket") && s.includes("LIMIT 30")) return rows([{ path: "/v1/posts", requests: 30, chaos: 21, onsite: 1 }]);
+    if (s.includes("FROM referrer_bucket")) return rows([{ referrer: "bing.com", requests: 1 }]);
+    if (s.includes("FROM page_time")) return one({ pages: 2, views: 5, seconds: 541, bounced: 3 });
+    if (s.includes("FROM path_bucket")) return one({ endpoints: 12, requests: 85, chaos: 31, onsite: 33 });
+    return prepare(sql);
+  };
+
+  const res = await call("/v1/admin/visits?day=2026-09-24", ADMIN, env);
+  assert.equal(res.status, 200);
+  const data = await body(res);
+
+  assert.deepEqual(data.pages[0], { path: "/createMockServer", views: 3, avgSeconds: 176, maxSeconds: 521, bounced: 2 });
+  assert.deepEqual(data.api[0], { path: "/v1/posts", requests: 30, chaos: 21, fromSite: 1 });
+  assert.equal(data.referrers[0].referrer, "bing.com");
+  // Totals from their own queries, not a sum of the listed rows.
+  assert.equal(data.totals.apiRequests, 85);
+  assert.equal(data.totals.chaosRequests, 31);
+  assert.equal(data.totals.views, 5);
+
+  // Only the day asked for, bots subtracted, and the operator's own pages and
+  // the beacon plumbing never counted as something a visitor did.
+  assert.ok(seen.every((q) => q.args[0] === "2026-09-24"));
+  const endpoints = seen.find((q) => q.s.includes("FROM path_bucket") && q.s.includes("LIMIT 30")).s;
+  assert.match(endpoints, /requests - bot_requests/);
+  assert.match(endpoints, /NOT LIKE '\/v1\/admin%'/);
+  assert.match(endpoints, /path != '\/v1\/beacon'/);
+  // Never the per-person table: the privacy page promises it is only read for
+  // people who came back.
+  assert.ok(!seen.some((q) => q.s.includes("visitor_path")));
+});
+
+test("what people did needs the token and a real date", async () => {
+  assert.equal((await call("/v1/admin/visits?day=2026-09-24")).status, 401);
+  assert.equal((await call("/v1/admin/visits?day=yesterday", ADMIN)).status, 400);
+});
+
 test("one day's errors need the admin token", async () => {
   assert.equal((await call("/v1/admin/errors?day=2026-09-23")).status, 401);
 });

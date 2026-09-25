@@ -57,22 +57,27 @@ let DAILY_PEAK = 1;
 let DAY_ERRORS_OPEN = null;
 const DAY_ERRORS = new Map();
 
+// The same, for what people did that day. Only one detail row is open at a time
+// across both kinds — two panels under two days is the wall of numbers again.
+let DAY_VISITS_OPEN = null;
+const DAY_VISITS = new Map();
+
 function renderDaily() {
   const rows = [...DAILY].reverse();
 
   $("daily").innerHTML = rows.length
-    ? rows.map((d) => `<tr${DAY_ERRORS_OPEN === d.day ? ' class="open"' : ""}>
+    ? rows.map((d) => `<tr${DAY_ERRORS_OPEN === d.day || DAY_VISITS_OPEN === d.day ? ' class="open"' : ""}>
             <td class="mono">${d.day}</td>
             <td class="wk${isWeekend(d.day) ? " wkend" : ""}">${weekdayOf(d.day)}</td>
             <td class="num">${num(d.requests)}</td>
             <td class="num">${errorCell(d, d.userErrors)}</td>
             <td class="num">${errorCell(d, d.requestedErrors)}</td>
             <td class="num${d.fixErrors ? " warn" : ""}">${errorCell(d, d.fixErrors)}</td>
-            <td class="num">${num(DAILY_VISITORS[d.day])}</td>
+            <td class="num">${visitorCell(d.day, DAILY_VISITORS[d.day])}</td>
             <td class="mono wk"${d.peakHour == null ? ">—" : ` title="busiest hour · ${hhmm(d.peakHour)} UTC · ${num(d.peakRequests)} requests">${localRange(d.peakHour)}`}</td>
             <td class="chart"><div class="track${(d.fixErrors ?? (d.errors > d.requests * 0.1)) ? " err" : ""}"
               data-w="${((d.requests / DAILY_PEAK) * 100).toFixed(1)}"></div></td>
-          </tr>${DAY_ERRORS_OPEN === d.day ? dayErrorRow(d.day) : ""}`)
+          </tr>${DAY_ERRORS_OPEN === d.day ? dayErrorRow(d.day) : DAY_VISITS_OPEN === d.day ? dayVisitRow(d.day) : ""}`)
         .join("")
     : '<tr><td colspan="9" class="muted">No traffic yet.</td></tr>';
   applySizes($("daily"));
@@ -126,6 +131,90 @@ function dayErrorRow(day) {
 
 const detailRow = (inner) => `<tr class="daydetail"><td colspan="9">${inner}</td></tr>`;
 
+function visitorCell(day, count) {
+  if (!count) return num(count);
+  return `<button class="disclose errlink" data-visday="${day}"
+            aria-expanded="${DAY_VISITS_OPEN === day}"
+            title="what people did on ${day}">${num(count)}</button>`;
+}
+
+// 48 → 0:48, 312 → 5:12. Reading time is minutes at most; hours would mean a
+// tab left open, which the beacon already caps.
+const mmss = (sec) => `${Math.floor(sec / 60)}:${String(Math.round(sec % 60)).padStart(2, "0")}`;
+
+// Totals, never people: which pages were read and for how long, which endpoints
+// were called and how many of those asked for a failure. The per-person trail
+// exists, but the privacy page promises it is only read for people who came
+// back, so this panel is built from the tables that were never tied to anyone.
+function dayVisitRow(day) {
+  const data = DAY_VISITS.get(day);
+  if (!data) return detailRow('<span class="muted">Loading…</span>');
+  if (data.error) return detailRow(`<span class="warn">${strip(data.error)}</span>`);
+
+  const t = data.totals;
+  const pages = data.pages.length
+    ? `<table class="detail">
+        <thead><tr><th>Page read</th><th class="num">Views</th><th class="num">Avg time</th><th class="num">Longest</th><th class="num">Left in &lt;10s</th></tr></thead>
+        <tbody>${data.pages.map((p) => `<tr>
+          <td class="mono">${strip(p.path)}</td>
+          <td class="num">${num(p.views)}</td>
+          <td class="num">${mmss(p.avgSeconds)}</td>
+          <td class="num">${mmss(p.maxSeconds)}</td>
+          <td class="num">${num(p.bounced)}</td>
+        </tr>`).join("")}</tbody>
+      </table>`
+    : "";
+
+  const api = data.api.length
+    ? `<table class="detail">
+        <thead><tr><th>API called</th><th class="num">Requests</th><th class="num">Asked to fail</th><th class="num">From the site's try-it box</th></tr></thead>
+        <tbody>${data.api.map((a) => `<tr>
+          <td class="mono">${strip(a.path)}</td>
+          <td class="num">${num(a.requests)}</td>
+          <td class="num${a.chaos ? " warn" : ""}">${num(a.chaos)}</td>
+          <td class="num">${num(a.fromSite)}</td>
+        </tr>`).join("")}</tbody>
+      </table>`
+    : "";
+
+  if (!pages && !api) return detailRow('<span class="muted">Nothing recorded for this day beyond the visitor count.</span>');
+
+  const from = data.referrers.length
+    ? `<div class="tabletotal">arrived from ${data.referrers.map((r) => `${strip(r.referrer)} <b>${num(r.requests)}</b>`).join(" · ")}</div>`
+    : "";
+
+  return detailRow(`${pages}${api}
+    <div class="tabletotal">${[
+      part("page views", num(t.views)),
+      part("time reading", mmss(t.readingSeconds)),
+      part("API requests", num(t.apiRequests)),
+      part("asked to fail", num(t.chaosRequests), t.chaosRequests ? "warn" : ""),
+      part("from the try-it box", num(t.fromSite)),
+    ].join("")}</div>${from}
+    <div class="tabletotal muted">Bots left out. Reading time comes from the page telling us when it is closed, so visitors who only called the API have none.</div>`);
+}
+
+// The same shape as toggleDayErrors, and it closes the other panel when it opens.
+async function toggleDayVisits(day) {
+  if (DAY_VISITS_OPEN === day) { DAY_VISITS_OPEN = null; renderDaily(); return; }
+
+  DAY_VISITS_OPEN = day;
+  DAY_ERRORS_OPEN = null;
+  if (DAY_VISITS.has(day) && day !== DAILY.at(-1)?.day) { renderDaily(); return; }
+
+  renderDaily();
+  try {
+    const res = await fetch(`/v1/admin/visits?day=${encodeURIComponent(day)}`, {
+      headers: { authorization: "Bearer " + authToken },
+    });
+    if (!res.ok) throw new Error("Request failed: " + res.status);
+    DAY_VISITS.set(day, await res.json());
+  } catch (err) {
+    DAY_VISITS.set(day, { error: err.message });
+  }
+  if (DAY_VISITS_OPEN === day) renderDaily();
+}
+
 // Fetch once per day, then toggle from the cache. A day's rollup is finished
 // except for today's, and re-reading it on every open would cost a round trip
 // to answer the same question.
@@ -133,6 +222,7 @@ async function toggleDayErrors(day) {
   if (DAY_ERRORS_OPEN === day) { DAY_ERRORS_OPEN = null; renderDaily(); return; }
 
   DAY_ERRORS_OPEN = day;
+  DAY_VISITS_OPEN = null;
   // Today is still being written to, so never serve it from the cache.
   if (DAY_ERRORS.has(day) && day !== DAILY.at(-1)?.day) { renderDaily(); return; }
 
@@ -663,7 +753,9 @@ function setMode(mode) {
 // first click, and the CSP rules out an inline one.
 $("daily").addEventListener("click", (event) => {
   const button = event.target.closest("[data-errday]");
-  if (button) toggleDayErrors(button.dataset.errday);
+  if (button) return toggleDayErrors(button.dataset.errday);
+  const visits = event.target.closest("[data-visday]");
+  if (visits) toggleDayVisits(visits.dataset.visday);
 });
 
 $("geo").addEventListener("click", (event) => {

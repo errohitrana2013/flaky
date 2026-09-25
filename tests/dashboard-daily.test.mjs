@@ -312,3 +312,50 @@ test("the People tile is distinct people, not a sum of the daily counts", () => 
   assert.equal(el("t-vis").textContent, "7");
   assert.equal(el("t-ip").textContent, "3");
 });
+
+// --- Opening what people did on a day ----------------------------------------
+
+const VISITS = {
+  day: "2026-06-10",
+  pages: [{ path: "/createMockServer", views: 3, avgSeconds: 176, maxSeconds: 521, bounced: 2 }],
+  api: [{ path: "/v1/posts", requests: 30, chaos: 21, fromSite: 1 }],
+  referrers: [{ referrer: "bing.com", requests: 1 }],
+  totals: { pages: 1, views: 3, readingSeconds: 527, bounced: 2, endpoints: 1, apiRequests: 30, chaosRequests: 21, fromSite: 1 },
+};
+
+const bothFetch = (url) =>
+  url.includes("/v1/admin/visits") ? { ok: true, json: async () => VISITS, headers: { get: () => null } }
+  : url.includes("/v1/admin/errors") ? { ok: true, json: async () => DAY_DETAIL, headers: { get: () => null } }
+  : { ok: true, json: async () => ({}), headers: { get: () => null } };
+
+test("a day's visitor count opens what they did, as totals", async () => {
+  const page = load(bothFetch);
+  page.render(payload(40));
+  assert.match(page.el("daily").innerHTML, /data-visday="2026-06-10"/, "the count is a control");
+
+  page.clickOn("daily:click", "data-visday", "2026-06-10");
+  await new Promise((r) => setTimeout(r, 0));
+
+  assert.match(page.fetched.find((u) => u.includes("/v1/admin/visits")), /day=2026-06-10/);
+  const html = page.el("daily").innerHTML;
+  assert.match(html, /\/createMockServer/);
+  assert.match(html, /2:56/, "176 seconds read as minutes");
+  assert.match(html, /\/v1\/posts/);
+  assert.match(html, /asked to fail <b class="warn">21</);
+  assert.match(html, /bing\.com/);
+});
+
+test("only one day's detail is open, whichever kind it is", async () => {
+  const page = load(bothFetch);
+  page.render(payload(40));
+
+  page.clickOn("daily:click", "data-errday", "2026-06-10");
+  await new Promise((r) => setTimeout(r, 0));
+  page.clickOn("daily:click", "data-visday", "2026-06-10");
+  await new Promise((r) => setTimeout(r, 0));
+
+  const html = page.el("daily").innerHTML;
+  assert.equal(html.split("daydetail").length - 1, 1, "the errors closed when the visits opened");
+  assert.match(html, /Page read/);
+  assert.ok(!html.includes("cause-requested"));
+});

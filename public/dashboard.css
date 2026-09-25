@@ -161,7 +161,10 @@ tr.open .errlink { text-decoration-color: currentColor; }
    panel needed to preserve is the alignment this one needs to escape. */
 tr.daydetail > td { padding: 0 0 14px 0; background: var(--panel); }
 table.detail { font-size: 13px; }
-table.detail th { padding: 8px 10px 8px 0; }
+/* Not sticky. .tablebox th pins the per-day header to the top of the scroll, and
+   it matched these too, so a panel's own header stuck over the main one and hid
+   its first row. It scrolls with its panel, which is the row it belongs to. */
+table.detail th { padding: 8px 10px 8px 0; position: static; box-shadow: none; }
 table.detail th:first-child, table.detail td:first-child { padding-left: 14px; }
 table.detail td { padding: 6px 10px 6px 0; border-bottom: 1px solid var(--line); }
 table.detail tr:last-child td { border-bottom: 0; }

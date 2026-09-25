@@ -615,6 +615,101 @@ export async function getDayErrors(ctx) {
   });
 }
 
+// --- What people did on one day ---------------------------------------------
+//
+// The Visitors column says how many people came and nothing about what they
+// did. This answers that, as totals: which pages were read and for how long,
+// which endpoints were called, how many of those calls asked for a failure,
+// and where people arrived from.
+//
+// Totals only, and on purpose. visitor_path has every person's trail for the
+// day, but the privacy page promises it is only read for people who came back
+// on more than one day — so this reads the tables that were never tied to a
+// person: page_time (per page), path_bucket (per endpoint) and referrer_bucket.
+// A per-person view would need that promise changed first, and only for data
+// collected after the change.
+//
+// Its own endpoint for the same reason as the day's errors: it is a question
+// about one day, and ninety days of it on every dashboard load answers nothing.
+//
+// GET /v1/admin/visits?day=YYYY-MM-DD
+export async function getDayVisits(ctx) {
+  if (!authorised(ctx.request, ctx.env)) {
+    return fail(401, "Admin token required", "Send Authorization: Bearer <ADMIN_TOKEN>.");
+  }
+
+  const day = ctx.query.get("day") || "";
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(day)) {
+    return fail(400, `Not a date: ${echo(day)}`, "Use day=YYYY-MM-DD, the same UTC dates the per-day table shows.");
+  }
+
+  // Bots are subtracted rather than filtered: path_bucket keeps one row per path
+  // with the bot share inside it. The admin pages and the beacon itself are the
+  // operator and the plumbing, not anything a visitor did.
+  const API = `path LIKE '/v1/%' AND path NOT LIKE '/v1/admin%' AND path != '/v1/beacon'`;
+
+  const [pages, api, referrers, pageTotals, apiTotals] = await Promise.all([
+    ctx.env.DB.prepare(
+      `SELECT path, visits, sum_seconds, max_seconds, bounced
+       FROM page_time WHERE day = ? ORDER BY visits DESC, path LIMIT 30`
+    ).bind(day).all(),
+
+    ctx.env.DB.prepare(
+      `SELECT path, requests - bot_requests AS requests, with_any - bot_chaos AS chaos,
+              onsite
+       FROM path_bucket WHERE day = ? AND ${API} AND requests - bot_requests > 0
+       ORDER BY requests - bot_requests DESC, path LIMIT 30`
+    ).bind(day).all(),
+
+    ctx.env.DB.prepare(
+      "SELECT referrer, requests FROM referrer_bucket WHERE day = ? ORDER BY requests DESC LIMIT 15"
+    ).bind(day).all(),
+
+    // Over every row, not the 30 listed — the capped-list trap the errors panel
+    // already fell into once.
+    ctx.env.DB.prepare(
+      `SELECT COUNT(*) AS pages, SUM(visits) AS views, SUM(sum_seconds) AS seconds, SUM(bounced) AS bounced
+       FROM page_time WHERE day = ?`
+    ).bind(day).first(),
+
+    ctx.env.DB.prepare(
+      `SELECT COUNT(*) AS endpoints, SUM(requests - bot_requests) AS requests,
+              SUM(with_any - bot_chaos) AS chaos, SUM(onsite) AS onsite, SUM(onsite_chaos) AS onsiteChaos
+       FROM path_bucket WHERE day = ? AND ${API} AND requests - bot_requests > 0`
+    ).bind(day).first(),
+  ]);
+
+  return json({
+    day,
+    pages: (pages.results || []).map((r) => ({
+      path: r.path,
+      views: r.visits,
+      avgSeconds: r.visits ? Math.round(r.sum_seconds / r.visits) : 0,
+      maxSeconds: r.max_seconds,
+      bounced: r.bounced,
+    })),
+    api: (api.results || []).map((r) => ({
+      path: r.path,
+      requests: r.requests,
+      chaos: Math.max(0, r.chaos),
+      // From the site's own try-it box, which is the page demonstrating itself
+      // rather than someone using the API from their own code.
+      fromSite: r.onsite,
+    })),
+    referrers: referrers.results || [],
+    totals: {
+      pages: pageTotals?.pages || 0,
+      views: pageTotals?.views || 0,
+      readingSeconds: pageTotals?.seconds || 0,
+      bounced: pageTotals?.bounced || 0,
+      endpoints: apiTotals?.endpoints || 0,
+      apiRequests: apiTotals?.requests || 0,
+      chaosRequests: Math.max(0, apiTotals?.chaos || 0),
+      fromSite: apiTotals?.onsite || 0,
+    },
+  });
+}
+
 // --- Returning people ------------------------------------------------------
 //
 // The frequency table on /insights says how many people came back and nothing
