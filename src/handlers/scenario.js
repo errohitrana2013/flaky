@@ -21,7 +21,26 @@ const ID = /^[0-9a-f]{16}$/;
 
 // Reads either shape into one number. `fail_count` is the threshold in both
 // directions — see 0016_scenario_invert.sql for why the column kept its name.
+// A whole number, given as a number or as digits. "503" means 503 and loses
+// nothing, so it is accepted; 1.5 would have to be rounded to mean anything,
+// and rounding it quietly is the kind of guess a failure-testing tool must not
+// make. Everything else is NaN, which the range checks below then refuse.
+function whole(value) {
+  if (typeof value === "number") return Number.isInteger(value) ? value : NaN;
+  if (typeof value === "string" && /^\s*\d+\s*$/.test(value)) return Number(value);
+  return NaN;
+}
+
+// The whole of the request body. A field outside it was being ignored, so a
+// typo — "fial", "stauts" — silently produced the default scenario.
+const FIELDS = new Set(["fail", "succeed", "status"]);
+
 function policyFrom(body) {
+  const unknown = Object.keys(body).find((key) => !FIELDS.has(key));
+  if (unknown !== undefined) {
+    return { error: [`Unknown field '${echo(unknown)}'`, "A scenario takes fail or succeed, and optionally status."] };
+  }
+
   const hasFail = body.fail !== undefined && body.fail !== null;
   const hasSucceed = body.succeed !== undefined && body.succeed !== null;
 
@@ -31,7 +50,7 @@ function policyFrom(body) {
 
   const invert = hasSucceed ? 1 : 0;
   const word = invert ? "succeed" : "fail";
-  const threshold = Math.trunc(Number(invert ? body.succeed : body.fail ?? 2));
+  const threshold = whole(invert ? body.succeed : body.fail ?? 2);
 
   if (!Number.isFinite(threshold) || threshold < 0 || threshold > MAX_SCENARIO_THRESHOLD) {
     return {
@@ -74,7 +93,7 @@ export async function createScenario(ctx) {
 
   // A rate limit is the obvious reason to invert one, so default to its status
   // rather than making everybody spell out 429.
-  const status = Math.trunc(Number(body.status ?? (invert ? 429 : 503)));
+  const status = whole(body.status ?? (invert ? 429 : 503));
   if (!Number.isInteger(status) || status < 400 || status > 599) {
     return fail(400, "Invalid status", "Expected a failure status from 400 to 599.");
   }

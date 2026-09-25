@@ -1473,6 +1473,29 @@ test("a scenario body is an object or nothing, and never a 500", async () => {
   }
 });
 
+test("a scenario refuses what it would otherwise have to guess at", async () => {
+  const post = async (payload) => {
+    const res = await call("/v1/scenario", { method: "POST", body: JSON.stringify(payload) });
+    return { status: res.status, data: await body(res) };
+  };
+
+  // Rounded quietly before: 1.5 became 1, 503.5 became 503.
+  for (const payload of [{ fail: 1.5 }, { succeed: 2.9 }, { fail: 2, status: 503.5 }, { fail: "two" }, { fail: true }]) {
+    assert.equal((await post(payload)).status, 400, JSON.stringify(payload));
+  }
+
+  // Ignored quietly before, so a typo made the default scenario.
+  const typo = await post({ fial: 3 });
+  assert.equal(typo.status, 400);
+  assert.match(typo.data.error.message, /Unknown field 'fial'/);
+  assert.equal((await post({ fail: 2, invert: "yes" })).status, 400, "direction is chosen by sending succeed");
+
+  // Digits as text lose nothing, so they still work.
+  const text = await post({ fail: "3", status: "502" });
+  assert.equal(text.status, 201);
+  assert.deepEqual(text.data.policy, { fail: 3, status: 502, thenSucceeds: true });
+});
+
 test("a URL with a broken % escape is a 400 on every route, not a 500", async () => {
   // decodeURIComponent threw in the router, so /v1/posts/%E0%A4%A blamed flaky
   // for a URL that was never valid.
