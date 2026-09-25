@@ -1457,6 +1457,34 @@ test("validates the scenario policy on creation", async () => {
   assert.equal((await call("/v1/scenario", { method: "POST", body: JSON.stringify({ fail: 3, status: 429 }) })).status, 201);
 });
 
+test("a scenario body is an object or nothing, and never a 500", async () => {
+  const post = (payload) => call("/v1/scenario", { method: "POST", ...(payload === undefined ? {} : { body: payload }) });
+
+  // No body is the documented default: fail twice with 503.
+  const plain = await post();
+  assert.equal(plain.status, 201);
+  assert.deepEqual((await body(plain)).policy, { fail: 2, status: 503, thenSucceeds: true });
+
+  // null reached body.fail and crashed — one of the two 500s in production.
+  for (const [payload, message] of [["null", /JSON object/], ["[]", /JSON object/], ['"x"', /JSON object/], ["42", /JSON object/], ["{oops", /not valid JSON/]]) {
+    const res = await post(payload);
+    assert.equal(res.status, 400, `${payload} is the caller's mistake, not flaky's`);
+    assert.match((await body(res)).error.message, message);
+  }
+});
+
+test("a URL with a broken % escape is a 400 on every route, not a 500", async () => {
+  // decodeURIComponent threw in the router, so /v1/posts/%E0%A4%A blamed flaky
+  // for a URL that was never valid.
+  for (const path of ["/v1/posts/%E0%A4%A", "/v1/scenario/%E0%A4%A", "/v1/custom/%E0%A4%A/users", "/v1/%zz"]) {
+    const res = await call(path);
+    assert.equal(res.status, 400, path);
+    assert.match((await body(res)).error.message, /not validly encoded/);
+  }
+  // A correctly encoded one is untouched.
+  assert.equal((await call("/v1/posts/%31")).status, 200);
+});
+
 test("a scenario cannot run in both directions at once", async () => {
   // Silently picking one would give a passing test that proves the opposite of
   // what it claims, so this is a 400 rather than a precedence rule.

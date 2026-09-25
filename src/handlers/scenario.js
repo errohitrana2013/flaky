@@ -50,7 +50,23 @@ function policyFrom(body) {
 
 // POST /v1/scenario  { fail: 2, status: 503 }  or  { succeed: 3, status: 429 }
 export async function createScenario(ctx) {
-  const body = await ctx.request.json().catch(() => ({}));
+  // No body at all is the defaults — fail twice with 503 — and stays that way.
+  // Anything else has to be a JSON object. This was .json().catch(() => ({})),
+  // which turned broken JSON, an array or a string into the defaults without a
+  // word, and let `null` through to crash on body.fail as a 500: the two ways a
+  // tool for testing failure must never fail.
+  const raw = (await ctx.request.text()).trim();
+  let body = {};
+  if (raw) {
+    try {
+      body = JSON.parse(raw);
+    } catch (err) {
+      return fail(400, "That is not valid JSON", String(err.message).slice(0, 120));
+    }
+    if (body === null || typeof body !== "object" || Array.isArray(body)) {
+      return fail(400, "Expected a JSON object", 'Send {"fail":2,"status":503}, or no body at all for those defaults.');
+    }
+  }
 
   const policy = policyFrom(body);
   if (policy.error) return fail(400, policy.error[0], policy.error[1]);

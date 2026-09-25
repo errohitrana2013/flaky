@@ -17,6 +17,17 @@ import { visitorId, classifyClient, logRequest, rollUp, sendDigest, purgeExpired
 import { today, utcHour, ipId } from "./lib/hash.js";
 
 async function handle(request, env, ctx, url, state) {
+  // A % not followed by two hex digits cannot be decoded, and the router's
+  // decodeURIComponent threw on it — a 500 blaming flaky for a URL that was
+  // never valid, on every route. It is the caller's to fix, so it is a 400 that
+  // says what is wrong. Echoed nowhere: the path is exactly what is broken.
+  try {
+    decodeURIComponent(url.pathname);
+  } catch {
+    return fail(400, "That URL is not validly encoded",
+      "A % in a path must be followed by two hex digits, as in %20. Encode the value with encodeURIComponent.");
+  }
+
   const route = matchRoute(request.method, url.pathname);
 
   // A known path with the wrong method is a 405, not a 404 — answering 404 sends
