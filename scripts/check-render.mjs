@@ -117,7 +117,7 @@ const problems = [
   // render(), so it needs its own pass — with a cohort, since the page picks one
   // when a row is clicked.
   ...(await check("insights people", "public/insights.js", "/v1/admin/returning?days=30&min=2", {
-    "people-title": /came back/i, "people-hint": /./, "people-body": /./,
+    "people-title": /Visited on \d+ days/i, "people-hint": /./, "people-body": /./,
   }, "showPeople(__DATA__, 2)")),
   ...(await check("insights", "public/insights.js", "/v1/admin/insights?days=30", {
     "chaos-share": /%/, "paths": /<tr/, "paths-total": /endpoints/, "frequency-total": /people/,
