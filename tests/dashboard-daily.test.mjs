@@ -115,6 +115,7 @@ const payload = (dayCount) => {
       errors: daily.reduce((n, d) => n + d.errors, 0),
       errorRate: 0.2, serverErrors: 0, clientErrors: 0,
       userErrors: 500, requestedErrors: 200, fixErrors: 7, unsplitErrors: 3,
+      botShare: 0.4912, chaosRequests: 290,
       keysIssued: 0, countries: 1, addresses: 3, bots: 2,
       // Deliberately unequal to the sum of the per-day counts below, which is
       // the bug this figure exists to keep fixed: 5 people a day for 40 days is
@@ -386,4 +387,11 @@ test("needs fixing lists a server error with when it was last seen", () => {
   assert.match(html, /\/v1\/scenario/);
   assert.match(html, />2026-09-03</);
   assert.match(el("errors-total").innerHTML, /need fixing <b class="warn">2</);
+});
+
+test("the tiles show the bot share and what people asked to fail, not a raw error rate", () => {
+  const { el, render } = load();
+  render(payload(40));
+  assert.equal(el("t-req-bots").textContent, "49% bots");
+  assert.equal(el("t-chaos").textContent, "290");
 });

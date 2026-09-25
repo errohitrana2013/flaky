@@ -106,7 +106,7 @@ async function check(page, script, endpoint, assertions, entry = "render") {
 
 const problems = [
   ...(await check("dashboard", "public/dashboard.js", "/v1/admin/stats?days=30", {
-    "t-req": /\d/, "geo": /<tr/, "geo-total": /countries/, "errors-total": /need fixing.*everything else/, "daily-total": /days/,
+    "t-req": /\d/, "t-req-bots": /% bots/, "t-chaos": /\d/, "geo": /<tr/, "geo-total": /countries/, "errors-total": /need fixing.*everything else/, "daily-total": /days/,
   })),
   // The custom-API table renders from its own endpoint, so it needs its own
   // pass — render() never touches it and would report everything fine.

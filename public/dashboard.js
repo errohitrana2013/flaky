@@ -243,7 +243,12 @@ async function toggleDayErrors(day) {
 
 function render(data) {
   $("t-req").textContent = num(data.totals.requests);
-  $("t-err").textContent = (data.totals.errorRate * 100).toFixed(1) + "%";
+  // Half of all requests can be scanners, and a bare total reads as people.
+  $("t-req-bots").textContent = `${Math.round((data.totals.botShare || 0) * 100)}% bots`;
+  // The number that says whether the thing flaky exists for is being used. It
+  // replaced an error rate that counted scanners and requested failures as
+  // breakage and put a healthy service at 59%.
+  $("t-chaos").textContent = num(data.totals.chaosRequests || 0);
   $("t-real").textContent = num(data.totals.serverErrors);
   $("t-key").textContent = num(data.totals.keysIssued);
   $("t-ip").textContent = num(data.totals.addresses);

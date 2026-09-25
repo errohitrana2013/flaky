@@ -412,6 +412,26 @@ test("guards the admin endpoint", async () => {
   assert.equal((await call("/v1/admin/stats", { headers: { authorization: "Bearer admin-token" } })).status, 200);
 });
 
+test("the headline tiles get the bot share and what people asked to fail", async () => {
+  const env = makeEnv();
+  const prepare = env.DB.prepare;
+  let usageSql = "";
+  env.DB.prepare = (sql) => {
+    if (sql.includes("SUM(bot_requests) AS bots")) {
+      usageSql = sql.replace(/\s+/g, " ");
+      return { bind: () => ({ first: async () => ({ requests: 8828, bots: 4803, chaos: 290 }) }) };
+    }
+    return prepare(sql);
+  };
+
+  const stats = await body(await call("/v1/admin/stats", { headers: { authorization: "Bearer admin-token" } }, env));
+  // Numerator and denominator from the same table, so the share is honest.
+  assert.equal(stats.totals.botShare, 0.5441);
+  assert.equal(stats.totals.chaosRequests, 290);
+  // Bots and the site's own try-it box are not anyone adopting the feature.
+  assert.match(usageSql, /with_any - bot_chaos - onsite_chaos/);
+});
+
 test("the needs-fixing list is unrequested 5xx only, and the totals still cover everything", async () => {
   // The list used to be every kind of error, and 90 days of WordPress scanners
   // buried the one row that meant something was broken. It is now only what

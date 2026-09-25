@@ -71,7 +71,7 @@ export async function getStats(ctx) {
   const days = Math.min(Math.max(Number(ctx.query.get("days")) || 90, 1), 90);
   const since = daysAgo(days);
 
-  const [daily, visitors, keys, topKeys, hourly, geoRequests, geoVisitors, errors_, errorSums, regions, addresses, arrivals, peaks, splits] = await Promise.all([
+  const [daily, visitors, keys, topKeys, hourly, geoRequests, geoVisitors, errors_, errorSums, regions, addresses, arrivals, peaks, splits, usage] = await Promise.all([
     ctx.env.DB.prepare(
       `SELECT day, SUM(requests) AS requests, SUM(errors) AS errors
        FROM usage_bucket WHERE day >= ? GROUP BY day ORDER BY day`
@@ -214,6 +214,17 @@ export async function getStats(ctx) {
               SUM(CASE WHEN injected = 0 AND status >= 500 THEN count ELSE 0 END) AS broken
        FROM error_bucket WHERE day >= ? GROUP BY day`
     ).bind(since).all(),
+
+    // For the two headline tiles. The bot share is taken inside path_bucket, the
+    // one table that splits bots out per request, so its numerator and
+    // denominator are the same rows. "Asked to fail" is people's requests that
+    // used a chaos control, less the site's own try-it box — the page
+    // demonstrating itself is not anyone adopting the feature.
+    ctx.env.DB.prepare(
+      `SELECT SUM(requests) AS requests, SUM(bot_requests) AS bots,
+              SUM(with_any - bot_chaos - onsite_chaos) AS chaos
+       FROM path_bucket WHERE day >= ?`
+    ).bind(since).first(),
   ]);
 
   // Hour stays UTC here, as everywhere else in this payload; the dashboard
@@ -270,6 +281,11 @@ export async function getStats(ctx) {
       requests,
       errors,
       errorRate: requests ? Number((errors / requests).toFixed(4)) : 0,
+      // Replaces errorRate on the tiles. 59% read as a broken service when two
+      // requests in ten thousand were flaky failing; the rest were scanners,
+      // correct rejections and failures people asked for.
+      botShare: usage?.requests ? Number(((usage.bots || 0) / usage.requests).toFixed(4)) : 0,
+      chaosRequests: Math.max(0, usage?.chaos || 0),
       // These three plus unsplitErrors add up to errors, so the totals under
       // the per-day table reconcile with its columns.
       userErrors,
