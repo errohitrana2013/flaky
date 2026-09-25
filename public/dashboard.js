@@ -518,8 +518,11 @@ function renderGeo(countries, regions) {
 
   // Seeded once, then left alone: re-seeding on every render would spring open
   // everything the reader had just shut, and the table re-renders on every
-  // click of a disclosure.
-  if (GEO_OPEN === null) GEO_OPEN = new Set(ordered.map((g) => GEO_KEY.continent(g.name)));
+  // click of a disclosure. It starts shut — one row per continent, each with
+  // its totals — the same state Collapse all leaves it in. Opening on sixty-odd
+  // country rows put the one thing worth reading first, the continent totals,
+  // half a scroll apart.
+  if (GEO_OPEN === null) GEO_OPEN = new Set();
 
   // Scaled to the busiest country, not the busiest continent: the bar is there
   // to compare countries, and a continent that is one country would otherwise

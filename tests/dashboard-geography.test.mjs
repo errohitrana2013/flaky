@@ -76,6 +76,12 @@ function load() {
     // browser.
     open: (key) => handlers.get("geo:click")({ target: { closest: () => ({ dataset: { geo: key } }) } }),
     openAll: () => handlers.get("geo-all:click")(),
+    // The table starts at continents only. Tests about the country rows open
+    // every continent first, the way a reader clicking each one would.
+    openContinents() {
+      const shut = [...nodes.get("geo")._html.matchAll(/data-geo="(c:[^"]+)" aria-expanded="false"/g)].map((m) => m[1]);
+      for (const key of shut) handlers.get("geo:click")({ target: { closest: () => ({ dataset: { geo: key } }) } });
+    },
   };
 }
 
@@ -119,24 +125,30 @@ const rowsOf = (html) =>
     text: row,
   }));
 
-test("it opens on continents and countries, with the states put away", () => {
-  const { el, render } = load();
+test("it opens on continents only, each with its totals", () => {
+  const { el, render, openContinents } = load();
   render(payload());
   const rows = rowsOf(el("geo").innerHTML);
 
-  assert.ok(rows.some((r) => r.level === "continent"));
-  assert.ok(rows.some((r) => r.level === "country"));
-  assert.equal(rows.filter((r) => r.level === "state").length, 0, "states start put away");
-  // A country with states offers to open; Romania, which has none, does not.
+  // The same state Collapse all leaves it in, on a first visit and on a refresh.
+  assert.ok(rows.length > 0 && rows.every((r) => r.level === "continent"), "nothing but continents");
+  assert.match(el("geo").innerHTML, /data-geo="c:Asia" aria-expanded="false"/);
+  assert.equal(el("geo-all").textContent, "expand all", "the button offers the move not yet made");
+
+  // Opening a continent shows its countries, states still put away. A country
+  // with states offers to open; Romania, which has none, does not.
+  openContinents();
+  const open = rowsOf(el("geo").innerHTML);
+  assert.ok(open.some((r) => r.level === "country"));
+  assert.equal(open.filter((r) => r.level === "state").length, 0, "states stay put away");
   assert.match(el("geo").innerHTML, /data-geo="n:IN" aria-expanded="false"/);
   assert.doesNotMatch(el("geo").innerHTML, /data-geo="n:RO"/);
-  // And the continents are open, so the countries under them are visible.
-  assert.match(el("geo").innerHTML, /data-geo="c:Asia" aria-expanded="true"/);
 });
 
 test("every level nests under the one above it, in that order", () => {
-  const { el, render, open } = load();
+  const { el, render, open, openContinents } = load();
   render(payload());
+  openContinents();
   open("n:IN");
   open("n:NL");
   const levels = rowsOf(el("geo").innerHTML).map((r) => r.level);
@@ -153,8 +165,9 @@ test("every level nests under the one above it, in that order", () => {
 });
 
 test("opening a country shows its states and nothing else's", () => {
-  const { el, render, open } = load();
+  const { el, render, open, openContinents } = load();
   render(payload());
+  openContinents();
   open("n:IN");
   const rows = rowsOf(el("geo").innerHTML);
 
@@ -165,8 +178,9 @@ test("opening a country shows its states and nothing else's", () => {
 });
 
 test("shutting a continent takes its countries and their states with it", () => {
-  const { el, render, open } = load();
+  const { el, render, open, openContinents } = load();
   render(payload());
+  openContinents();
   open("n:IN");
   assert.ok(rowsOf(el("geo").innerHTML).some((r) => r.label === "Karnataka"));
 
@@ -181,8 +195,9 @@ test("shutting a continent takes its countries and their states with it", () => 
 });
 
 test("a shut country keeps its own numbers", () => {
-  const { el, render } = load();
+  const { el, render, openContinents } = load();
   render(payload());
+  openContinents();
   // The whole point of collapsing: the row still answers the question. India is
   // 42 people whether or not its four states are on screen.
   const india = rowsOf(el("geo").innerHTML).find((r) => /n:IN/.test(r.text));
@@ -238,8 +253,9 @@ test("a continent row is the sum of the countries under it", () => {
 });
 
 test("a country whose states fall short of it says where the rest went", () => {
-  const { el, render, open } = load();
+  const { el, render, open, openContinents } = load();
   render(payload());
+  openContinents();
   open("n:NL");
   open("n:IN");
   const html = el("geo").innerHTML;
@@ -259,8 +275,9 @@ test("a country whose states fall short of it says where the rest went", () => {
 });
 
 test("a country that missed the requests cutoff still appears, without a requests figure", () => {
-  const { el, render } = load();
+  const { el, render, openContinents } = load();
   render(payload());
+  openContinents();
   const rows = rowsOf(el("geo").innerHTML);
 
   const slovenia = rows.find((r) => r.level === "country" && /Slovenia/.test(r.text));
@@ -280,8 +297,9 @@ test("requests are never claimed at state level", () => {
 });
 
 test("the bar scale comes from the busiest country, not the busiest continent", () => {
-  const { el, render } = load();
+  const { el, render, openContinents } = load();
   render(payload());
+  openContinents();
   const html = el("geo").innerHTML;
   // India is the peak at 3,612; the Netherlands is 1,059 of it.
   assert.match(html, /data-w="100\.0"/);
