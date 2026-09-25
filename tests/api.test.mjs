@@ -429,7 +429,9 @@ test("the headline tiles get the bot share and what people asked to fail", async
   assert.equal(stats.totals.botShare, 0.5441);
   assert.equal(stats.totals.chaosRequests, 290);
   // Bots and the site's own try-it box are not anyone adopting the feature.
-  assert.match(usageSql, /with_any - bot_chaos - onsite_chaos/);
+  // Clamped per row: backfilled rows can have more bot chaos than chaos, and an
+  // unclamped sum once put the whole window at -106.
+  assert.match(usageSql, /SUM\(MAX\(with_any - bot_chaos - onsite_chaos, 0\)\)/);
 });
 
 test("the needs-fixing list is unrequested 5xx only, and the totals still cover everything", async () => {

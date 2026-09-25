@@ -220,9 +220,15 @@ export async function getStats(ctx) {
     // denominator are the same rows. "Asked to fail" is people's requests that
     // used a chaos control, less the site's own try-it box — the page
     // demonstrating itself is not anyone adopting the feature.
+    //
+    // Clamped per row, not on the total. with_any was backfilled by migration
+    // 0017 (2026-09-05) as MAX of three columns rather than their sum, so on
+    // older rows bot_chaos can exceed it; summed unclamped, the window came to
+    // -106 and the tile read 0 beside a day with 31. Before that date the
+    // figure is therefore a floor, not a count.
     ctx.env.DB.prepare(
       `SELECT SUM(requests) AS requests, SUM(bot_requests) AS bots,
-              SUM(with_any - bot_chaos - onsite_chaos) AS chaos
+              SUM(MAX(with_any - bot_chaos - onsite_chaos, 0)) AS chaos
        FROM path_bucket WHERE day >= ?`
     ).bind(since).first(),
   ]);
@@ -696,7 +702,7 @@ export async function getDayVisits(ctx) {
 
     ctx.env.DB.prepare(
       `SELECT COUNT(*) AS endpoints, SUM(requests - bot_requests) AS requests,
-              SUM(with_any - bot_chaos) AS chaos, SUM(onsite) AS onsite, SUM(onsite_chaos) AS onsiteChaos
+              SUM(MAX(with_any - bot_chaos, 0)) AS chaos, SUM(onsite) AS onsite, SUM(onsite_chaos) AS onsiteChaos
        FROM path_bucket WHERE day = ? AND ${API} AND requests - bot_requests > 0`
     ).bind(day).first(),
   ]);
