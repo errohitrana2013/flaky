@@ -85,9 +85,14 @@
     </table>
     <div class="tabletotal" id="geo-total"></div>
 
-    <h2>What is failing <button class="csv" data-csv="errors">csv</button></h2>
+    <h2>Needs fixing <button class="csv" data-csv="errors">csv</button></h2>
+    <p class="hint">
+      5xx errors nobody asked for — the only kind that means flaky itself broke.
+      User errors and built-in failures are in the per-day table above; the csv
+      has every kind.
+    </p>
     <table>
-      <thead><tr><th>Status</th><th>Path</th><th>Cause</th><th>From</th><th class="num">Count</th><th class="chart"></th></tr></thead>
+      <thead><tr><th>Status</th><th>Path</th><th>From</th><th class="num">Count</th><th>Last seen</th><th class="chart"></th></tr></thead>
       <tbody id="errors"></tbody>
     </table>
     <div class="tabletotal" id="errors-total"></div>

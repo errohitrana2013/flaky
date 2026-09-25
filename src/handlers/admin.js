@@ -124,10 +124,16 @@ export async function getStats(ctx) {
        GROUP BY country`
     ).bind(since).all(),
 
+    // Only what means flaky itself broke: a 5xx nobody asked for, from anyone —
+    // a crash is a crash whoever set it off. The full list was 90 days of
+    // WordPress scanners and correct 400s burying the one row that mattered;
+    // the rest is in the per-day table's columns and each day's breakdown, and
+    // the errors CSV still has every kind. Newest first, because a failure that
+    // stopped a month ago is history and one from today is the job.
     ctx.env.DB.prepare(
-      `SELECT status, path, injected, bot, SUM(count) AS count
-       FROM error_bucket WHERE day >= ?
-       GROUP BY status, path, injected, bot ORDER BY injected ASC, count DESC LIMIT 40`
+      `SELECT status, path, bot, SUM(count) AS count, MIN(day) AS firstDay, MAX(day) AS lastDay
+       FROM error_bucket WHERE day >= ? AND injected = 0 AND status >= 500
+       GROUP BY status, path, bot ORDER BY lastDay DESC, count DESC LIMIT 40`
     ).bind(since).all(),
 
     // Totals over every error, not a sum of the 40 rows above. The list sorts

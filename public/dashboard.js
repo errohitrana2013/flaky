@@ -276,7 +276,7 @@ function render(data) {
   ]);
   LATEST = data;
   renderHours(data.hourly, data.hourlyVisitors, MODE);
-  renderErrors(data.errors || [], data.errorTotals || {});
+  renderErrors(data.errors || [], data.errorTotals || {}, data.window?.days);
   renderGeo(data.countries || [], data.regions || []);
   syncGeoAll();
 
@@ -378,37 +378,39 @@ function cause(e) {
   return e.status >= 500 ? "server" : "client";
 }
 
-function renderErrors(errors, totals) {
+// Only unrequested 5xx — the server sends nothing else. An empty list is the
+// good outcome and says so in words, because a blank table reads as a failed
+// load rather than as "nothing is broken".
+function renderErrors(errors, totals, days) {
+  // The totals come from the server, over every error, never from these rows.
+  // Everything that is not a server error is still counted here, so the panel
+  // cannot be read as "no errors at all".
+  const footer = () => summary("errors-total", [
+    part("need fixing", num(totals.server || 0), totals.server ? "warn" : ""),
+    part("everything else", num((totals.total || 0) - (totals.server || 0))),
+    part("of which requested", num(totals.requested || 0)),
+    part("from bots", num(totals.bots || 0)),
+  ]);
+
   if (!errors.length) {
-    $("errors").innerHTML = '<tr><td colspan="6" class="muted">No errors recorded.</td></tr>';
+    $("errors").innerHTML = `<tr><td colspan="6" class="muted">Nothing broken in ${num(days || 0)} days.</td></tr>`;
+    footer();
     return;
   }
+
   const peak = Math.max(...errors.map((e) => e.count));
   $("errors").innerHTML = errors
-    .map((e) => `<tr class="${cause(e) === "server" ? "real" : ""}">
+    .map((e) => `<tr class="real">
         <td><span class="st st-${String(e.status)[0]}">${Number(e.status) || "?"}</span></td>
         <td class="mono">${strip(e.path)}</td>
-        <td><span class="cause cause-${cause(e)}">${cause(e)}</span></td>
         <td><span class="cause ${e.bot ? "cause-client" : ""}">${e.bot ? "bot" : "caller"}</span></td>
         <td class="num">${num(e.count)}</td>
-        <td class="chart"><div class="track${cause(e) === "server" ? " sev" : ""}" data-w="${((e.count / peak) * 100).toFixed(1)}"></div></td>
+        <td class="mono wk" title="first seen ${strip(e.firstDay || "")}">${strip(e.lastDay || "")}</td>
+        <td class="chart"><div class="track sev" data-w="${((e.count / peak) * 100).toFixed(1)}"></div></td>
       </tr>`)
     .join("");
   applySizes($("errors"));
-
-  // The totals come from the server, over every error. Summed from these rows
-  // they were wrong: the list stops at 40 and puts requested failures last, so it
-  // showed "requested 0" beside 182 of them.
-  //
-  // Server errors are called out separately because they are the only kind that
-  // means something is broken; the rest is scanners and correct rejections.
-  summary("errors-total", [
-    part("kinds", totals.kinds > errors.length ? `${num(errors.length)} of ${num(totals.kinds)}` : num(errors.length)),
-    part("total", num(totals.total)),
-    part("requested", num(totals.requested)),
-    part("from bots", num(totals.bots)),
-    part("server", num(totals.server), totals.server ? "warn" : ""),
-  ]);
+  footer();
 }
 
 // ISO 3166-1 alpha-2 -> continent. Byte-identical to CONTINENT_GROUPS in

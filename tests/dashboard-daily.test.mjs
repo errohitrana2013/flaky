@@ -359,3 +359,31 @@ test("only one day's detail is open, whichever kind it is", async () => {
   assert.match(html, /Page read/);
   assert.ok(!html.includes("cause-requested"));
 });
+
+// --- Needs fixing ---------------------------------------------------------------
+
+test("needs fixing says nothing is broken in words, and still counts everything else", () => {
+  const { el, render } = load();
+  const data = payload(40);
+  data.errors = [];
+  data.errorTotals = { kinds: 12, total: 900, requested: 40, server: 0, client: 860, bots: 700 };
+  render(data);
+
+  assert.match(el("errors").innerHTML, /Nothing broken in 40 days/, "empty is the good outcome, said as one");
+  const total = el("errors-total").innerHTML;
+  assert.match(total, /need fixing <b[^>]*>0</);
+  assert.match(total, /everything else <b[^>]*>900</, "the rest is still counted, so it cannot read as no errors at all");
+});
+
+test("needs fixing lists a server error with when it was last seen", () => {
+  const { el, render } = load();
+  const data = payload(40);
+  data.errors = [{ status: 500, path: "/v1/scenario", bot: 1, count: 2, firstDay: "2026-09-03", lastDay: "2026-09-03" }];
+  data.errorTotals = { kinds: 1, total: 2, requested: 0, server: 2, client: 0, bots: 2 };
+  render(data);
+
+  const html = el("errors").innerHTML;
+  assert.match(html, /\/v1\/scenario/);
+  assert.match(html, />2026-09-03</);
+  assert.match(el("errors-total").innerHTML, /need fixing <b class="warn">2</);
+});

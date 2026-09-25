@@ -412,24 +412,30 @@ test("guards the admin endpoint", async () => {
   assert.equal((await call("/v1/admin/stats", { headers: { authorization: "Bearer admin-token" } })).status, 200);
 });
 
-test("error totals cover every error, not just the 40 rows listed", async () => {
-  // The list puts requested failures last and stops at 40, so with enough
-  // scanner noise not one of them is in it. Summing the list is what reported
-  // "requested 0" beside 182 requested failures.
-  const listed = Array.from({ length: 40 }, (_, i) => ({ status: 404, path: `/probe-${i}`, injected: 0, bot: 1, count: 50 - i }));
+test("the needs-fixing list is unrequested 5xx only, and the totals still cover everything", async () => {
+  // The list used to be every kind of error, and 90 days of WordPress scanners
+  // buried the one row that meant something was broken. It is now only what
+  // means flaky itself failed; the totals beside it still count everything, so
+  // it cannot be read as "no errors at all".
+  const broken = [{ status: 500, path: "/v1/scenario", bot: 1, count: 2, firstDay: "2026-09-03", lastDay: "2026-09-03" }];
   const everything = { kinds: 46, total: 2542, requested: 182, server: 30, client: 2330, bots: 2260 };
 
   const env = makeEnv();
   const prepare = env.DB.prepare;
+  let listSql = "";
   env.DB.prepare = (sql) => {
     if (sql.includes("AS kinds")) return { bind: () => ({ first: async () => everything }) };
-    if (sql.includes("FROM error_bucket") && sql.includes("LIMIT 40")) return { bind: () => ({ all: async () => ({ results: listed }) }) };
+    if (sql.includes("FROM error_bucket") && sql.includes("LIMIT 40")) {
+      listSql = sql.replace(/\s+/g, " ");
+      return { bind: () => ({ all: async () => ({ results: broken }) }) };
+    }
     return prepare(sql);
   };
 
   const stats = await body(await call("/v1/admin/stats", { headers: { authorization: "Bearer admin-token" } }, env));
-  assert.equal(stats.errors.length, 40);
-  assert.equal(stats.errors.some((e) => e.injected), false, "the fixture reproduces the bug: nothing requested is listed");
+  assert.match(listSql, /injected = 0 AND status >= 500/, "nothing asked for, nothing below 500");
+  assert.match(listSql, /ORDER BY lastDay DESC/, "a failure from today above one from last month");
+  assert.deepEqual(stats.errors, broken);
   assert.deepEqual(stats.errorTotals, everything);
   assert.equal(stats.totals.serverErrors, 30);
   assert.equal(stats.totals.clientErrors, 2330);
