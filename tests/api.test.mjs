@@ -1502,6 +1502,16 @@ test("validates the scenario policy on creation", async () => {
   assert.equal((await call("/v1/scenario", { method: "POST", body: JSON.stringify({ fail: 3, status: 429 }) })).status, 201);
 });
 
+test("a browser app can read the headers flaky sends for it to act on", async () => {
+  const res = await call("/v1/posts/1", { headers: { origin: "http://localhost:4200" } });
+  const exposed = res.headers.get("access-control-expose-headers").split(/,\s*/);
+  // Without these, an Angular app got the 503 and could not see which attempt it
+  // was, or how long Retry-After told it to wait.
+  for (const header of ["retry-after", "x-scenario-attempt", "x-scenario-remaining-failures", "x-scenario-remaining-successes", "x-total-count"]) {
+    assert.ok(exposed.includes(header), header);
+  }
+});
+
 test("a scenario body is an object or nothing, and never a 500", async () => {
   const post = (payload) => call("/v1/scenario", { method: "POST", ...(payload === undefined ? {} : { body: payload }) });
 

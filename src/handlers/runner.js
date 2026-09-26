@@ -71,7 +71,7 @@ const send = (res, status, body, headers = {}) => {
     "access-control-allow-origin": "*",
     "access-control-allow-methods": "GET, POST, PUT, PATCH, DELETE, OPTIONS",
     "access-control-allow-headers": "content-type, authorization",
-    "access-control-expose-headers": "x-total-count",
+    "access-control-expose-headers": "x-total-count, retry-after",
     ...headers,
   });
   res.end(text);
@@ -286,7 +286,7 @@ class Handler(BaseHTTPRequestHandler):
         self.send_header("Access-Control-Allow-Origin", "*")
         self.send_header("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS")
         self.send_header("Access-Control-Allow-Headers", "content-type, authorization")
-        self.send_header("Access-Control-Expose-Headers", "x-total-count")
+        self.send_header("Access-Control-Expose-Headers", "x-total-count, retry-after")
         for key, value in (extra or {}).items():
             self.send_header(key, value)
         self.end_headers()
@@ -556,7 +556,7 @@ ${embedChunks(data)}
     exchange.getResponseHeaders().set("Access-Control-Allow-Origin", "*");
     exchange.getResponseHeaders().set("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS");
     exchange.getResponseHeaders().set("Access-Control-Allow-Headers", "content-type, authorization");
-    exchange.getResponseHeaders().set("Access-Control-Expose-Headers", "x-total-count");
+    exchange.getResponseHeaders().set("Access-Control-Expose-Headers", "x-total-count, retry-after");
     if (extra != null) {
       for (Map.Entry<String, String> entry : extra.entrySet()) {
         exchange.getResponseHeaders().set(entry.getKey(), entry.getValue());
@@ -1214,7 +1214,7 @@ static async Task Send(HttpListenerContext context, int status, string body,
     response.Headers["Access-Control-Allow-Origin"] = "*";
     response.Headers["Access-Control-Allow-Methods"] = "GET, POST, PUT, PATCH, DELETE, OPTIONS";
     response.Headers["Access-Control-Allow-Headers"] = "content-type, authorization";
-    response.Headers["Access-Control-Expose-Headers"] = "x-total-count";
+    response.Headers["Access-Control-Expose-Headers"] = "x-total-count, retry-after";
 
     if (extra is not null)
     {

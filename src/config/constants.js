@@ -6,7 +6,12 @@ export const CORS_HEADERS = {
   "access-control-allow-headers": "authorization, content-type",
   "access-control-max-age": "86400",
   "access-control-expose-headers":
-    "x-total-count, x-page, x-total-pages, x-tier, x-ratelimit-limit, x-ratelimit-remaining, x-mock-write",
+    "x-total-count, x-page, x-total-pages, x-tier, x-ratelimit-limit, x-ratelimit-remaining, x-mock-write, " +
+    // A browser app reads only what is listed here. The scenario counters and
+    // Retry-After exist to be read by the code under test — a retry loop that
+    // honours Retry-After, a test asserting it succeeded on attempt 3 — and an
+    // Angular app on localhost:4200 was getting the 503 but not these.
+    "retry-after, x-scenario-attempt, x-scenario-remaining-failures, x-scenario-remaining-successes",
 };
 
 // Query params the API interprets itself. Everything else is treated as a
