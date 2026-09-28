@@ -1,0 +1,502 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Flaky UI playground — practise Playwright and Selenium against flaky elements | flaky</title>
+<meta name="description" content="A page built to break your UI tests: elements that appear late, buttons that move, overlays that swallow clicks, lists that re-render and shuffle. Seeded, so a failure reproduces. Each case shows the fragile test and the robust one, in Playwright and Selenium.">
+<link rel="canonical" href="https://flakyapi.dev/uiPlayground">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://flakyapi.dev/uiPlayground">
+<meta property="og:title" content="Flaky UI playground — a page built to break your UI tests">
+<meta property="og:description" content="Late elements, moving buttons, click-swallowing overlays, stale nodes, shuffled lists. Seeded so failures reproduce, with the fix for each in Playwright and Selenium.">
+<meta property="og:image" content="https://flakyapi.dev/og.png">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<link rel="alternate icon" href="/favicon.ico" sizes="32x32">
+<link rel="stylesheet" href="/app.css">
+<link rel="stylesheet" href="/custom.css">
+<link rel="stylesheet" href="/playground.css">
+</head>
+<body>
+<div class="wrap">
+
+  <header class="doc-head">
+    <a class="brand" href="/" aria-label="flaky — home">
+      <svg class="mark" viewBox="0 0 32 32" aria-hidden="true">
+        <rect class="bar"   x="3"    y="18"  width="5"   height="9"  rx="2.5"/>
+        <rect class="bar"   x="10"   y="12"  width="5"   height="15" rx="2.5"/>
+        <rect class="ghost" x="17.6" y="8.6" width="4.8" height="11" rx="2.4"/>
+        <rect class="flake" x="17"   y="22"  width="5"   height="5"  rx="2.5"/>
+        <rect class="bar"   x="24"   y="4"   width="5"   height="23" rx="2.5"/>
+      </svg>
+      <span class="wordmark">flaky<span class="dot">.</span></span>
+    </a>
+
+    <nav class="tabs" aria-label="Site sections">
+      <a href="/">Ready-made API</a>
+      <a href="/createMockServer">Use Your Own Data</a>
+      <a href="/openapiMockServer">Generate from OpenAPI</a>
+      <a href="/uiPlayground" class="on" aria-current="page">Flaky UI Playground</a>
+    </nav>
+
+    <h1>A page built to break your UI tests.</h1>
+    <p class="lede">
+      Every element below misbehaves the way real apps do — it arrives late,
+      moves, gets covered, re-renders or reshuffles. Point Playwright or Selenium
+      at it, watch the naive test fail, then <strong>open the fix</strong> under
+      each case.
+    </p>
+  </header>
+
+  <section class="pg-controls" aria-label="Playground controls">
+    <div class="pg-bar">
+      <label class="ctl">Mode
+        <select id="mode" data-testid="mode">
+          <option value="flaky">flaky — random timing</option>
+          <option value="stable">stable — shortest timing, no surprises</option>
+        </select>
+      </label>
+      <label class="ctl">Seed
+        <input id="seed" data-testid="seed" inputmode="numeric" aria-label="Random seed">
+      </label>
+      <button id="rerun-all" type="button" data-testid="rerun-all">Re-run all</button>
+      <button id="new-seed" type="button" class="ghostbtn">New seed</button>
+    </div>
+    <p class="hint m-0">
+      Timing is seeded, so a failure reproduces: load
+      <code id="repro" data-testid="repro">/uiPlayground?seed=…</code> and every
+      case behaves the same way again. <code>?mode=stable</code> takes every case at its
+      fastest with no surprises — check your test is right there, then make it survive flaky.
+    </p>
+  </section>
+
+  <nav class="pg-toc" aria-label="Cases">
+    <a href="#late">Late element</a>
+    <a href="#disabled">Enabled late</a>
+    <a href="#overlay">Click-swallowing overlay</a>
+    <a href="#shift">Layout shift</a>
+    <a href="#stale">Stale element</a>
+    <a href="#text">Premature text</a>
+    <a href="#toast">Vanishing toast</a>
+    <a href="#shuffle">Shuffled list</a>
+    <a href="#dynid">Dynamic IDs</a>
+    <a href="#animate">Moving target</a>
+    <a href="#network">Flaky network</a>
+    <a href="#scroll">Infinite scroll</a>
+    <a href="#search">Debounced search</a>
+    <a href="#shadow">Shadow DOM</a>
+  </nav>
+
+  <!-- 1 -->
+  <article class="case" id="late" data-case="late">
+    <div class="case-head">
+      <h3>1. An element that appears late</h3>
+      <button class="ghostbtn" data-rerun type="button">Re-run</button>
+    </div>
+    <p>The greeting renders after a delay of up to four seconds, as if waiting on a session call. A test that looks for it once, straight after load, fails whenever the delay is long.</p>
+    <div class="stage" data-testid="late-stage"></div>
+    <details>
+      <summary>How to handle it</summary>
+<pre><span class="tok-com">// ✗ fragile — checks once, at whatever moment the line runs</span>
+expect(await page.locator('[data-testid=late-message]').count()).toBe(1);
+
+<span class="tok-com">// ✓ Playwright — web-first assertions retry until the timeout</span>
+await expect(page.getByTestId('late-message')).toBeVisible();
+
+<span class="tok-com"># ✓ Selenium — an explicit wait, never time.sleep()</span>
+WebDriverWait(driver, 10).until(
+    EC.visibility_of_element_located((By.CSS_SELECTOR, "[data-testid=late-message]")))</pre>
+    </details>
+  </article>
+
+  <!-- 2 -->
+  <article class="case" id="disabled" data-case="disabled">
+    <div class="case-head">
+      <h3>2. A button that is enabled late</h3>
+      <button class="ghostbtn" data-rerun type="button">Re-run</button>
+    </div>
+    <p>Submit stays disabled until an async check finishes. Selenium clicks a disabled button without complaint — nothing happens, and the failure surfaces three steps later.</p>
+    <div class="stage">
+      <p class="pg-state" data-testid="disabled-check">Checking the address…</p>
+      <button data-testid="disabled-submit" type="button" disabled>Submit</button>
+      <p class="pg-result" data-testid="disabled-result">Not submitted</p>
+    </div>
+    <details>
+      <summary>How to handle it</summary>
+<pre><span class="tok-com">// ✓ Playwright — click() already waits for enabled; assert it to make the intent visible</span>
+const submit = page.getByTestId('disabled-submit');
+await expect(submit).toBeEnabled();
+await submit.click();
+await expect(page.getByTestId('disabled-result')).toHaveText('Submitted');
+
+<span class="tok-com"># ✓ Selenium — element_to_be_clickable checks visible AND enabled</span>
+WebDriverWait(driver, 10).until(
+    EC.element_to_be_clickable((By.CSS_SELECTOR, "[data-testid=disabled-submit]"))).click()</pre>
+    </details>
+  </article>
+
+  <!-- 3 -->
+  <article class="case" id="overlay" data-case="overlay">
+    <div class="case-head">
+      <h3>3. An overlay that swallows the click</h3>
+      <button class="ghostbtn" data-rerun type="button">Re-run</button>
+    </div>
+    <p>The button is visible and enabled the whole time, but a loading veil sits on top of it for a while. Selenium throws <code>ElementClickInterceptedException</code>; a JavaScript click goes through and hides the bug from you.</p>
+    <div class="stage pg-veil-host">
+      <button data-testid="overlay-pay" type="button">Pay now</button>
+      <div class="pg-veil" data-testid="overlay-veil" aria-label="Loading"><span class="pg-spin"></span></div>
+      <p class="pg-result" data-testid="overlay-result">Not paid</p>
+    </div>
+    <details>
+      <summary>How to handle it</summary>
+<pre><span class="tok-com">// ✓ Playwright — actionability checks wait until the button receives events</span>
+await page.getByTestId('overlay-pay').click();
+<span class="tok-com">// state it explicitly when the veil matters to the story</span>
+await expect(page.getByTestId('overlay-veil')).toBeHidden();
+
+<span class="tok-com"># ✓ Selenium — wait for the veil to go, then for the button</span>
+WebDriverWait(driver, 10).until(
+    EC.invisibility_of_element_located((By.CSS_SELECTOR, "[data-testid=overlay-veil]")))
+driver.find_element(By.CSS_SELECTOR, "[data-testid=overlay-pay]").click()
+
+<span class="tok-com"># ✗ never: driver.execute_script("arguments[0].click()", el) — no user could do that</span></pre>
+    </details>
+  </article>
+
+  <!-- 4 -->
+  <article class="case" id="shift" data-case="shift">
+    <div class="case-head">
+      <h3>4. A layout shift under the cursor</h3>
+      <button class="ghostbtn" data-rerun type="button">Re-run</button>
+    </div>
+    <p>Just after the page settles, a second button is inserted <em>above</em> Confirm. A click at remembered coordinates — or on "the first button" — cancels the order instead.</p>
+    <div class="stage">
+      <div class="pg-stack" data-testid="shift-buttons">
+        <button data-testid="shift-confirm" type="button">Confirm order</button>
+      </div>
+      <p class="pg-result" data-testid="shift-result">Nothing chosen</p>
+    </div>
+    <details>
+      <summary>How to handle it</summary>
+<pre><span class="tok-com">// ✗ fragile — position and order are not identity</span>
+await page.locator('[data-testid=shift-buttons] button').first().click();
+const box = await confirm.boundingBox(); <span class="tok-com">/* …later… */</span> await page.mouse.click(box.x, box.y);
+
+<span class="tok-com">// ✓ find it by what the user reads, at the moment of the click</span>
+await page.getByRole('button', { name: 'Confirm order' }).click();
+await expect(page.getByTestId('shift-result')).toHaveText('Order confirmed');
+
+<span class="tok-com"># ✓ Selenium</span>
+driver.find_element(By.XPATH, "//button[normalize-space()='Confirm order']").click()</pre>
+    </details>
+  </article>
+
+  <!-- 5 -->
+  <article class="case" id="stale" data-case="stale">
+    <div class="case-head">
+      <h3>5. A list that re-renders under you</h3>
+      <button class="ghostbtn" data-rerun type="button">Re-run</button>
+    </div>
+    <p>The rows look identical, but in flaky mode they are thrown away and rebuilt every second or two, like a poll-and-replace table. A stored reference points at a node that is no longer in the page.</p>
+    <div class="stage">
+      <ul class="pg-rows" data-testid="stale-rows"></ul>
+      <p class="pg-result" data-testid="stale-result">No one selected</p>
+      <p class="pg-state" data-testid="stale-renders">Rendered 0 times</p>
+    </div>
+    <details>
+      <summary>How to handle it</summary>
+<pre><span class="tok-com"># ✗ Selenium — the handle is found once and reused after a re-render</span>
+row = driver.find_element(By.XPATH, "//li[contains(., 'Ervin')]")
+time.sleep(2)
+row.find_element(By.TAG_NAME, "button").click()   <span class="tok-com"># StaleElementReferenceException</span>
+
+<span class="tok-com"># ✓ Selenium — look it up inside the wait, so a stale lookup is simply retried</span>
+WebDriverWait(driver, 10, ignored_exceptions=[StaleElementReferenceException]).until(
+    lambda d: d.find_element(By.XPATH, "//li[contains(., 'Ervin')]//button").click() or True)
+
+<span class="tok-com">// ✓ Playwright — a Locator re-resolves on every action; an ElementHandle does not</span>
+await page.getByRole('listitem').filter({ hasText: 'Ervin' }).getByRole('button').click();
+<span class="tok-com">// ✗ const handle = await page.$('li:has-text("Ervin") button');  — goes stale too</span></pre>
+    </details>
+  </article>
+
+  <!-- 6 -->
+  <article class="case" id="text" data-case="text">
+    <div class="case-head">
+      <h3>6. Text that is already true too early</h3>
+      <button class="ghostbtn" data-rerun type="button">Re-run</button>
+    </div>
+    <p>The status reads "All changes saved" before you click Save — left over from last time. After the click it keeps saying so for a moment, then "Saving…", then "All changes saved" again. Asserting the text passes before anything was saved.</p>
+    <div class="stage">
+      <button data-testid="text-save" type="button">Save</button>
+      <p class="pg-result" data-testid="text-status">All changes saved</p>
+      <p class="pg-state" data-testid="text-count">Saved 0 times</p>
+    </div>
+    <details>
+      <summary>How to handle it</summary>
+<pre><span class="tok-com">// ✗ passes immediately — the text was already there</span>
+await page.getByTestId('text-save').click();
+await expect(page.getByTestId('text-status')).toHaveText('All changes saved');
+
+<span class="tok-com">// ✓ wait for something only the new save can produce</span>
+await page.getByTestId('text-save').click();
+await expect(page.getByTestId('text-count')).toHaveText('Saved 1 time');
+<span class="tok-com">// or watch the transition: "Saving…" must appear, then disappear</span>
+await expect(page.getByTestId('text-status')).toHaveText('Saving…');
+await expect(page.getByTestId('text-status')).toHaveText('All changes saved');</pre>
+    </details>
+  </article>
+
+  <!-- 7 -->
+  <article class="case" id="toast" data-case="toast">
+    <div class="case-head">
+      <h3>7. A toast that is gone before you look</h3>
+      <button class="ghostbtn" data-rerun type="button">Re-run</button>
+    </div>
+    <p>The confirmation shows up after a short delay and stays for about a second and a half. Sleep two seconds "to be safe" and you have slept straight past it.</p>
+    <div class="stage">
+      <button data-testid="toast-copy" type="button">Copy link</button>
+      <div class="pg-toasts" data-testid="toast-area" aria-live="polite"></div>
+    </div>
+    <details>
+      <summary>How to handle it</summary>
+<pre><span class="tok-com">// ✗ fragile — a fixed sleep is both too long and too short</span>
+await page.waitForTimeout(2000);
+expect(await page.getByTestId('toast').isVisible()).toBe(true);
+
+<span class="tok-com">// ✓ start polling straight away; the assertion catches it while it is up</span>
+await page.getByTestId('toast-copy').click();
+await expect(page.getByTestId('toast')).toHaveText('Link copied');
+await expect(page.getByTestId('toast')).toBeHidden();   <span class="tok-com">// and that it goes away</span>
+
+<span class="tok-com"># ✓ Selenium — a short poll interval so a brief element is not missed</span>
+WebDriverWait(driver, 5, poll_frequency=0.1).until(
+    EC.text_to_be_present_in_element((By.CSS_SELECTOR, "[data-testid=toast]"), "Link copied"))</pre>
+    </details>
+  </article>
+
+  <!-- 8 -->
+  <article class="case" id="shuffle" data-case="shuffle">
+    <div class="case-head">
+      <h3>8. A list in a different order every time</h3>
+      <button class="ghostbtn" data-rerun type="button">Re-run</button>
+    </div>
+    <p>Recommendations, search results, anything sorted by a score: the same items, never the same order. <code>nth(2)</code> is the keyboard on your machine and the monitor in CI.</p>
+    <div class="stage">
+      <ul class="pg-rows" data-testid="shuffle-list"></ul>
+      <p class="pg-result" data-testid="shuffle-result">Cart is empty</p>
+    </div>
+    <details>
+      <summary>How to handle it</summary>
+<pre><span class="tok-com">// ✗ fragile — index is not identity</span>
+await page.getByRole('listitem').nth(2).getByRole('button').click();
+
+<span class="tok-com">// ✓ filter the row by its content, then act inside it</span>
+await page.getByTestId('shuffle-list').getByRole('listitem')
+  .filter({ hasText: 'Keyboard' }).getByRole('button', { name: 'Add' }).click();
+await expect(page.getByTestId('shuffle-result')).toHaveText('Cart: Keyboard');
+
+<span class="tok-com"># ✓ Selenium</span>
+driver.find_element(By.XPATH,
+    "//*[@data-testid='shuffle-list']/li[contains(., 'Keyboard')]//button").click()</pre>
+    </details>
+  </article>
+
+  <!-- 9 -->
+  <article class="case" id="dynid" data-case="dynid">
+    <div class="case-head">
+      <h3>9. IDs and classes that change every build</h3>
+      <button class="ghostbtn" data-rerun type="button">Re-run</button>
+    </div>
+    <p>CSS-in-JS and component libraries generate these. The recorder happily writes <code>#btn-8f3a2</code> into your test, and the next deploy renames it.</p>
+    <div class="stage">
+      <button data-testid="dynid-button" type="button">Download invoice</button>
+      <p class="pg-state mono" data-testid="dynid-attrs"></p>
+      <p class="pg-result" data-testid="dynid-result">Not downloaded</p>
+    </div>
+    <details>
+      <summary>How to handle it</summary>
+<pre><span class="tok-com">// ✗ fragile — generated names</span>
+await page.locator('#btn-8f3a2').click();
+await page.locator('.css-1x9kq2 > button').click();
+
+<span class="tok-com">// ✓ in order of preference: role + name, a test id you own, then label/text</span>
+await page.getByRole('button', { name: 'Download invoice' }).click();
+await page.getByTestId('dynid-button').click();
+
+<span class="tok-com"># ✓ Selenium — a prefix match if the stable part is all you have</span>
+driver.find_element(By.CSS_SELECTOR, "[id^='btn-']")      <span class="tok-com"># last resort</span>
+driver.find_element(By.CSS_SELECTOR, "[data-testid=dynid-button]")</pre>
+    </details>
+  </article>
+
+  <!-- 10 -->
+  <article class="case" id="animate" data-case="animate">
+    <div class="case-head">
+      <h3>10. A target that is still moving</h3>
+      <button class="ghostbtn" data-rerun type="button">Re-run</button>
+    </div>
+    <p>The panel slides in over a second and a bit. Clicking the moment it exists hits the point where the button <em>was</em> when the click was computed.</p>
+    <div class="stage pg-drawer-host">
+      <div class="pg-drawer" data-testid="animate-drawer" data-state="closed">
+        <span>Unsaved changes</span>
+        <button data-testid="animate-discard" type="button">Discard</button>
+      </div>
+      <p class="pg-result" data-testid="animate-result">Nothing discarded</p>
+    </div>
+    <details>
+      <summary>How to handle it</summary>
+<pre><span class="tok-com">// ✓ Playwright — click() waits for the element to be stable (same box two frames running)</span>
+await page.getByTestId('animate-discard').click();
+
+<span class="tok-com">// when the app exposes it, wait for the state it ends in</span>
+await expect(page.getByTestId('animate-drawer')).toHaveAttribute('data-state', 'open');
+
+<span class="tok-com"># ✓ Selenium — nothing waits for motion for you; wait for the end state</span>
+WebDriverWait(driver, 5).until(lambda d: d.find_element(
+    By.CSS_SELECTOR, "[data-testid=animate-drawer]").get_attribute("data-state") == "open")
+
+<span class="tok-com">// ✓ or turn animation off for the whole run</span>
+await page.emulateMedia({ reducedMotion: 'reduce' });   <span class="tok-com">// this page honours it</span></pre>
+    </details>
+  </article>
+
+  <!-- 11 -->
+  <article class="case" id="network" data-case="network">
+    <div class="case-head">
+      <h3>11. Content behind a flaky API</h3>
+      <button class="ghostbtn" data-rerun type="button">Re-run</button>
+    </div>
+    <p>This one makes a real call to <code id="network-url" data-testid="network-url">/v1/users/1</code>. In flaky mode it asks the API for up to two seconds of latency and, four times in ten, a 503 — so sometimes you get the user and sometimes the error state. A test that only knows about one of them is a coin toss.</p>
+    <div class="stage">
+      <div class="pg-card" data-testid="network-card" aria-busy="true"></div>
+    </div>
+    <details>
+      <summary>How to handle it</summary>
+<pre><span class="tok-com">// ✗ fragile — assumes the happy path</span>
+await expect(page.getByTestId('network-name')).toHaveText('Leanne Graham');
+
+<span class="tok-com">// ✓ decide the outcome yourself: the page forwards chaos controls to the API</span>
+await page.goto('/uiPlayground?_status=503#network');
+await expect(page.getByTestId('network-error')).toBeVisible();
+await page.goto('/uiPlayground?_delay=3000#network');
+await expect(page.getByTestId('network-skeleton')).toBeVisible();
+
+<span class="tok-com">// ✓ test the retry: fail twice, then recover (create the id with POST /v1/scenario)</span>
+await page.goto('/uiPlayground?_scenario=' + id + '#network');
+await page.getByRole('button', { name: 'Retry' }).click();   <span class="tok-com">// until it recovers</span>
+
+<span class="tok-com">// ✓ or intercept it in the test</span>
+await page.route('**/v1/users/1*', r => r.fulfill({ status: 500, body: '{}' }));</pre>
+    </details>
+  </article>
+
+  <!-- 12 -->
+  <article class="case" id="scroll" data-case="scroll">
+    <div class="case-head">
+      <h3>12. An item that only exists after you scroll</h3>
+      <button class="ghostbtn" data-rerun type="button">Re-run</button>
+    </div>
+    <p>Ten rows are loaded; ten more arrive after a delay whenever you reach the bottom. <strong>Row 27</strong> is not hidden — it is not in the DOM at all until the third page loads, so no amount of waiting finds it.</p>
+    <div class="stage">
+      <ol class="pg-feed" data-testid="scroll-feed" tabindex="0" aria-label="Feed"></ol>
+      <p class="pg-state" data-testid="scroll-count">0 rows loaded</p>
+    </div>
+    <details>
+      <summary>How to handle it</summary>
+<pre><span class="tok-com">// ✓ Playwright — scroll, wait for the next page, repeat until it exists</span>
+const feed = page.getByTestId('scroll-feed');
+const target = feed.getByText('Row 27', { exact: true });
+while (await target.count() === 0) {
+  const before = await feed.locator('li').count();
+  await feed.evaluate(el => el.scrollTo(0, el.scrollHeight));
+  await expect(feed.locator('li')).not.toHaveCount(before);   <span class="tok-com">// the next page arrived</span>
+}
+await target.scrollIntoViewIfNeeded();
+
+<span class="tok-com"># ✓ Selenium — the same loop</span>
+feed = driver.find_element(By.CSS_SELECTOR, "[data-testid=scroll-feed]")
+while not driver.find_elements(By.XPATH, "//li[.='Row 27']"):
+    n = len(feed.find_elements(By.TAG_NAME, "li"))
+    driver.execute_script("arguments[0].scrollTo(0, arguments[0].scrollHeight)", feed)
+    WebDriverWait(driver, 10).until(lambda d: len(feed.find_elements(By.TAG_NAME, "li")) > n)</pre>
+    </details>
+  </article>
+
+  <!-- 13 -->
+  <article class="case" id="search" data-case="search">
+    <div class="case-head">
+      <h3>13. Search results that lag the input</h3>
+      <button class="ghostbtn" data-rerun type="button">Re-run</button>
+    </div>
+    <p>The box waits for you to stop typing, then fetches. In flaky mode responses come back out of order, so for a moment the list can show results for an older query. Counting rows right after typing counts the wrong list.</p>
+    <div class="stage">
+      <input type="search" data-testid="search-input" aria-label="Search people" placeholder="Search people…">
+      <ul class="pg-rows" data-testid="search-results" data-query=""></ul>
+    </div>
+    <details>
+      <summary>How to handle it</summary>
+<pre><span class="tok-com">// ✗ fragile — reads the list before it caught up</span>
+await page.getByTestId('search-input').fill('clem');
+expect(await page.getByTestId('search-results').locator('li').count()).toBe(2);
+
+<span class="tok-com">// ✓ assert the final content; the assertion retries until it holds</span>
+await page.getByTestId('search-input').fill('clem');
+await expect(page.getByTestId('search-results').locator('li'))
+  .toHaveText(['Clementine Bauch', 'Clementina DuBuque']);
+
+<span class="tok-com">// ✓ or wait for the app to say which query it is showing</span>
+await expect(page.getByTestId('search-results')).toHaveAttribute('data-query', 'clem');</pre>
+    </details>
+  </article>
+
+  <!-- 14 -->
+  <article class="case" id="shadow" data-case="shadow">
+    <div class="case-head">
+      <h3>14. A button inside a shadow root</h3>
+      <button class="ghostbtn" data-rerun type="button">Re-run</button>
+    </div>
+    <p>Web components keep their markup in a shadow root. It shows up late here too, because the component registers after a delay. XPath cannot see into it at all.</p>
+    <div class="stage">
+      <flaky-subscribe data-testid="shadow-host"></flaky-subscribe>
+      <p class="pg-result" data-testid="shadow-result">Not subscribed</p>
+    </div>
+    <details>
+      <summary>How to handle it</summary>
+<pre><span class="tok-com">// ✓ Playwright — CSS, role and text locators pierce open shadow roots already</span>
+await page.getByRole('button', { name: 'Subscribe' }).click();
+<span class="tok-com">// ✗ XPath does not: page.locator('//button[.="Subscribe"]') never matches</span>
+
+<span class="tok-com"># ✓ Selenium 4 — go through the host's shadow_root, inside a wait</span>
+def subscribe_button(d):
+    host = d.find_element(By.CSS_SELECTOR, "[data-testid=shadow-host]")
+    return host.shadow_root.find_element(By.CSS_SELECTOR, "button")
+WebDriverWait(driver, 10, ignored_exceptions=[NoSuchShadowRootException]).until(subscribe_button).click()</pre>
+    </details>
+  </article>
+
+  <section>
+    <h2>The rules underneath all fourteen</h2>
+    <p><strong>Wait for a condition, never for a duration.</strong> A sleep is too short on a slow CI runner and wasted time everywhere else.</p>
+    <p><strong>Find elements by what the user perceives</strong> — role, label, text — or by a test id you own. Not position, not generated names.</p>
+    <p><strong>Look elements up at the moment you use them.</strong> A stored reference is a snapshot of a page that keeps changing.</p>
+    <p><strong>Wait for evidence that is new.</strong> If the thing you are waiting for could already be true, you are not waiting for anything.</p>
+    <p><strong>Choose the outcome instead of hoping for one.</strong> A test that depends on the network going one way is two tests pretending to be one — force each branch. That is what the <a href="/">flaky API</a> is for.</p>
+  </section>
+
+  <footer>
+    <p class="m-0">
+      Every element has a <code>data-testid</code>. No signup, no cookies.
+      <a href="/">Mock API</a> ·
+      <a href="/privacy">Privacy &amp; contact</a> ·
+      <a href="https://github.com/errohitrana2013/flaky">Source</a>
+    </p>
+  </footer>
+
+</div>
+
+<script src="/playground.js" defer></script>
+<script src="/dwell.js" defer></script>
+</body>
+</html>

@@ -1,0 +1,102 @@
+/* Layered on app.css and custom.css (tabs, .hint, .ghostbtn). The flaky UI
+   playground at /uiPlayground.
+
+   Also loaded inside the <flaky-subscribe> shadow root: the CSP's style-src
+   'self' blocks an inline <style> there as much as anywhere, so the component
+   links this file rather than carrying its own rules. */
+
+.pg-controls { padding: 24px 0; }
+.pg-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 12px 16px; margin-bottom: 12px; font-size: 13px; color: var(--muted); }
+.pg-bar .ctl input { width: 110px; }
+
+.pg-toc { display: flex; flex-wrap: wrap; gap: 6px; padding: 0 0 32px; }
+.pg-toc a {
+  font-size: 12.5px; text-decoration: none; color: var(--ink);
+  border: 1px solid var(--line); border-radius: 99px; padding: 4px 10px;
+}
+.pg-toc a:hover { border-color: var(--accent); color: var(--accent); }
+
+.case { padding: 32px 0; border-top: 1px solid var(--line); scroll-margin-top: 12px; }
+.case-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
+.case-head h3 { margin: 0; }
+.case > p { margin: 8px 0 14px; }
+
+.stage {
+  position: relative; min-height: 92px;
+  background: var(--panel); border: 1px dashed var(--line); border-radius: 12px;
+  padding: 16px; display: flex; flex-direction: column; align-items: flex-start; gap: 10px;
+}
+.stage p { margin: 0; }
+.pg-result { font-weight: 600; color: var(--ink); }
+.pg-result.ok { color: var(--ok); }
+.pg-result.bad { color: var(--accent); }
+.pg-state { font-size: 13px; color: var(--muted); }
+
+details { margin-top: 12px; }
+summary { cursor: pointer; font-size: 14px; font-weight: 600; color: var(--accent); }
+details pre { margin-top: 10px; }
+
+/* 3 — the veil covers the button but not the result line under it. */
+.pg-veil-host .pg-veil {
+  position: absolute; left: 8px; top: 8px; width: 150px; height: 56px;
+  display: flex; align-items: center; justify-content: center;
+  background: color-mix(in srgb, var(--panel) 80%, transparent); border-radius: 10px;
+}
+.pg-veil[hidden] { display: none; }
+.pg-spin {
+  width: 18px; height: 18px; border-radius: 50%;
+  border: 2px solid var(--line); border-top-color: var(--accent);
+  animation: pg-spin .8s linear infinite;
+}
+@keyframes pg-spin { to { transform: rotate(360deg); } }
+
+.pg-stack { display: flex; flex-direction: column; gap: 8px; }
+.pg-stack .danger { background: var(--ink); color: var(--bg); }
+
+.pg-rows { list-style: none; margin: 0; padding: 0; width: 100%; max-width: 420px; }
+.pg-rows li {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  padding: 7px 0; border-bottom: 1px solid var(--line); font-size: 14.5px;
+}
+.pg-rows li button { padding: 6px 12px; }
+
+.pg-toasts { min-height: 40px; }
+.pg-toast {
+  background: var(--ink); color: var(--bg); padding: 9px 14px; border-radius: 8px;
+  font-size: 14px; animation: pg-pop .15s ease-out;
+}
+@keyframes pg-pop { from { opacity: 0; transform: translateY(4px); } }
+
+/* 10 — the drawer slides across; data-state says where it is. */
+.pg-drawer-host { overflow: hidden; }
+.pg-drawer {
+  display: flex; align-items: center; gap: 14px;
+  background: var(--accent-soft); border: 1px solid var(--line); border-radius: 10px; padding: 10px 14px;
+  transform: translateX(110vw); transition: transform 1.3s cubic-bezier(.3,.7,.2,1);
+}
+.pg-drawer[data-state="opening"], .pg-drawer[data-state="open"] { transform: none; }
+.pg-drawer.instant { transition: none; }
+
+.pg-card { min-height: 60px; width: 100%; max-width: 420px; }
+.pg-skeleton { height: 14px; border-radius: 6px; background: var(--line); margin: 6px 0; animation: pg-pulse 1s ease-in-out infinite alternate; }
+.pg-skeleton.short { width: 55%; }
+@keyframes pg-pulse { to { opacity: .45; } }
+.pg-card .name { font-weight: 600; color: var(--ink); margin: 0; }
+.pg-card .err { color: var(--accent); margin: 0 0 8px; }
+
+.pg-feed {
+  width: 100%; max-width: 420px; height: 180px; overflow-y: auto; margin: 0;
+  padding: 0 0 0 34px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg);
+}
+.pg-feed li { padding: 6px 0; border-bottom: 1px solid var(--line); font-size: 14px; }
+.pg-feed li.loading { color: var(--muted); list-style: none; margin-left: -34px; text-align: center; }
+
+.stage input[type="search"] { width: 100%; max-width: 420px; font-size: 14px; }
+
+/* 14 — inside the shadow root */
+.pg-sub { display: flex; align-items: center; gap: 10px; font-size: 14px; color: var(--muted); }
+
+@media (prefers-reduced-motion: reduce) {
+  .pg-drawer { transition: none; }
+  .pg-spin, .pg-skeleton, .pg-toast { animation: none; }
+}
