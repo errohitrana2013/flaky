@@ -170,7 +170,7 @@ driver.find_element(By.CSS_SELECTOR, "[data-testid=overlay-pay]").click()
       <h3>4. A layout shift under the cursor</h3>
       <button class="ghostbtn" data-rerun type="button">Re-run</button>
     </div>
-    <p>Just after the page settles, a second button is inserted <em>above</em> Confirm. A click at remembered coordinates — or on "the first button" — cancels the order instead.</p>
+    <p>Just after the page settles, a second button is inserted <em>above</em> Confirm. A click at remembered coordinates — or on "the first button" — cancels the order instead. In stable mode both buttons are there from the start: nothing moves, but position still isn't identity.</p>
     <div class="stage">
       <div class="pg-stack" data-testid="shift-buttons">
         <button data-testid="shift-confirm" type="button">Confirm order</button>
