@@ -85,9 +85,18 @@ export async function getStats(ctx) {
        FROM daily_visitors WHERE day >= ? GROUP BY day ORDER BY day`
     ).bind(since).all(),
 
+    // Sign-ups from outside only. The operator's own key and anything on a
+    // reserved example domain (RFC 2606, where test runs sign up) made the tile
+    // read 3 when one person had signed up. The operator address is a secret
+    // rather than a literal because the repo is public.
     ctx.env.DB.prepare(
-      "SELECT COUNT(*) AS count FROM api_keys WHERE revoked = 0 AND created_at >= ?"
-    ).bind(Date.now() - days * 86400000).first(),
+      `SELECT COUNT(*) AS count FROM api_keys
+       WHERE revoked = 0 AND created_at >= ?
+         AND lower(email) != lower(?)
+         AND lower(email) NOT LIKE '%@example.com'
+         AND lower(email) NOT LIKE '%@example.org'
+         AND lower(email) NOT LIKE '%@example.net'`
+    ).bind(Date.now() - days * 86400000, ctx.env.OPERATOR_EMAIL || "").first(),
 
     ctx.env.DB.prepare(
       `SELECT key_id, SUM(requests) AS requests
