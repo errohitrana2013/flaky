@@ -114,53 +114,6 @@ async function send() {
 $("send").addEventListener("click", send);
 $("path").addEventListener("keydown", (e) => { if (e.key === "Enter") send(); });
 
-// What each method does at each kind of URL. The methods themselves come from
-// /v1/meta, so this can only describe ones the API accepts; the words are the
-// page's own.
-const DOES = {
-  collection: { GET: "List them, with filters, search, sorting and paging", POST: "Create one" },
-  record: { GET: "Get it", PUT: "Replace it with the body you send", PATCH: "Change only the fields you send", DELETE: "Delete it" },
-  nested: { GET: "List its {child}", POST: "Create one of its {child}" },
-};
-
-// Shown once, not repeated on every resource row: the methods are the same for
-// all of them, and a column saying so seven times read as if each one differed.
-function renderMethods(meta) {
-  // Real URLs rather than :id placeholders, from a resource that has nested
-  // routes so all three kinds can be shown.
-  const example = meta.resources.find((r) => r.nested.length) || meta.resources[0];
-  const nested = example.nested[0]?.replace(":id", "1");
-  const child = nested?.split("/").pop();
-  const urls = [["collection", example.url], ["record", `${example.url}/1`], ...(nested ? [["nested", nested]] : [])];
-
-  $("methods").querySelector("tbody").innerHTML = urls
-    .map(([shape, url]) => meta.methods[shape]
-      .map((method, i) => `<tr>
-        ${i === 0 ? `<td class="mono" rowspan="${meta.methods[shape].length}"><a href="${url}">${url}</a></td>` : ""}
-        <td><span class="verb">${method}</span></td>
-        <td>${(DOES[shape][method] || "").replace("{child}", child)}</td>
-      </tr>`)
-      .join(""))
-    .join("");
-}
-
-function renderResources(meta) {
-  $("resources").querySelector("tbody").innerHTML = meta.resources
-    .map((r) => `<tr>
-      <td class="mono"><a href="/v1/${r.name}">/v1/${r.name}</a></td>
-      <td class="num">${r.count.toLocaleString()}</td>
-      <td class="mono muted">${r.nested.join("<br>") || "—"}</td>
-    </tr>`)
-    .join("");
-}
-
-// Both tables are rendered from /v1/meta so they can never drift from the
-// actual dataset, or from the methods the API really accepts.
-fetch("/v1/meta", { headers: ownerHeaders() })
-  .then((r) => r.json())
-  .then((meta) => { renderMethods(meta); renderResources(meta); })
-  .catch(() => {
-    for (const id of ["methods", "resources"]) {
-      $(id).querySelector("tbody").innerHTML = '<tr><td colspan="3" class="muted">Could not reach /v1/meta.</td></tr>';
-    }
-  });
+// The resource and method tables are written into index.html by
+// scripts/bake-tables.mjs, so crawlers that do not run JavaScript see them too.
+// npm test fails if they fall out of step with /v1/meta.

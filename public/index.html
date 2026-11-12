@@ -181,13 +181,30 @@ GET /v1/posts?_cors=off</pre>
     <div class="scroll-x mt-16">
       <table id="methods">
         <thead><tr><th>URL</th><th>Method</th><th>What it does</th></tr></thead>
-        <tbody><tr><td colspan="3" class="muted">Loading…</td></tr></tbody>
+        <tbody>
+          <tr><td class="mono" rowspan="2"><a href="/v1/users">/v1/users</a></td><td><span class="verb">GET</span></td><td>List them, with filters, search, sorting and paging</td></tr>
+          <tr><td><span class="verb">POST</span></td><td>Create one</td></tr>
+          <tr><td class="mono" rowspan="4"><a href="/v1/users/1">/v1/users/1</a></td><td><span class="verb">GET</span></td><td>Get it</td></tr>
+          <tr><td><span class="verb">PUT</span></td><td>Replace it with the body you send</td></tr>
+          <tr><td><span class="verb">PATCH</span></td><td>Change only the fields you send</td></tr>
+          <tr><td><span class="verb">DELETE</span></td><td>Delete it</td></tr>
+          <tr><td class="mono" rowspan="2"><a href="/v1/users/1/posts">/v1/users/1/posts</a></td><td><span class="verb">GET</span></td><td>List its posts</td></tr>
+          <tr><td><span class="verb">POST</span></td><td>Create one of its posts</td></tr>
+        </tbody>
       </table>
     </div>
     <div class="scroll-x mt-20">
       <table id="resources">
         <thead><tr><th>Resource</th><th>Rows</th><th>Nested</th></tr></thead>
-        <tbody><tr><td colspan="3" class="muted">Loading…</td></tr></tbody>
+        <tbody>
+          <tr><td class="mono"><a href="/v1/users">/v1/users</a></td><td class="num">10</td><td class="mono muted">/v1/users/:id/posts<br>/v1/users/:id/albums<br>/v1/users/:id/todos</td></tr>
+          <tr><td class="mono"><a href="/v1/posts">/v1/posts</a></td><td class="num">100</td><td class="mono muted">/v1/posts/:id/comments</td></tr>
+          <tr><td class="mono"><a href="/v1/comments">/v1/comments</a></td><td class="num">500</td><td class="mono muted">—</td></tr>
+          <tr><td class="mono"><a href="/v1/albums">/v1/albums</a></td><td class="num">100</td><td class="mono muted">/v1/albums/:id/photos</td></tr>
+          <tr><td class="mono"><a href="/v1/photos">/v1/photos</a></td><td class="num">1,000</td><td class="mono muted">—</td></tr>
+          <tr><td class="mono"><a href="/v1/todos">/v1/todos</a></td><td class="num">200</td><td class="mono muted">—</td></tr>
+          <tr><td class="mono"><a href="/v1/products">/v1/products</a></td><td class="num">100</td><td class="mono muted">—</td></tr>
+        </tbody>
       </table>
     </div>
     <div class="note mt-20">
