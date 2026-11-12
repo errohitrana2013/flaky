@@ -19,6 +19,7 @@
 <meta name="twitter:description" content="Real data at real URLs, like every other fake API. The difference: you decide how it behaves. Force a 503, add latency, or make a third of requests fail — from the query string.">
 <meta name="twitter:image" content="https://flakyapi.dev/og.png">
 <link rel="canonical" href="https://flakyapi.dev/">
+<link rel="service-desc" href="/v1/openapi.json" type="application/json">
 <link rel="icon" href="/favicon.svg" type="image/svg+xml">
 <link rel="alternate icon" href="/favicon.ico" sizes="32x32">
 <link rel="apple-touch-icon" href="/favicon.png">
@@ -214,16 +215,16 @@ GET /v1/posts/1/comments                  <span class="tok-com"># nested</span><
       loses an afternoon to it. When you need writes that persist, take a sandbox.
     </p>
     <pre><span class="tok-com"># 1. a free key (no confirmation email)</span>
-curl -X POST <span class="host">https://flaky.dev</span>/v1/keys \
+curl -X POST <span class="host">https://flakyapi.dev</span>/v1/keys \
   -H 'content-type: application/json' \
   -d '{"email":"you@example.com"}'
 
 <span class="tok-com"># 2. a sandbox — your own writable copy, 24 hours</span>
-curl -X POST <span class="host">https://flaky.dev</span>/v1/sandbox \
+curl -X POST <span class="host">https://flakyapi.dev</span>/v1/sandbox \
   -H 'authorization: Bearer flk_...'
 
 <span class="tok-com"># 3. write to it. this one is real.</span>
-curl -X POST <span class="host">https://flaky.dev</span>/v1/sandbox/&lt;id&gt;/posts \
+curl -X POST <span class="host">https://flakyapi.dev</span>/v1/sandbox/&lt;id&gt;/posts \
   -H 'content-type: application/json' \
   -d '{"title":"this persists"}'</pre>
     <p class="mt-16">

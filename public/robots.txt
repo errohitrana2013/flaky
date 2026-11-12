@@ -8,13 +8,17 @@ User-agent: *
 # Admin-token gated and useless without it, but there is no reason for it
 # to appear in a search result.
 Disallow: /dashboard
+Disallow: /insights
 Disallow: /v1/admin/
 
 # The API itself. Indexing thousands of near-identical JSON responses
 # would bury the pages that actually explain what this is.
+# Except the two documents that describe it, which llms.txt points agents at.
+# The longer path wins, so these override the Disallow above.
 Disallow: /v1/
+Allow: /v1/openapi.json
+Allow: /v1/meta
 
 Allow: /
 
 Sitemap: https://flakyapi.dev/sitemap.xml
-Disallow: /insights
