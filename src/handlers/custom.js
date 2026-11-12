@@ -1,5 +1,5 @@
 import { json, fail, echo } from "../lib/response.js";
-import { queryCollection, pageHeaders } from "../lib/query.js";
+import { queryCollection, pageHeaders, selectFields } from "../lib/query.js";
 import { today } from "../lib/hash.js";
 import { TIERS, MAX_CUSTOM_BYTES, DAY_MS, CUSTOM_DEFAULT_DAYS, CUSTOM_MAX_DAYS, CUSTOM_PER_IP_PER_DAY } from "../config/tiers.js";
 import { CUSTOM_EXAMPLE } from "../config/example.js";
@@ -187,7 +187,7 @@ export async function readCustom(ctx) {
   if (recordId) {
     const found = rows.find((row) => String(row?.id) === recordId);
     return found
-      ? json(found, { headers: cache })
+      ? json(selectFields(found, ctx.query), { headers: cache })
       : fail(404, `No ${echo(resource)} with id ${echo(recordId)}`, "Records need an `id` field to be addressable.");
   }
 

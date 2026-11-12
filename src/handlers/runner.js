@@ -159,7 +159,10 @@ const server = createServer(async (req, res) => {
 
   if (id) {
     const found = rows.find((row) => String(row?.id) === id);
-    return found ? send(res, 200, found) : fail(res, 404, \`No \${resource} with id \${id}\`);
+    if (!found) return fail(res, 404, \`No \${resource} with id \${id}\`);
+    // _select applies to one record as it does to a list.
+    const select = params.has("_select") ? query([found], new URLSearchParams({ _select: params.get("_select") })).rows[0] : found;
+    return send(res, 200, select);
   }
 
   const page = query(rows, params);
@@ -335,7 +338,12 @@ class Handler(BaseHTTPRequestHandler):
 
         if len(parts) > 1:
             found = next((r for r in DB[resource] if as_text(r.get("id")) == parts[1]), None)
-            return self._send(200, found) if found else self._fail(404, "No %s with id %s" % (resource, parts[1]))
+            if not found:
+                return self._fail(404, "No %s with id %s" % (resource, parts[1]))
+            # _select applies to one record as it does to a list.
+            if "_select" in params:
+                found = query([found], {"_select": params["_select"]})[0][0]
+            return self._send(200, found)
 
         rows, total = query(DB[resource], params)
         body = dumps(rows)
@@ -661,7 +669,14 @@ ${embedChunks(data)}
       String id = parts.get(1);
       for (Object item : rows) {
         if (text(row(item).get("id")).equals(id)) {
-          send(exchange, 200, Json.write(item), null);
+          // _select applies to one record as it does to a list.
+          Object shaped = item;
+          if (params.containsKey("_select")) {
+            Map<String, String> only = new LinkedHashMap<String, String>();
+            only.put("_select", params.get("_select"));
+            shaped = query(new ArrayList<Object>(Collections.singletonList(item)), only).rows.get(0);
+          }
+          send(exchange, 200, Json.write(shaped), null);
           return;
         }
       }
@@ -1056,6 +1071,12 @@ async Task Handle(HttpListenerContext context)
             return;
         }
 
+        // _select applies to one record as it does to a list.
+        if (query.ContainsKey("_select"))
+        {
+            var only = new Dictionary<string, string> { ["_select"] = query["_select"] };
+            found = Query(new JsonArray(found.DeepClone()), only).rows[0]!;
+        }
         await Send(context, 200, Fmt.Write(found));
         return;
     }

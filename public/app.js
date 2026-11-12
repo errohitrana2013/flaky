@@ -49,15 +49,22 @@ const EXAMPLES = {
 };
 const edited = { path: false, body: false };
 
-$("path").addEventListener("input", () => { edited.path = true; });
-$("req-body").addEventListener("input", () => { edited.body = true; });
+// The try-it box is on the landing page only. /docs/jsonplaceholder loads this
+// file for the .host rewrite above, and wiring a box that is not there threw
+// on every visit to it.
+const hasTryIt = Boolean($("send"));
 
-$("method").addEventListener("change", () => {
-  const example = EXAMPLES[$("method").value];
-  if (!edited.path) $("path").value = example.path;
-  if (!edited.body) $("req-body").value = example.body ? JSON.stringify(example.body, null, 2) : "";
-  $("req-body-wrap").hidden = !example.body;
-});
+if (hasTryIt) {
+  $("path").addEventListener("input", () => { edited.path = true; });
+  $("req-body").addEventListener("input", () => { edited.body = true; });
+
+  $("method").addEventListener("change", () => {
+    const example = EXAMPLES[$("method").value];
+    if (!edited.path) $("path").value = example.path;
+    if (!edited.body) $("req-body").value = example.body ? JSON.stringify(example.body, null, 2) : "";
+    $("req-body-wrap").hidden = !example.body;
+  });
+}
 
 async function send() {
   const method = $("method").value;
@@ -111,8 +118,10 @@ async function send() {
   }
 }
 
-$("send").addEventListener("click", send);
-$("path").addEventListener("keydown", (e) => { if (e.key === "Enter") send(); });
+if (hasTryIt) {
+  $("send").addEventListener("click", send);
+  $("path").addEventListener("keydown", (e) => { if (e.key === "Enter") send(); });
+}
 
 // The resource and method tables are written into index.html by
 // scripts/bake-tables.mjs, so crawlers that do not run JavaScript see them too.

@@ -1,7 +1,7 @@
 import { DATA, RESOURCES } from "../data/index.js";
 import { RELATIONS, childrenOf } from "../data/relations.js";
 import { json, fail, echo } from "../lib/response.js";
-import { queryCollection, pageHeaders } from "../lib/query.js";
+import { queryCollection, pageHeaders, selectFields } from "../lib/query.js";
 import { wrongMethod } from "../lib/allow.js";
 import { TIERS } from "../config/tiers.js";
 import { READ_CACHE_SECONDS } from "../config/constants.js";
@@ -44,7 +44,7 @@ export function readResource(ctx) {
 
   if (id) {
     const found = DATA[resource].find((row) => String(row.id) === id);
-    return found ? json(found, { headers: cache }) : noRecord(resource, id);
+    return found ? json(selectFields(found, ctx.query), { headers: cache }) : noRecord(resource, id);
   }
 
   const page = queryCollection(DATA[resource], ctx.query, maxLimit);

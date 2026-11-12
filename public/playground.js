@@ -337,9 +337,12 @@
       const btn = el("button", { type: "button" }, "Subscribe");
       btn.addEventListener("click", () => setResult(c.q("shadow-result"), "Subscribed", "ok"));
       wrap.append(el("span", {}, "Weekly digest"), btn);
+      // The page's own <link> URLs, which carry the version stamp. A bare
+      // /app.css would be served from a year-long cache after a deploy.
+      const sheet = (name) => document.querySelector(`link[href^="/${name}"]`)?.getAttribute("href") || `/${name}`;
       root.append(
-        el("link", { rel: "stylesheet", href: "/app.css" }),
-        el("link", { rel: "stylesheet", href: "/playground.css" }),
+        el("link", { rel: "stylesheet", href: sheet("app.css") }),
+        el("link", { rel: "stylesheet", href: sheet("playground.css") }),
         wrap
       );
     });

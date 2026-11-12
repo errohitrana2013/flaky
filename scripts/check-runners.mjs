@@ -42,6 +42,7 @@ const REQUESTS = [
   "/",
   "/employees",
   "/employees/2",
+  "/employees/2?_select=name,score",
   "/employees/99",
   "/tags",
   "/nope",

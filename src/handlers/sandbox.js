@@ -1,7 +1,7 @@
 import { DATA, RESOURCES } from "../data/index.js";
 import { RELATIONS, childrenOf } from "../data/relations.js";
 import { json, fail, echo } from "../lib/response.js";
-import { queryCollection, pageHeaders } from "../lib/query.js";
+import { queryCollection, pageHeaders, selectFields } from "../lib/query.js";
 import { wrongMethod } from "../lib/allow.js";
 import { TIERS, SANDBOX_TTL_MS, MAX_SANDBOX_RECORD_BYTES, MAX_SANDBOX_RECORDS } from "../config/tiers.js";
 
@@ -119,7 +119,7 @@ export async function handleSandbox(ctx) {
 
     if (id && !child) {
       const found = rows.find((row) => String(row.id) === id);
-      return found ? json(found) : fail(404, `No ${echo(resource)} with id ${echo(id)}`);
+      return found ? json(selectFields(found, ctx.query)) : fail(404, `No ${echo(resource)} with id ${echo(id)}`);
     }
     const page = queryCollection(rows, ctx.query, TIERS[ctx.auth.tier].maxLimit);
     return json(page.rows, { headers: pageHeaders(page) });

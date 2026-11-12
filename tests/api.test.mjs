@@ -1002,6 +1002,14 @@ test("returns only the requested fields, keeping id", async () => {
   assert.deepEqual(Object.keys(partial[0]).sort(), ["id", "title"]);
 });
 
+test("applies _select to a single record, not only to lists", async () => {
+  // It used to be accepted and ignored here, returning every field.
+  assert.deepEqual(await body(await call("/v1/posts/1?_select=id")), { id: 1 });
+  assert.deepEqual(Object.keys(await body(await call("/v1/products/2?select=title"))).sort(), ["id", "title"]);
+  // Without it, the whole record, as before.
+  assert.ok(Object.keys(await body(await call("/v1/posts/1"))).length > 2);
+});
+
 test("sends Retry-After on the statuses that mean come back later", async () => {
   // A client that backs off correctly reads this. Nothing else returning these
   // codes provides one, so there is nothing to test backoff against.
@@ -1194,6 +1202,7 @@ test("serves a custom API with the usual query parameters", async () => {
   assert.equal((await body(await call(`${base}/employees?dept=Product`, {}, env)))[0].name, "Wei");
   assert.equal((await body(await call(`${base}/employees/1`, {}, env))).name, "Asha");
   assert.equal((await body(await call(`${base}/employees?_select=name`, {}, env)))[0].dept, undefined);
+  assert.deepEqual(Object.keys(await body(await call(`${base}/employees/1?_select=name`, {}, env))).sort(), ["id", "name"]);
 
   const missing = await call(`${base}/nothing`, {}, env);
   assert.equal(missing.status, 404);

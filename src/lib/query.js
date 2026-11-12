@@ -39,6 +39,22 @@ export function validatePaging(params, maxLimit) {
   return null;
 }
 
+// Sparse fieldsets. id is always kept — a record you cannot identify is not
+// useful, and every client assumes it is there.
+//
+// Takes an array or a single record. It applied to lists only, so
+// /v1/posts/1?_select=id quietly returned every field — a parameter accepted
+// and ignored, on a tool whose whole rule is not to do that. DummyJSON honours
+// select on a single record too, and people arrive from there.
+export function selectFields(rows, params) {
+  const select = params.get("_select") || params.get("select");
+  const fields = new Set((select || "").split(",").map((f) => f.trim()).filter(Boolean));
+  if (!fields.size) return rows;
+  fields.add("id");
+  const slim = (row) => Object.fromEntries(Object.entries(row).filter(([k]) => fields.has(k)));
+  return Array.isArray(rows) ? rows.map(slim) : slim(rows);
+}
+
 // Filter, search, sort and paginate an in-memory collection.
 export function queryCollection(rows, params, maxLimit) {
   let result = rows;
@@ -61,18 +77,7 @@ export function queryCollection(rows, params, maxLimit) {
       a[sortField] > b[sortField] ? dir : a[sortField] < b[sortField] ? -dir : 0);
   }
 
-  // Sparse fieldsets. id is always kept — a record you cannot identify is not
-  // useful, and every client assumes it is there.
-  const select = params.get("_select") || params.get("select");
-  if (select) {
-    const fields = new Set(select.split(",").map((f) => f.trim()).filter(Boolean));
-    if (fields.size) {
-      fields.add("id");
-      result = result.map((row) =>
-        Object.fromEntries(Object.entries(row).filter(([k]) => fields.has(k)))
-      );
-    }
-  }
+  result = selectFields(result, params);
 
   const total = result.length;
   const limit = Math.min(Number(params.get("_limit")) || DEFAULT_PAGE_SIZE, maxLimit);
