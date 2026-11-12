@@ -14,6 +14,29 @@
   Permissions-Policy: geolocation=(), microphone=(), camera=(), payment=()
   Content-Security-Policy: default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'none'; object-src 'none'
 
+# Pages are marked no-transform so Cloudflare does not rewrite them. Its Web
+# Analytics beacon was being injected into every page despite being switched
+# off in the dashboard; script-src 'self' blocked it, so it collected nothing,
+# but its presence made /privacy's "no third-party scripts" untrue. Listed by
+# path rather than /* so the CSS and JS rules below are not joined with these.
+# max-age=0 is the asset server's own default for HTML, kept as it was.
+/
+  Cache-Control: public, max-age=0, must-revalidate, no-transform
+/createMockServer
+  Cache-Control: public, max-age=0, must-revalidate, no-transform
+/openapiMockServer
+  Cache-Control: public, max-age=0, must-revalidate, no-transform
+/uiPlayground
+  Cache-Control: public, max-age=0, must-revalidate, no-transform
+/privacy
+  Cache-Control: public, max-age=0, must-revalidate, no-transform
+/docs/*
+  Cache-Control: public, max-age=0, must-revalidate, no-transform
+/dashboard
+  Cache-Control: public, max-age=0, must-revalidate, no-transform
+/insights
+  Cache-Control: public, max-age=0, must-revalidate, no-transform
+
 # CSS and JS are referenced from the HTML as /name.css?v=<content hash>, written
 # by scripts/stamp-assets.mjs, so a changed file always arrives at a new URL and
 # the old one can be kept for a year. HTML is not listed: it keeps the default
