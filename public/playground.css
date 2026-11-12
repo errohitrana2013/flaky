@@ -8,6 +8,11 @@
 .pg-controls { padding: 24px 0; }
 .pg-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 12px 16px; margin-bottom: 12px; font-size: 13px; color: var(--muted); }
 .pg-bar .ctl input { width: 110px; }
+/* A select is as wide as its longest option, and the mode labels are long
+   enough to push a 375px phone into sideways scrolling. Let the row and the
+   select shrink to the screen instead; the chosen option is still readable. */
+.pg-bar .ctl { max-width: 100%; min-width: 0; }
+.pg-bar .ctl select { min-width: 0; max-width: 100%; flex: 1 1 auto; text-overflow: ellipsis; }
 
 .pg-toc { display: flex; flex-wrap: wrap; gap: 6px; padding: 0 0 32px; }
 .pg-toc a {
@@ -100,3 +105,7 @@ details pre { margin-top: 10px; }
   .pg-drawer { transition: none; }
   .pg-spin, .pg-skeleton, .pg-toast { animation: none; }
 }
+
+/* Exception names like ElementClickInterceptedException are one unbreakable
+   word, wider than a 320px phone. Break them only when nothing else fits. */
+p code { overflow-wrap: anywhere; }
