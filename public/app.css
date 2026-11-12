@@ -118,3 +118,10 @@
 .mt-20 { margin-top: 20px; }
 .m-0 { margin: 0; }
 .muted { color: var(--muted); }
+
+/* Touch screens need targets about 44px tall; the controls here are 29px. Only
+   on coarse pointers, so the desktop layout does not grow. The playground's
+   .stage areas are left alone: their geometry is the test case. */
+@media (pointer: coarse) {
+  :is(button, select, input:not([type="checkbox"], [type="radio"])):not(.stage *) { min-height: 44px; }
+}

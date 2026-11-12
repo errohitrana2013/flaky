@@ -15,3 +15,10 @@
 # spec lives under /v1 with the rest of what the Worker serves.
 /openapi.json /v1/openapi.json 301
 /swagger.json /v1/openapi.json 301
+
+# The page URLs are camelCase, and anyone typing one from memory types it in
+# lower case and got the 404 page. Matching is case-sensitive, so these do not
+# catch the real URLs — checked in wrangler dev before shipping.
+/createmockserver /createMockServer 301
+/openapimockserver /openapiMockServer 301
+/uiplayground /uiPlayground 301

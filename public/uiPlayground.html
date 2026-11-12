@@ -3,20 +3,65 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Flaky UI playground — practise Playwright and Selenium against flaky elements | flaky</title>
-<meta name="description" content="A page built to break your UI tests: elements that appear late, buttons that move, overlays that swallow clicks, lists that re-render and shuffle. Seeded, so a failure reproduces. Each case shows the fragile test and the robust one, in Playwright and Selenium.">
+<title>Flaky UI playground for Playwright and Selenium | Flaky API</title>
+<meta name="description" content="A page built to break your UI tests: late elements, moving buttons, click-swallowing overlays, shuffled lists. Seeded, with the fix in Playwright and Selenium.">
 <link rel="canonical" href="https://flakyapi.dev/uiPlayground">
 <meta property="og:type" content="website">
 <meta property="og:url" content="https://flakyapi.dev/uiPlayground">
 <meta property="og:title" content="Flaky UI playground — a page built to break your UI tests">
 <meta property="og:description" content="Late elements, moving buttons, click-swallowing overlays, stale nodes, shuffled lists. Seeded so failures reproduce, with the fix for each in Playwright and Selenium.">
 <meta property="og:image" content="https://flakyapi.dev/og.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="Flaky API — a mock REST API that fails on purpose. GET /v1/posts?_status=503">
+<meta property="og:site_name" content="Flaky API">
 <meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:image" content="https://flakyapi.dev/og.png">
 <link rel="icon" href="/favicon.svg" type="image/svg+xml">
 <link rel="alternate icon" href="/favicon.ico" sizes="32x32">
 <link rel="stylesheet" href="/app.css">
 <link rel="stylesheet" href="/custom.css">
 <link rel="stylesheet" href="/playground.css">
+<script type="application/ld+json">
+{
+ "@context": "https://schema.org",
+ "@graph": [
+  {
+   "@type": "WebPage",
+   "@id": "https://flakyapi.dev/uiPlayground#webpage",
+   "url": "https://flakyapi.dev/uiPlayground",
+   "name": "Flaky UI playground",
+   "isPartOf": {
+    "@id": "https://flakyapi.dev/#website"
+   },
+   "about": {
+    "@id": "https://flakyapi.dev/#app"
+   },
+   "breadcrumb": {
+    "@id": "https://flakyapi.dev/uiPlayground#breadcrumb"
+   }
+  },
+  {
+   "@type": "BreadcrumbList",
+   "@id": "https://flakyapi.dev/uiPlayground#breadcrumb",
+   "itemListElement": [
+    {
+     "@type": "ListItem",
+     "position": 1,
+     "name": "Flaky API",
+     "item": "https://flakyapi.dev/"
+    },
+    {
+     "@type": "ListItem",
+     "position": 2,
+     "name": "UI Playground",
+     "item": "https://flakyapi.dev/uiPlayground"
+    }
+   ]
+  }
+ ]
+}
+</script>
 </head>
 <body>
 <div class="wrap">

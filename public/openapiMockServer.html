@@ -3,19 +3,64 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>OpenAPI mock server — paste your spec, get your API | flaky</title>
-<meta name="description" content="Paste an OpenAPI or Swagger spec and get a working mock of your own API in one click, with realistic records for every list endpoint — plus the chaos controls, so you can force a 503, a timeout or a flaky connection against it. Export it to Node, Python, Java or C#. Free, no account.">
+<title>OpenAPI mock server — paste your spec, get your API | Flaky API</title>
+<meta name="description" content="Paste an OpenAPI or Swagger spec and get a mock server of your own API, with realistic records and the chaos controls. Export to Node, Python, Java or C#. Free.">
 <link rel="canonical" href="https://flakyapi.dev/openapiMockServer">
 <meta property="og:type" content="website">
 <meta property="og:url" content="https://flakyapi.dev/openapiMockServer">
 <meta property="og:title" content="A mock of your own API, from its OpenAPI spec — with failures you can ask for">
 <meta property="og:description" content="Paste your spec, get your endpoints with realistic records, then make them fail on purpose. No account. Export it to Node, Python, Java or C# and keep it forever.">
 <meta property="og:image" content="https://flakyapi.dev/og.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="Flaky API — a mock REST API that fails on purpose. GET /v1/posts?_status=503">
+<meta property="og:site_name" content="Flaky API">
 <meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:image" content="https://flakyapi.dev/og.png">
 <link rel="icon" href="/favicon.svg" type="image/svg+xml">
 <link rel="alternate icon" href="/favicon.ico" sizes="32x32">
 <link rel="stylesheet" href="/app.css">
 <link rel="stylesheet" href="/custom.css">
+<script type="application/ld+json">
+{
+ "@context": "https://schema.org",
+ "@graph": [
+  {
+   "@type": "WebPage",
+   "@id": "https://flakyapi.dev/openapiMockServer#webpage",
+   "url": "https://flakyapi.dev/openapiMockServer",
+   "name": "OpenAPI mock server",
+   "isPartOf": {
+    "@id": "https://flakyapi.dev/#website"
+   },
+   "about": {
+    "@id": "https://flakyapi.dev/#app"
+   },
+   "breadcrumb": {
+    "@id": "https://flakyapi.dev/openapiMockServer#breadcrumb"
+   }
+  },
+  {
+   "@type": "BreadcrumbList",
+   "@id": "https://flakyapi.dev/openapiMockServer#breadcrumb",
+   "itemListElement": [
+    {
+     "@type": "ListItem",
+     "position": 1,
+     "name": "Flaky API",
+     "item": "https://flakyapi.dev/"
+    },
+    {
+     "@type": "ListItem",
+     "position": 2,
+     "name": "OpenAPI Mock Server",
+     "item": "https://flakyapi.dev/openapiMockServer"
+    }
+   ]
+  }
+ ]
+}
+</script>
 </head>
 <body data-mode="openapi">
 <div class="wrap">
@@ -39,7 +84,7 @@
       <a href="/uiPlayground">Flaky UI Playground</a>
     </nav>
 
-    <h1>Paste your spec. Get your API.</h1>
+    <h1>Paste your OpenAPI spec. Get a mock server.</h1>
     <p class="lede">
       Your app's real endpoints, with believable records behind every list —
       and <strong>the chaos controls work on them</strong>, so you can see what

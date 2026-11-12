@@ -3,19 +3,19 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>flaky — a mock REST API that fails on purpose</title>
+<title>Flaky API — a free fake REST API that fails on purpose</title>
 <meta name="description" content="Free fake REST API with real data. Unlike other mock APIs, you control the response: force any status code, add latency, or make a percentage of requests fail.">
 <meta property="og:type" content="website">
 <meta property="og:url" content="https://flakyapi.dev/">
-<meta property="og:title" content="flaky — a mock REST API that fails on purpose">
+<meta property="og:title" content="Flaky API — a free fake REST API that fails on purpose">
 <meta property="og:description" content="Real data at real URLs, like every other fake API. The difference: you decide how it behaves. Force a 503, add latency, or make a third of requests fail — from the query string.">
 <meta property="og:image" content="https://flakyapi.dev/og.png">
 <meta property="og:image:width" content="1200">
 <meta property="og:image:height" content="630">
-<meta property="og:image:alt" content="flaky — a mock REST API that fails on purpose. GET /v1/posts?_status=503">
-<meta property="og:site_name" content="flaky">
+<meta property="og:image:alt" content="Flaky API — a mock REST API that fails on purpose. GET /v1/posts?_status=503">
+<meta property="og:site_name" content="Flaky API">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="twitter:title" content="flaky — a mock REST API that fails on purpose">
+<meta name="twitter:title" content="Flaky API — a free fake REST API that fails on purpose">
 <meta name="twitter:description" content="Real data at real URLs, like every other fake API. The difference: you decide how it behaves. Force a 503, add latency, or make a third of requests fail — from the query string.">
 <meta name="twitter:image" content="https://flakyapi.dev/og.png">
 <link rel="canonical" href="https://flakyapi.dev/">
@@ -25,6 +25,80 @@
 <link rel="apple-touch-icon" href="/favicon.png">
 <link rel="stylesheet" href="/app.css">
 <link rel="stylesheet" href="/custom.css">
+<script type="application/ld+json">
+{
+ "@context": "https://schema.org",
+ "@graph": [
+  {
+   "@type": "WebSite",
+   "@id": "https://flakyapi.dev/#website",
+   "url": "https://flakyapi.dev/",
+   "name": "Flaky API",
+   "alternateName": [
+    "flaky",
+    "flakyapi.dev"
+   ],
+   "description": "Free fake REST API with real data. Force any status code, add latency, or make a percentage of requests fail.",
+   "inLanguage": "en",
+   "publisher": {
+    "@id": "https://flakyapi.dev/#publisher"
+   }
+  },
+  {
+   "@type": "Person",
+   "@id": "https://flakyapi.dev/#publisher",
+   "name": "Rohit Rana",
+   "sameAs": [
+    "https://github.com/errohitrana2013"
+   ]
+  },
+  {
+   "@type": "WebApplication",
+   "@id": "https://flakyapi.dev/#app",
+   "name": "Flaky API",
+   "alternateName": "flaky",
+   "url": "https://flakyapi.dev/",
+   "description": "A free mock REST API that fails on purpose: force status codes, add latency, or inject random failures to test how a client handles errors.",
+   "applicationCategory": "DeveloperApplication",
+   "operatingSystem": "Any",
+   "isAccessibleForFree": true,
+   "offers": {
+    "@type": "Offer",
+    "price": "0",
+    "priceCurrency": "USD"
+   },
+   "author": {
+    "@id": "https://flakyapi.dev/#publisher"
+   },
+   "sameAs": [
+    "https://github.com/errohitrana2013/flaky"
+   ]
+  },
+  {
+   "@type": "WebAPI",
+   "@id": "https://flakyapi.dev/#api",
+   "name": "Flaky API",
+   "description": "Mock REST API with caller-controlled status codes, latency and failure rate.",
+   "documentation": "https://flakyapi.dev/v1/openapi.json",
+   "provider": {
+    "@id": "https://flakyapi.dev/#publisher"
+   }
+  },
+  {
+   "@type": "WebPage",
+   "@id": "https://flakyapi.dev/#webpage",
+   "url": "https://flakyapi.dev/",
+   "name": "Flaky API — a free fake REST API that fails on purpose",
+   "isPartOf": {
+    "@id": "https://flakyapi.dev/#website"
+   },
+   "about": {
+    "@id": "https://flakyapi.dev/#app"
+   }
+  }
+ ]
+}
+</script>
 </head>
 <body>
 <div class="wrap">
@@ -281,13 +355,15 @@ curl -X POST <span class="host">https://flakyapi.dev</span>/v1/sandbox/&lt;id&gt
 
   <section>
     <h2>Limits</h2>
-    <table>
-      <thead><tr><th>Tier</th><th>Requests/day</th><th>Max page</th><th>Sandboxes</th></tr></thead>
-      <tbody>
-        <tr><td>Anonymous</td><td class="num">1,000</td><td class="num">100</td><td class="num">—</td></tr>
-        <tr><td><a href="#key">Free key</a></td><td class="num">10,000</td><td class="num">250</td><td class="num">1</td></tr>
-      </tbody>
-    </table>
+    <div class="scroll-x">
+      <table>
+        <thead><tr><th>Tier</th><th>Requests/day</th><th>Max page</th><th>Sandboxes</th></tr></thead>
+        <tbody>
+          <tr><td>Anonymous</td><td class="num">1,000</td><td class="num">100</td><td class="num">—</td></tr>
+          <tr><td><a href="#key">Free key</a></td><td class="num">10,000</td><td class="num">250</td><td class="num">1</td></tr>
+        </tbody>
+      </table>
+    </div>
     <p class="mt-16">
       <strong>That is all of it: flaky is free, and there is no paid tier.</strong>
       Limits reset at 00:00 UTC. Every response carries <code>x-ratelimit-remaining</code>.
