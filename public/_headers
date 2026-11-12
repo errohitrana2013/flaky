@@ -22,6 +22,7 @@
 # max-age=0 is the asset server's own default for HTML, kept as it was.
 /
   Cache-Control: public, max-age=0, must-revalidate, no-transform
+  Link: </v1/openapi.json>; rel="service-desc"; type="application/json"
 /createMockServer
   Cache-Control: public, max-age=0, must-revalidate, no-transform
 /openapiMockServer

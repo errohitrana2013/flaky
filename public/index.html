@@ -18,6 +18,7 @@
 <meta name="twitter:title" content="Flaky API — a free fake REST API that fails on purpose">
 <meta name="twitter:description" content="Real data at real URLs, like every other fake API. The difference: you decide how it behaves. Force a 503, add latency, or make a third of requests fail — from the query string.">
 <meta name="twitter:image" content="https://flakyapi.dev/og.png">
+<meta name="twitter:image:alt" content="Flaky API — a mock REST API that fails on purpose. GET /v1/posts?_status=503">
 <link rel="canonical" href="https://flakyapi.dev/">
 <link rel="service-desc" href="/v1/openapi.json" type="application/json">
 <link rel="icon" href="/favicon.svg" type="image/svg+xml">
@@ -50,7 +51,8 @@
    "name": "Rohit Rana",
    "sameAs": [
     "https://github.com/errohitrana2013"
-   ]
+   ],
+   "url": "https://github.com/errohitrana2013"
   },
   {
    "@type": "WebApplication",
@@ -82,7 +84,11 @@
    "documentation": "https://flakyapi.dev/v1/openapi.json",
    "provider": {
     "@id": "https://flakyapi.dev/#publisher"
-   }
+   },
+   "alternateName": "flaky",
+   "sameAs": [
+    "https://github.com/errohitrana2013/flaky"
+   ]
   },
   {
    "@type": "WebPage",
@@ -104,7 +110,7 @@
 <div class="wrap">
 
   <header>
-    <a class="brand" href="/" aria-label="flaky — home">
+    <a class="brand" href="/" aria-label="Flaky API — home">
       <svg class="mark" viewBox="0 0 32 32" aria-hidden="true">
         <rect class="bar"   x="3"    y="18"  width="5"   height="9"  rx="2.5"/>
         <rect class="bar"   x="10"   y="12"  width="5"   height="15" rx="2.5"/>
@@ -365,7 +371,7 @@ curl -X POST <span class="host">https://flakyapi.dev</span>/v1/sandbox/&lt;id&gt
       </table>
     </div>
     <p class="mt-16">
-      <strong>That is all of it: flaky is free, and there is no paid tier.</strong>
+      <strong>That is all of it: Flaky API is free, and there is no paid tier.</strong>
       Limits reset at 00:00 UTC. Every response carries <code>x-ratelimit-remaining</code>.
       Machine-readable description at <a href="/v1/meta">/v1/meta</a>, and an
       <a href="/v1/openapi.json">OpenAPI 3.1 spec</a> you can import straight into
@@ -379,6 +385,9 @@ curl -X POST <span class="host">https://flakyapi.dev</span>/v1/sandbox/&lt;id&gt
       never an IP. <a href="/privacy">Privacy &amp; contact</a> ·
       <a href="/v1/meta">/v1/meta</a> ·
       <a href="https://github.com/errohitrana2013/flaky">Source</a>
+    </p>
+    <p class="m-0 mt-16">
+      Built and maintained by <a href="https://github.com/errohitrana2013" rel="author">Rohit Rana</a>.
     </p>
   </footer>
 

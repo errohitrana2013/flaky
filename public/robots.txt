@@ -1,23 +1,23 @@
 # flakyapi.dev — a mock REST API that fails on purpose.
 #
 # Crawling the site is welcome: being found in search is the whole
-# distribution plan. Two things are excluded, for different reasons.
+# distribution plan. The API is excluded, and the admin pages are kept out of
+# the index by their own noindex rather than here — a crawler that is not
+# allowed to fetch a page never sees its noindex, and can still list the URL.
 
 User-agent: *
 
-# Admin-token gated and useless without it, but there is no reason for it
-# to appear in a search result.
-Disallow: /dashboard
-Disallow: /insights
+# The admin API: token-gated, and nothing there for a crawler.
 Disallow: /v1/admin/
 
 # The API itself. Indexing thousands of near-identical JSON responses
 # would bury the pages that actually explain what this is.
 # Except the two documents that describe it, which llms.txt points agents at.
-# The longer path wins, so these override the Disallow above.
-Disallow: /v1/
+# The longer path wins under the standard; they come first anyway, for
+# parsers that stop at the first match.
 Allow: /v1/openapi.json
 Allow: /v1/meta
+Disallow: /v1/
 
 Allow: /
 

@@ -1,4 +1,4 @@
-# flaky
+# Flaky API (flakyapi.dev)
 
 > A free mock REST API that fails on purpose. Same resources and field names as JSONPlaceholder, plus query parameters that make any request slow, failing, intermittently failing, rate-limited, truncated or CORS-blocked — for testing how a client copes with a bad backend. No signup, and no key needed to read.
 

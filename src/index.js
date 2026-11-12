@@ -194,11 +194,15 @@ export default {
     // more standard answer.
 
 
+    // HEAD is answered as the GET would be, minus the body. It returned 405,
+    // which tells a link checker or an uptime probe that a working URL is broken.
+    const isHead = isApi && request.method === "HEAD";
+
     let response;
     try {
       // Anything outside /v1 is the marketing site and docs.
       response = isApi
-        ? await handle(request, env, ctx, url, state)
+        ? await handle(isHead ? new Request(request, { method: "GET" }) : request, env, ctx, url, state)
         : harden(await env.ASSETS.fetch(request), { page: true });
     } catch (err) {
       // Last line of defence. Without it an unexpected throw — a D1 outage, a
@@ -211,6 +215,7 @@ export default {
     // Assets are hardened above with the page policy; everything else, including
     // the catch path, gets the API policy here.
     if (isApi || response.status === 500) response = harden(response);
+    if (isHead) response = new Response(null, response);
 
     // Measured HERE, not inside waitUntil. Taking it there included the
     // telemetry's own D1 round trip — work that happens after the response has

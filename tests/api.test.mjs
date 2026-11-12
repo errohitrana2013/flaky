@@ -1002,6 +1002,15 @@ test("returns only the requested fields, keeping id", async () => {
   assert.deepEqual(Object.keys(partial[0]).sort(), ["id", "title"]);
 });
 
+test("answers HEAD like GET, without a body", async () => {
+  // It returned 405, which reads to a link checker as a broken URL.
+  const head = await call("/v1/posts/1", { method: "HEAD" });
+  assert.equal(head.status, 200);
+  assert.equal(await head.text(), "");
+  assert.match(head.headers.get("content-type"), /json/);
+  assert.equal((await call("/v1/nope", { method: "HEAD" })).status, 404);
+});
+
 test("applies _select to a single record, not only to lists", async () => {
   // It used to be accepted and ignored here, returning every field.
   assert.deepEqual(await body(await call("/v1/posts/1?_select=id")), { id: 1 });
